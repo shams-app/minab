@@ -16,6 +16,8 @@ Because both layers share the same expression grammar, anything you can write in
 
 Design principle: **ad-hoc convenience over upfront declaration.** Any table can be referenced inline via `@TableName` anywhere an expression is expected — no prior `JOIN` or `USING` clause is required. This keeps validation rules and one-off cross-table checks short, at the cost of static analyzability (you cannot tell which tables a rule touches just by reading its header — you have to scan the body).
 
+Minab is **not** strictly read-only (decided 2026-09-13): alongside querying and validating, it's intended to express declarative writes — e.g. what should be persisted when a validation rule fires, or a computed/derived value (trigger- or generated-column-like). The concrete write syntax hasn't been designed yet — see §8, item 10.
+
 ---
 
 ## 2. Context Sigils
@@ -446,3 +448,38 @@ These are flagged but not yet resolved — worth deciding before the grammar is 
 5. **Multi-token keyword handling.** `GROUP BY`, `ORDER BY`, `LEFT JOIN`, `CROSS JOIN` are currently two separate tokens each rather than single compound keywords. Confirm this doesn't cause unwanted parses (e.g. `GROUP` or `BY` used as an identifier elsewhere).
 6. **Bare `alias.field` vs. required `@alias.field` for joined scopes.** Currently the spec recommends `@alias` for every non-primary scope "if there is more than one," but also permits bare `alias.field` when unambiguous. Pick one rule and apply it consistently — likely candidates: (a) primary scope implicit, every other scope requires `@alias`, always; or (b) bare `alias.field` always allowed, `@alias` reserved only for cases where an alias collides with a real field name.
 7. **Depth of implicit relation traversal before requiring an explicit subquery.** E.g., should `.customer.country` silently perform a join-equivalent lookup in `WHERE`/`SELECT`, or should crossing a to-many relation always require explicit `[...]` filtering or a subquery to keep query cost visible to the reader?
+8. **Relational comparison semantics for null operands.** §9.1 settles `==`/`!=` as null-safe and total (`null == null` is `true`); `<`, `<=`, `>`, `>=` with a null operand is undecided — always `false`? an error? a nulls-sort-last ordering convention?
+9. **Aggregate/predicate behavior when traversal yields `null` instead of a collection.** E.g. `SUM(.orders.total)` when `.orders` itself is `null` because the parent `ref` was null (§9.2 propagation) — should this be treated as an empty collection (`SUM` → `null`/`0`, `COUNT` → `0`, `EXISTS` → `false`), a propagated `null`, or an error?
+10. **Concrete syntax for declarative writes.** Minab is not read-only (§1) — it needs syntax to express what gets written when a validation rule fires or a value is computed, but none exists yet. Needs its own proposal/example/approval pass before roadmap Phase 5 (evaluator) can account for it.
+---
+
+## 9. Null Semantics
+
+Decided 2026-09-13 (see `docs/status.md`); enforcement/implementation lands in later phases — validator and type system (`docs/roadmap.md` Phases 3-4), evaluator (Phase 5).
+
+### 9.1 Equality is total — no three-valued logic
+
+`==` and `!=` always evaluate to a definite `true` or `false`. There is no `UNKNOWN`/three-valued state in Minab, unlike raw SQL:
+
+```
+null == null         // true
+null == "shipped"    // false
+"shipped" == null     // false
+.status == null       // true only if .status is actually null
+```
+
+This differs from Postgres's native `NULL = NULL → NULL` behavior. An evaluator that compiles to SQL (roadmap Phase 5) needs to translate `==`/`!=` to a null-safe form (e.g. Postgres's `IS NOT DISTINCT FROM` / `IS DISTINCT FROM`), not emit `=`/`<>` directly.
+
+### 9.2 Traversal through null propagates
+
+`.field` access through a null value — a null `ref` field, or any null intermediate result in a chain — propagates `null` rather than erroring, the way optional chaining works in many languages:
+
+```
+.customer.country
+```
+
+If `.customer` is null (e.g. an unmatched `LEFT JOIN`, or a nullable `ref`), the whole expression evaluates to `null` rather than raising an error, and that `null` then flows into whatever consumes it next (per §9.1, for a subsequent comparison).
+
+### 9.3 Not yet decided
+
+See §8, items 8-9, for the null-adjacent questions this section doesn't settle: relational-operator (`<`/`<=`/`>`/`>=`) semantics with a null operand, and aggregate/predicate behavior when traversal produces `null` instead of a collection.

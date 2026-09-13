@@ -6,11 +6,13 @@ A running note of where things stand and what to do next. Update the top two sec
 
 Repo is bootstrapped and working: Langium grammar (`src/language/minab.langium`) mirrors the spec's §7 reference grammar, parses the spec's own pipeline/validation examples (`test/parsing.test.ts`), and `npm run build && npm test` are green. No semantic services yet — no `ScopeProvider`, no `Validator`, no evaluator. `docs/query-language-spec.md` is the spec; `docs/roadmap.md` has the full phased plan; `.cursor/rules/` carries the same working conventions into Cursor.
 
-Roadmap Phase 0 (reconcile design history) is in progress. Done: the two flagged spec/example inconsistencies are resolved (§4.3 clause order; §6.2 `IN`-list syntax — and `IN` is now documented as accepting any collection-valued expression, not just a list literal). Still open: the five prior constructs (`LET`, loops, `CAST`, `is`/`isnot`, `SELECT DISTINCT`) — Hamed has the original design artifact and is providing it; and the two open design questions (null semantics, read/write scope), which are being worked through now rather than deferred.
+Roadmap Phase 0 (reconcile design history) is nearly done. Resolved: the two flagged spec/example inconsistencies (§4.3 clause order; §6.2 `IN`-list syntax, now also documented to accept any collection-valued expression); and the two open design questions — null semantics (equality is null-safe/total, `null == null` is `true`, no SQL three-valued logic; traversal through null propagates rather than errors — spec §9) and read/write scope (Minab supports declarative writes, not read-only — spec §1). Those decisions spun off three residual, still-open items (spec §8, items 8-10): relational-operator null semantics, aggregate-over-null behavior, and the (undesigned) concrete write syntax.
+
+Still open in Phase 0: the five prior constructs (`LET`, loops, `CAST`, `is`/`isnot`, `SELECT DISTINCT`) — Hamed has the original design artifact and is providing it next.
 
 ## Next job
 
-**Finish Roadmap Phase 0.** Once the null-semantics and read/write-scope decisions are made (in progress) and the original artifact for the five prior constructs is in hand: fold everything into `docs/query-language-spec.md` and `src/language/minab.langium` one construct at a time (concrete example → explicit approval → implement), following the spec-governance cycle. After that, Phase 0 is done and Phase 1 (grammar completeness & LL(k) safety pass) is next. See `docs/roadmap.md` Phase 0 for the full task list and definition of done.
+**Finish Roadmap Phase 0.** Once the original artifact for the five prior constructs is in hand: fold each one into `docs/query-language-spec.md` and `src/language/minab.langium`, one at a time (confirm still wanted → concrete example → explicit approval → implement), following the spec-governance cycle. After that, Phase 0 is done and Phase 1 (grammar completeness & LL(k) safety pass) is next. See `docs/roadmap.md` Phase 0 for the full task list and definition of done.
 
 ## Session log
 
@@ -31,3 +33,12 @@ Roadmap Phase 0 (reconcile design history) is in progress. Done: the two flagged
 - Updated `.cursor/rules/spec-governance.mdc` and `docs/roadmap.md` Phase 0 to reflect the resolution.
 - Started working through the two open design questions (null semantics, read/write scope) — see next entry once decided.
 - Hamed has the original design artifact for the five unmerged constructs (`LET`, loops, `CAST`, `is`/`isnot`, `SELECT DISTINCT`) and is providing it next.
+
+### 2026-09-13 (continued, part 2)
+
+- Worked through both open design questions with Hamed:
+  - **Null semantics:** `==`/`!=` are null-safe and total (`null == null` → `true`; no SQL-style `UNKNOWN`/three-valued logic). Traversal through a null value (e.g. `.customer.country` when `.customer` is null) propagates `null` rather than erroring. Documented as new spec §9. Three residual details spun out as new Open Design Questions (spec §8, items 8-10): null semantics for relational operators (`<`/`<=`/`>`/`>=`), aggregate behavior over a null-instead-of-collection, and the concrete write syntax below.
+  - **Read/write scope:** Minab is *not* read-only — it will support declarative writes (trigger-/generated-column-like: what gets persisted when a rule fires or a value is computed). No concrete syntax for this exists yet; it's tracked as its own design task (spec §8 item 10) that needs to happen before/alongside roadmap Phase 5's execution-strategy ADR, since it affects which execution strategies are viable.
+- Updated `docs/roadmap.md` Phase 0 (marked decided) and Phase 5 (folded in the write-path and null-safety implications for the ADR).
+- Synced `docs/query-language-spec.md` to the Claude Project doc (`query-language-spec.md`) so both copies match.
+- Still waiting on Hamed's original design artifact for the five unmerged constructs before Phase 0 can close out.

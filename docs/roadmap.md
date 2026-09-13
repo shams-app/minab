@@ -40,7 +40,7 @@ Separately, the smoke-test suite in this repo found two places where the spec's 
 **Tasks:**
 - Walk through the prior design decisions above one at a time. For each: confirm it's still wanted, get a concrete example, get explicit sign-off, and only then fold it into the spec and grammar (this phase can overlap with Phase 1's mechanics, but the decision-making itself is what belongs here). *(Not started — waiting on the original design artifact.)*
 - ~~Resolve the two flagged spec/example inconsistencies.~~ Done 2026-09-13.
-- Resolve — or explicitly schedule for later with a rationale — the two open design questions (null semantics; read/write scope). If deferred, write down *why* and what unblocks them, so a future phase doesn't rediscover the same ambiguity from scratch.
+- ~~Resolve the two open design questions (null semantics; read/write scope).~~ Done 2026-09-13: null equality is null-safe/total and traversal through null propagates (spec §9); Minab supports declarative writes, not read-only (spec §1). Three residual details spun out as new Open Design Questions (spec §8, items 8-10): relational-operator null semantics, aggregate-over-null behavior, and the (undesigned) concrete write syntax.
 
 **Output:** `docs/query-language-spec.md` contains every construct anyone intends to build, and nothing it doesn't; every internal contradiction is either fixed or logged as a deliberate, explained deferral (a short "Deferred Decisions" section in the spec is enough). No implementation work in Phases 1+ should surface a spec question this phase should have caught.
 
@@ -111,10 +111,13 @@ This is the first real custom Langium service, and everything downstream (valida
 
 **Sign-off: Design → Mechanical.** This is the biggest undecided architectural question in the whole roadmap and should not be implemented before it's explicitly settled.
 
-The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the `PgSqlType` typing already in the design), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream — the CLI (Phase 6), and what "correct" even means for null semantics (one of Phase 0's deferred questions, if it was deferred).
+The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the `PgSqlType` typing already in the design), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream, including the CLI (Phase 6).
+
+Two things Phase 0 already settled make this concrete rather than fully open: null semantics are null-safe/total, not SQL's three-valued logic (spec §9) — so a SQL-compiling strategy must translate `==`/`!=` to a null-safe form, not emit `=`/`<>` directly; and Minab supports declarative writes (spec §1), so the ADR needs to account for a write path, not just queries and validation. The concrete write *syntax* is still undesigned (spec §8, item 10) and should probably be settled before or alongside this ADR, since it affects which execution strategies are even viable.
 
 **Tasks:**
-- Write a short ADR (architecture decision record — a markdown file under `docs/adr/` is enough) comparing at least "compile pipeline queries to SQL" vs. "interpret against an in-memory record set," with the tradeoffs that matter here: how validation rules execute (they need to run per-record, likely outside SQL, even if queries compile to SQL); how correlated `@Table` scans perform if interpreted naively; how much of Postgres's semantics (nulls, three-valued logic) leak into Minab's own semantics if compiling to SQL.
+- Design the concrete write syntax (spec §8, item 10) — its own proposal/example/approval pass — early enough in this phase to inform the ADR below, since it affects which execution strategies are viable.
+- Write a short ADR (architecture decision record — a markdown file under `docs/adr/` is enough) comparing at least "compile pipeline queries to SQL" vs. "interpret against an in-memory record set," covering: how validation rules execute (per-record, likely outside SQL, even if queries compile to SQL); how correlated `@Table` scans perform if interpreted naively; how the null-safe equality from spec §9 gets implemented under each strategy; how declarative writes get executed (a generated trigger/function if compiling to SQL? an explicit write step in an interpreter?).
 - Get Hamed's sign-off on the ADR before building anything.
 - Implement a minimal but real evaluator/codegen for the chosen strategy, covering at least: a `FROM`/`WHERE`/`SELECT` pipeline, one aggregate `GROUP BY`/`HAVING` example, and one `VALIDATE` rule with a correlated `@Table` check.
 
