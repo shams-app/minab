@@ -1,0 +1,11 @@
+{
+  "projectName": "Minab",
+  "languages": [
+    {
+      "id": "minab",
+      "grammar": "src/language/minab.langium",
+      "fileExtensions": [".minab"]
+    }
+  ],
+  "out": "src/language/generated"
+}
