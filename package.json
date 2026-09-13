@@ -1,5 +1,5 @@
 {
-  "name": "minab",
+  "name": "@shamsine/minab",
   "version": "0.1.0",
   "description": "Minab — a pipeline query and validation language, implemented with Langium",
   "private": true,
