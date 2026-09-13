@@ -1,0 +1,19 @@
+---
+description: Minab project overview and core working conventions — always relevant
+alwaysApply: true
+---
+
+# Minab
+
+Minab is a two-layer language: a pipeline query layer (`FROM/JOIN/WHERE/GROUP BY/HAVING/SELECT/ORDER BY/LIMIT`) and a standalone validation layer (`VALIDATE`, `field` rules), sharing one expression grammar. It's implemented with Langium (TypeScript).
+
+Read before any non-trivial change:
+- `docs/query-language-spec.md` — the language spec, source of truth for syntax and semantics.
+- `docs/roadmap.md` — the phased implementation plan, with a defined output per step.
+
+Hard constraints, all the time:
+- No implicit type coercion, anywhere in the language.
+- Every grammar change must be checked for LL(k) parsing safety before it's considered done (`npm run langium:generate` fails loudly on conflicts — that's a blocker, not a warning to route around).
+- Keyword casing is a deliberate, load-bearing convention: SQL-style pipeline keywords are UPPERCASE (`FROM`, `WHERE`, `GROUP BY`, ...); loop/JSON/control-flow keywords are lowercase. After any grammar addition, grep for collisions between the two sets.
+- `docs/query-language-spec.md` is a controlled artifact, and so is the grammar it documents. Do not change either on your own judgment — including changes that look like obvious bugs. See the spec-governance rule for the required approval cycle.
+- A couple of known, unresolved inconsistencies exist between the spec's prose and its own worked examples (tracked in `docs/roadmap.md`, Phase 0). Don't silently resolve them either way — surface them and ask.

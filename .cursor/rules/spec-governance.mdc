@@ -1,0 +1,24 @@
+---
+description: Required approval workflow before changing Minab's language spec or grammar. Apply this whenever asked to add, change, extend, or "fix" any Minab syntax or semantics — even something that looks like an obvious bug.
+globs:
+  - "docs/query-language-spec.md"
+  - "src/language/minab.langium"
+---
+
+# Spec governance
+
+`docs/query-language-spec.md` is a controlled artifact describing a language Hamed is actively designing. Treat every syntax or semantics change as a design decision that needs his sign-off, not a bug fix you can just make.
+
+Required cycle, in order, every time:
+1. **Proposal** — state the change and why, in plain language.
+2. **Concrete example** — show the exact syntax before/after, with a realistic snippet, not just prose.
+3. **Explicit approval** — wait for Hamed to approve that specific proposal before touching anything.
+4. **Implementation** — grammar change → `npm run langium:generate` → `npm run build` → tests → only then update the spec doc itself (see the language-implementation rule for the mechanics).
+
+Never skip to step 4. Never edit the spec file speculatively "to see what it looks like" or "to keep things consistent" — raise it as a proposal instead, even for things like section renumbering.
+
+Two known inconsistencies between the spec's prose/grammar and its own worked examples are already flagged and tracked in `docs/roadmap.md` Phase 0:
+- §4.3's grouped-query example places `SELECT` before `HAVING`; §4.1 and the §7 grammar require the opposite order.
+- §6.2's field-rule example writes `IN (...)` with parens; §5.1/§5.2 and the §7 grammar only support `IN [...]`.
+
+Don't resolve either of these unilaterally in any direction — they're open questions for Hamed, not typos to silently correct.

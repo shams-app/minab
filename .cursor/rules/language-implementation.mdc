@@ -1,0 +1,27 @@
+---
+description: Langium implementation workflow for the Minab grammar and services
+globs:
+  - "src/language/**/*.langium"
+  - "src/language/**/*.ts"
+  - "test/**/*.ts"
+  - "langium-config.json"
+---
+
+# Working in `src/language`
+
+Layout:
+- `src/language/minab.langium` — the grammar. Hand-written, tracked in git.
+- `src/language/minab-module.ts` — Langium DI module wiring. Currently wires only **core** (non-LSP) services, imported from `langium` (not `langium/lsp`). There is no language server or VS Code extension yet — see `docs/roadmap.md` Phase 6 before assuming one exists.
+- `src/language/generated/` — output of `langium generate`. Gitignored. Never hand-edit; regenerate instead.
+- `test/parsing.test.ts` — vitest smoke suite, using `parseHelper` from `langium/test`. Every construct in the spec should have a passing parse example here.
+
+Workflow for any grammar change:
+1. Edit `src/language/minab.langium`.
+2. `npm run langium:generate` — regenerates the AST, grammar, and module in `src/language/generated`.
+3. `npm run build` — typechecks against the regenerated AST types.
+4. Add or update a case in `test/parsing.test.ts` covering the new syntax, then `npm test`. Both a valid and, where it matters, an invalid example are worth having.
+5. Only after 2-4 are green, and only with the approval described in the spec-governance rule, update `docs/query-language-spec.md` — the §7 grammar block, plus whatever prose sections the change affects. Section numbers and cross-references need to stay consistent; that's part of the change, not a follow-up.
+
+Current implementation status (update this line as work lands, don't let it go stale): grammar plus core Langium services only. No `ScopeProvider` — the `.` / `^` / `@alias` / `KEY` sigils (spec §2) parse but don't resolve to anything semantically yet. No `Validator` either, so none of the semantic checks in spec §6 (e.g. `$` only valid inside a `field` rule) are enforced. See `docs/roadmap.md` Phases 2-3.
+
+Don't add a `ScopeProvider`/`Validator`/other custom service by guessing Langium's current API shape — check the installed `langium` version's types first (`node_modules/langium/lib/**/*.d.ts` or the generated `module.ts` for the exact imports it already uses), since Langium's service surface has moved between major versions (this project is on `langium` ~4.4, core services only).
