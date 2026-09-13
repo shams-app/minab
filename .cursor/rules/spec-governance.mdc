@@ -2,12 +2,13 @@
 description: Required approval workflow before changing Minab's language spec or grammar. Apply this whenever asked to add, change, extend, or "fix" any Minab syntax or semantics — even something that looks like an obvious bug.
 globs:
   - "docs/query-language-spec.md"
+  - "docs/showcase.md"
   - "src/language/minab.langium"
 ---
 
 # Spec governance
 
-`docs/query-language-spec.md` is a controlled artifact describing a language Hamed is actively designing. Treat every syntax or semantics change as a design decision that needs his sign-off, not a bug fix you can just make.
+`docs/query-language-spec.md` (and its synced companion, `docs/showcase.md`) are controlled artifacts describing a language Hamed is actively designing. Treat every syntax or semantics change as a design decision that needs his sign-off, not a bug fix you can just make.
 
 Required cycle, in order, every time:
 1. **Proposal** — state the change and why, in plain language.
@@ -17,6 +18,12 @@ Required cycle, in order, every time:
 
 Never skip to step 4. Never edit the spec file speculatively "to see what it looks like" or "to keep things consistent" — raise it as a proposal instead, even for things like section renumbering.
 
-Two inconsistencies the initial smoke-test pass found between the spec's prose/grammar and its own worked examples have been resolved (2026-09-13, see `docs/status.md`): §4.3's clause order now matches §4.1/§7 (HAVING before SELECT), and §6.2's `IN` example uses `[...]` per §5.1/§5.2 — plus `IN`'s right-hand side is now documented as accepting any collection-valued expression, not just a list literal (a collection field, or a field on another table via `@Table`).
+**The one narrow exception:** an *example* (in `docs/showcase.md`, or a worked example inside the spec's prose) that contradicts the spec's own grammar or another part of its own prose — not an open design question, a genuine contradiction where one side is unambiguously wrong given what the rest of the document already says. On 2026-09-13, integrating the v2 spec surfaced three cases: a grouping example that put `SELECT` before `HAVING` when §11's grammar requires the opposite order (the same question already resolved once before — see below); `newStatus isnot "ok"` where §5.6 defines `is`/`isnot` strictly as JSON-shape-testing operators that can't take a string operand at all. In cases like these, fix the example to match the spec/grammar (never the other way around — the grammar is authoritative), mention what was found and fixed, and still get it in front of Hamed rather than treating it as invisible cleanup. A genuinely missing grammar feature — like `.doctor!.id = 21;` not parsing because `CurrentRecord` had no `vivify` flag at all, nothing to be "wrong" about on the example's side — is not this exception; that goes through the full cycle above (it did: see `docs/roadmap.md` Phase 1).
 
-The general rule stands for anything new: don't "fix" a spec/grammar discrepancy in either direction on your own judgment — surface it and follow the cycle above.
+Resolved so far (see `docs/status.md` for the full session-by-session detail):
+- §4.3's clause order matches §4.1/§11 (`HAVING` before `SELECT`) — resolved 2026-09-13, then regressed and re-fixed in the v2 showcase the same day.
+- §6.2's (now §6)'s `IN` example uses `[...]`, and `IN`'s right-hand side is documented as accepting any collection-valued expression, not just a list literal.
+- Null semantics (§7.7) and read/write scope (§1, §10) — both resolved via the full approval cycle before the v2 artifact formalized them.
+- `CurrentRecord` now carries a `vivify` flag alongside `MemberAccess`, so `.doctor!.id = 21;` parses (2026-09-13, approved fix).
+
+The general rule stands for anything new, and especially for spec §12's eighteen logged open questions: don't "fix" a spec/grammar discrepancy or resolve an open question in either direction on your own judgment — surface it and follow the cycle above.

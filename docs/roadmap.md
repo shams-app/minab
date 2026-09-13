@@ -18,7 +18,7 @@ Update the **Status** column as phases complete, and update `docs/query-language
 |---|---|---|---|
 | 0 | Reconcile design history | Design | One authoritative spec — no orphaned prior decisions, no unresolved contradictions |
 | 1 | Grammar completeness & safety pass | Mixed | Updated `minab.langium`, clean `langium generate`, full example coverage in `test/parsing.test.ts` |
-| 2 | Scope resolution (`ScopeProvider`) | Mechanical | Sigils (`.` `^` `@alias` `KEY`) resolve to real declarations; scoping test suite |
+| 2 | Scope resolution (`ScopeProvider`) | Mechanical | Sigils (`.` `^` `#alias` `KEY`) resolve to real declarations; scoping test suite |
 | 3 | Semantic validation (`Validator`) | Mixed | Invalid-but-parseable programs rejected with clear diagnostics; validation test suite |
 | 4 | Type system | Mixed | A type-checking pass enforcing §3's traversal rules and no-implicit-coercion |
 | 5 | Execution strategy + evaluator | Design → Mechanical | An ADR choosing interpret-vs-compile-to-SQL, plus a working evaluator for a real subset |
@@ -33,16 +33,13 @@ Update the **Status** column as phases complete, and update `docs/query-language
 
 **Sign-off: Design.**
 
-Past design conversations (outside this repo) settled on several constructs — `LET`-style variable declarations typed against a `PgSqlType` enum, three loop forms with labeled `break`/`continue`, explicit `CAST(expr AS TypeRef)`, an `is`/`isnot` JSON-shape-testing operator, `SELECT DISTINCT` — plus two open questions (null semantics across `ref` traversal and `LEFT JOIN`; whether Minab is read-only by design). None of this is reflected in the current `docs/query-language-spec.md` or `src/language/minab.langium`, which only contain the pipeline/expression/validation core.
+**Status: Done (2026-09-13).**
 
-Separately, the smoke-test suite in this repo found two places where the spec's prose/grammar and its own worked examples disagreed (§4.3 clause order; §6.2 `IN`-list syntax) — both resolved 2026-09-13 (see `docs/status.md`), and `IN`'s right-hand side is now documented as accepting any collection-valued expression, not just a list literal.
+The full backlog of prior design decisions has now landed. Hamed supplied the complete, already-negotiated v2 language design as two documents (`query-language-spec.md`, 12 sections, and a matching `docs/showcase.md` of runnable examples) — far broader than the five originally-flagged constructs (`LET`, loops, `CAST`, `is`/`isnot`, `SELECT DISTINCT`): it also replaced the `@alias` sigil with `#alias`, made `GROUPBY`/`ORDERBY`/`LEFTJOIN`/`CROSSJOIN` single compound keywords, added a full type system (§7.2), user functions (§8), `if`/`if!`/`switch` control flow (§9), and concrete `INSERT`/`UPDATE`/`DELETE` DML (§10) — resolving Phase 5's previously-open "concrete write syntax" task as a side effect.
 
-**Tasks:**
-- Walk through the prior design decisions above one at a time. For each: confirm it's still wanted, get a concrete example, get explicit sign-off, and only then fold it into the spec and grammar (this phase can overlap with Phase 1's mechanics, but the decision-making itself is what belongs here). *(Not started — waiting on the original design artifact.)*
-- ~~Resolve the two flagged spec/example inconsistencies.~~ Done 2026-09-13.
-- ~~Resolve the two open design questions (null semantics; read/write scope).~~ Done 2026-09-13: null equality is null-safe/total and traversal through null propagates (spec §9); Minab supports declarative writes, not read-only (spec §1). Three residual details spun out as new Open Design Questions (spec §8, items 8-10): relational-operator null semantics, aggregate-over-null behavior, and the (undesigned) concrete write syntax.
+Rather than accept it as a finished artifact, it was integrated as real Phase 1 work: replaced `src/language/minab.langium` and `docs/query-language-spec.md` wholesale, ran it through `langium generate` and `tsc -b` for real, and rebuilt `test/parsing.test.ts` from `docs/showcase.md`'s own 14 sections (49 tests). That surfaced three genuine defects the artifact itself hadn't caught — see Phase 1 below for what they were and how each was resolved.
 
-**Output:** `docs/query-language-spec.md` contains every construct anyone intends to build, and nothing it doesn't; every internal contradiction is either fixed or logged as a deliberate, explained deferral (a short "Deferred Decisions" section in the spec is enough). No implementation work in Phases 1+ should surface a spec question this phase should have caught.
+**Output:** `docs/query-language-spec.md` (12 sections) and `src/language/minab.langium` are the single authoritative pair; `docs/showcase.md` is a synced example corpus; no orphaned prior decisions remain. Eighteen items remain logged as genuinely open in spec §12 — those are deliberate deferrals, not oversights, and should go through the same proposal → example → approval cycle whenever picked up.
 
 ---
 
@@ -50,13 +47,17 @@ Separately, the smoke-test suite in this repo found two places where the spec's 
 
 **Sign-off: Mixed** (the constructs are Phase 0's decisions; encoding them in Langium syntax and checking they don't collide is mechanical).
 
-**Tasks:**
-- Extend `minab.langium` with everything Phase 0 approved.
-- Run `npm run langium:generate` after each addition — treat any LL(k)/ambiguity error as blocking, not a warning.
-- Grep for keyword collisions between the uppercase (SQL-style) and lowercase (control-flow/JSON) keyword sets after each addition.
-- Extend `test/parsing.test.ts` so every construct in the spec — not just the ones that existed at bootstrap — has at least one passing parse example, and every deliberately-invalid example (if any) has a corresponding failing-parse assertion.
+**Status: Done (2026-09-13)** for the grammar that exists; revisit whenever spec §12's open items get resolved and add new constructs.
 
-**Output:** `npm run build && npm test` green, with the smoke suite's coverage matching the spec 1:1 — if you can point at a syntax box in the spec, there's a test parsing it.
+`npm run langium:generate` and `npm run build` are clean (one Chevrotain "ambiguous alternatives" warning in the `Postfix` rule — `TupleAccess`'s `[NUMBER]` vs. `FilterAccess`'s `[Expression]`, since a bare number is also a valid expression — expected and already tracked as spec §12 item 4, not a build error). `npm test` is 49/49 green, with coverage built directly from `docs/showcase.md`'s 14 sections (one `describe` block each), plus a block asserting that constructs the showcase flags as *semantic* errors (e.g. `let age: INTEGER = null;`) still parse cleanly — that distinction only becomes checkable once Phase 3's `Validator` exists.
+
+Three real defects surfaced during this pass — exactly the kind of empirical verification spec §12 item 18 called for, though not the specific risk it named (that one — `AssignmentStatement`'s target sharing a leading token with a block's tail — turned out fine; Langium's generator reported no conflict there, and it's covered by dedicated tests):
+
+1. **Clause-order regression.** `docs/showcase.md` §5 wrote `SELECT` before `HAVING`; the §11 grammar (correctly, matching the same decision Hamed already made once for this exact question, back when it first came up in the pipeline-only spec) requires `HAVING` before `SELECT`. Fixed the showcase example, not the grammar — Hamed's call.
+2. **Vivify gap on the first path segment.** `CurrentRecord`'s grammar rule (`'.' (field=ID)?`) had no `vivify` flag, so `.doctor!.id = 21;` — a headline §9.3 example — didn't actually parse; only `MemberAccess` (later `.field` steps) had `vivify?='!'?`. Fixed by adding the same flag to `CurrentRecord` — Hamed's call; re-verified against the full suite afterward.
+3. **`isnot` misused as general inequality.** `docs/showcase.md`'s §14 combined example wrote `newStatus isnot "ok"` — but §5.6/§11 define `is`/`isnot` strictly for JSON-shape testing (`test=JsonKind`: `null`/`array`/`object`/`string`/`number`/`boolean`), not arbitrary-value comparison; a string literal isn't a legal right-hand operand. This wasn't a grammar bug or an open design question — the spec's own §5.6 is unambiguous — so it was a one-line example fix to `!=`, the operator actually meant.
+
+**Output:** `npm run build && npm test` green (confirmed 2026-09-13), 1:1 test coverage against every construct in `docs/showcase.md`.
 
 ---
 
@@ -68,13 +69,13 @@ This is the first real custom Langium service, and everything downstream (valida
 
 - `.` → the innermost active scope's current record.
 - `^` → the scope one level below the current one on the stack.
-- `@alias` → a named scope, regardless of stack depth.
-- `KEY` → the group key, valid only after `GROUP BY`.
+- `#alias` → a named scope, regardless of stack depth.
+- `KEY` → the group key, valid only after `GROUPBY`.
 
 **Tasks:**
-- Implement a custom `ScopeProvider` (or equivalent Langium 4.x service — confirm the exact extension point against the installed version's types before assuming an API shape) that maintains this stack as it walks `FROM`/`JOIN` sources, `[...]` filters, subqueries, and inline `@Table` scopes.
+- Implement a custom `ScopeProvider` (or equivalent Langium 4.x service — confirm the exact extension point against the installed version's types before assuming an API shape) that maintains this stack as it walks `FROM`/`JOIN` sources, `[...]` filters, subqueries, and inline `#Table` scopes.
 - Wire it into `minab-module.ts` alongside the existing generated services.
-- Write a scoping-specific test suite (separate from the parsing smoke tests) that resolves references in nested filters, correlated subqueries (the `@Booking[... ^...]` pattern from spec §6.1), and multi-level `.field` traversal, and asserts they point at the right declaration/table.
+- Write a scoping-specific test suite (separate from the parsing smoke tests) that resolves references in nested filters, correlated subqueries (the `#Booking[... ^...]` pattern from spec §6.1), and multi-level `.field` traversal, and asserts they point at the right declaration/table.
 
 **Output:** cross-references resolve correctly for every scoping example in the spec, backed by tests — not just "it parses," but "`^` in this nested filter actually points at the row that opened it."
 
@@ -82,10 +83,10 @@ This is the first real custom Langium service, and everything downstream (valida
 
 ## Phase 3 — Semantic validation (`Validator`)
 
-**Sign-off: Mixed** (some checks are unambiguous restatements of the spec; a few — like how strict to be about implicit relation traversal, spec §8 open question #7 — are design calls that should go through Phase 0/spec-governance if not already settled there).
+**Sign-off: Mixed** (most checks are unambiguous restatements of the spec; the one design call this touches — how strict to be about implicit relation traversal — is already settled: spec §12 item 7 resolved the collection-traversal boundary at §3.4, so this phase just implements it).
 
 **Tasks:**
-- Implement a `Validator` catching at minimum: `$` referenced outside a `field` rule; `KEY` referenced outside a `GROUP BY`-scoped clause; `@alias` referencing an undeclared table; a to-many (`collection`) field used where a scalar is required without an aggregate or explicit filter.
+- Implement a `Validator` catching at minimum: `$` referenced outside a `field` rule; `KEY` referenced outside a `GROUPBY`-scoped clause; `#alias` referencing an undeclared table; a to-many (`collection`) field used where a scalar is required without an aggregate or explicit filter.
 - Each check needs a clear, actionable diagnostic message — this is user-facing the moment there's an editor extension (Phase 7).
 - Build a validation test suite of deliberately-invalid snippets, one per rule, asserting the specific diagnostic fires.
 
@@ -95,11 +96,11 @@ This is the first real custom Langium service, and everything downstream (valida
 
 ## Phase 4 — Type system
 
-**Sign-off: Mixed** (the *rules* — no implicit coercion, scalar/ref/collection traversal semantics — are already decided; mapping them onto `PgSqlType` and deciding exact coercion-error wording is closer to Design).
+**Sign-off: Mixed** (the *rules* — no implicit coercion, scalar/ref/collection traversal semantics — are already decided; mapping them onto the type system's logical types (§7.2) and deciding exact coercion-error wording is closer to Design).
 
 **Tasks:**
-- Design (or confirm, if Phase 0 already pinned this down) how `PgSqlType` values map onto Minab's literal and expression types.
-- Implement type inference/checking over the expression grammar: literals, sigil types (`.`/`$`/`^`/`@alias`/`KEY`), function return types (aggregates reduce a collection to a scalar; predicates return boolean), and the scalar/ref/collection traversal and broadcast rules from spec §3.
+- Design (or confirm, if Phase 0 already pinned this down) how the type system's logical types (§7.2) map onto Minab's literal and expression types.
+- Implement type inference/checking over the expression grammar: literals, sigil types (`.`/`$`/`^`/`#alias`/`KEY`), function return types (aggregates reduce a collection to a scalar; predicates return boolean), and the scalar/ref/collection traversal and broadcast rules from spec §3.
 - Enforce no-implicit-coercion as a validator-level or dedicated type-checker error.
 - Test both the happy path (correctly-typed programs type-check) and the enforcement path (a coercion that should be rejected, is).
 
@@ -111,15 +112,14 @@ This is the first real custom Langium service, and everything downstream (valida
 
 **Sign-off: Design → Mechanical.** This is the biggest undecided architectural question in the whole roadmap and should not be implemented before it's explicitly settled.
 
-The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the `PgSqlType` typing already in the design), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream, including the CLI (Phase 6).
+The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the logical type system already in the design (§7.2)), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream, including the CLI (Phase 6).
 
-Two things Phase 0 already settled make this concrete rather than fully open: null semantics are null-safe/total, not SQL's three-valued logic (spec §9) — so a SQL-compiling strategy must translate `==`/`!=` to a null-safe form, not emit `=`/`<>` directly; and Minab supports declarative writes (spec §1), so the ADR needs to account for a write path, not just queries and validation. The concrete write *syntax* is still undesigned (spec §8, item 10) and should probably be settled before or alongside this ADR, since it affects which execution strategies are even viable.
+Two things Phase 0 already settled make this concrete rather than fully open: null semantics are null-safe/total, not SQL's three-valued logic (spec §9) — so a SQL-compiling strategy must translate `==`/`!=` to a null-safe form, not emit `=`/`<>` directly; and Minab supports declarative writes (spec §1), so the ADR needs to account for a write path, not just queries and validation. The concrete write syntax is now settled (spec §10 — `INSERT`/`UPDATE`/`DELETE`), so this ADR only needs to account for executing it, not design it.
 
 **Tasks:**
-- Design the concrete write syntax (spec §8, item 10) — its own proposal/example/approval pass — early enough in this phase to inform the ADR below, since it affects which execution strategies are viable.
-- Write a short ADR (architecture decision record — a markdown file under `docs/adr/` is enough) comparing at least "compile pipeline queries to SQL" vs. "interpret against an in-memory record set," covering: how validation rules execute (per-record, likely outside SQL, even if queries compile to SQL); how correlated `@Table` scans perform if interpreted naively; how the null-safe equality from spec §9 gets implemented under each strategy; how declarative writes get executed (a generated trigger/function if compiling to SQL? an explicit write step in an interpreter?).
+- Write a short ADR (architecture decision record — a markdown file under `docs/adr/` is enough) comparing at least "compile pipeline queries to SQL" vs. "interpret against an in-memory record set," covering: how validation rules execute (per-record, likely outside SQL, even if queries compile to SQL); how correlated `#Table` scans perform if interpreted naively; how the null-safe equality from spec §9 gets implemented under each strategy; how declarative writes get executed (a generated trigger/function if compiling to SQL? an explicit write step in an interpreter?).
 - Get Hamed's sign-off on the ADR before building anything.
-- Implement a minimal but real evaluator/codegen for the chosen strategy, covering at least: a `FROM`/`WHERE`/`SELECT` pipeline, one aggregate `GROUP BY`/`HAVING` example, and one `VALIDATE` rule with a correlated `@Table` check.
+- Implement a minimal but real evaluator/codegen for the chosen strategy, covering at least: a `FROM`/`WHERE`/`SELECT` pipeline, one aggregate `GROUPBY`/`HAVING` example, and one record-level validation rule with a correlated `#Table` check.
 
 **Output:** the ADR, plus a working evaluator (or SQL codegen, tested by diffing generated SQL against hand-written expected SQL for a few fixtures) proven against at least one non-trivial example from each of the pipeline and validation layers — not a toy that only handles the simplest case.
 
@@ -145,7 +145,7 @@ Two things Phase 0 already settled make this concrete rather than fully open: nu
 **Tasks:**
 - Switch `minab-module.ts` from core-only services to `langium/lsp`'s `createDefaultModule`/`createDefaultSharedModule`, adding the LSP-specific dependencies (`vscode-languageserver`, `vscode-languageserver-textdocument`, `vscode-uri`).
 - Add a minimal VS Code extension (langium-cli can scaffold most of this) wiring the language server, syntax highlighting (via the grammar's existing token definitions), and live diagnostics from the Phase 3 validator.
-- Verify hover/go-to-definition work for at least `@alias` references, using the Phase 2 scope provider.
+- Verify hover/go-to-definition work for at least `#alias` references, using the Phase 2 scope provider.
 
 **Output:** opening a `.minab` file in VS Code shows syntax highlighting and live diagnostics for the checks built in Phase 3, without needing to run the CLI separately.
 
