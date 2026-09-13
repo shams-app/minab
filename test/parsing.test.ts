@@ -43,12 +43,7 @@ describe('Minab grammar — smoke tests from the spec', () => {
         `);
     });
 
-    // NOTE: the spec's §4.3 example places SELECT before HAVING, but the
-    // grammar (§7, and the clause order documented in §4.1) requires
-    // HAVING before SELECT. Reordered here to match the grammar as written;
-    // flagged for Hamed to resolve (fix the example, or relax the grammar
-    // to accept either order) — see README "Next steps".
-    test('pipeline: group, aggregate, having (spec §4.3, clause order corrected)', async () => {
+    test('pipeline: group, aggregate, having (spec §4.3)', async () => {
         await expectNoErrors(`
             FROM Order
             GROUP BY .customer
@@ -75,14 +70,7 @@ describe('Minab grammar — smoke tests from the spec', () => {
         `);
     });
 
-    // NOTE: the spec's §6.2 example writes the IN list with parens
-    // ("pending", "shipped", "cancelled"), but §5.1/§5.2 specify list
-    // literals as [...] and the grammar (§7) has no parenthesized list
-    // form — only a single-expression '(' Expression ')' and Subquery
-    // '(' Query ')'. Using [...] here to match the grammar; flagged for
-    // Hamed to resolve (fix the example, or add a tuple-literal form to
-    // the grammar) — see README "Next steps".
-    test('validation: field-level rules (spec §6.2, IN-list syntax corrected)', async () => {
+    test('validation: field-level rules (spec §6.2)', async () => {
         await expectNoErrors(`
             field status:
                 $ IN ["pending", "shipped", "cancelled"]
@@ -94,6 +82,20 @@ describe('Minab grammar — smoke tests from the spec', () => {
         await expectNoErrors(`
             field customer_id:
                 EXISTS(@Customer[.id == $])
+        `);
+    });
+
+    // §5.1/§6.2: IN's right-hand side accepts any collection-valued
+    // expression, not just a list literal — a collection field on the
+    // current record, or a field on another table opened via @Table.
+    test('validation: IN against a collection-valued expression (spec §5.1, §6.2)', async () => {
+        await expectNoErrors(`
+            field status:
+                $ IN .allowed_statuses
+        `);
+        await expectNoErrors(`
+            field category:
+                $ IN @CategoryConfig.valid_categories
         `);
     });
 

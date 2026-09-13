@@ -153,8 +153,8 @@ LIMIT 20
 ```
 FROM Order
 GROUP BY .customer
-SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
 HAVING SUM(.total) > 1000
+SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
 ORDER BY total_spent DESC
 ```
 
@@ -186,7 +186,7 @@ primary      (literals, sigils, ( ), [ ])
 Notes:
 
 - `NOT` binds tighter than `AND`/`OR` but looser than comparison, and is right-recursive into itself: `NOT NOT x` is valid; `NOT x == y` parses as `NOT (x == y)`.
-- `IN` and `LIKE` are **non-chaining** comparison operators — `a < b < c` is not valid, matching standard convention. `IN` expects a `ListLiteral` or collection expression on the right.
+- `IN` and `LIKE` are **non-chaining** comparison operators — `a < b < c` is not valid, matching standard convention. `IN` expects a `ListLiteral` or any other collection-valued expression on the right — a collection field on the current record (`.allowed_statuses`), a field on another table opened via `@Table` (`@CategoryConfig.valid_categories`), etc. (see §6.2 for field-rule examples).
 - List literals use `[...]` — e.g. `.status IN ["pending", "shipped"]`. This is grammatically distinct from the postfix filter `[...]` (one is a primary expression, the other suffixes a collection expression), but the two can look visually similar; see open question in §8.
 
 ### 5.2 Literals
@@ -253,10 +253,20 @@ Evaluates a boolean expression against a single field. `$` is that field's value
 
 ```
 field status:
-    $ IN ("pending", "shipped", "cancelled")
+    $ IN ["pending", "shipped", "cancelled"]
 
 field total:
     $ >= 0 AND $ <= .customer.credit_limit
+```
+
+`IN`'s right-hand side isn't limited to a list literal — anything that evaluates to a collection works, including a collection-valued field on the current record or a field pulled from another table via `@Table`:
+
+```
+field status:
+    $ IN .allowed_statuses
+
+field category:
+    $ IN @CategoryConfig.valid_categories
 ```
 
 **Referential integrity check**, using an ad-hoc `@Table` scope:

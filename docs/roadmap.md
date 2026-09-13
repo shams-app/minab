@@ -35,11 +35,11 @@ Update the **Status** column as phases complete, and update `docs/query-language
 
 Past design conversations (outside this repo) settled on several constructs — `LET`-style variable declarations typed against a `PgSqlType` enum, three loop forms with labeled `break`/`continue`, explicit `CAST(expr AS TypeRef)`, an `is`/`isnot` JSON-shape-testing operator, `SELECT DISTINCT` — plus two open questions (null semantics across `ref` traversal and `LEFT JOIN`; whether Minab is read-only by design). None of this is reflected in the current `docs/query-language-spec.md` or `src/language/minab.langium`, which only contain the pipeline/expression/validation core.
 
-Separately, the smoke-test suite in this repo already found two places where the spec's prose/grammar and its own worked examples disagree (§4.3 clause order; §6.2 `IN`-list syntax — see `test/parsing.test.ts`).
+Separately, the smoke-test suite in this repo found two places where the spec's prose/grammar and its own worked examples disagreed (§4.3 clause order; §6.2 `IN`-list syntax) — both resolved 2026-09-13 (see `docs/status.md`), and `IN`'s right-hand side is now documented as accepting any collection-valued expression, not just a list literal.
 
 **Tasks:**
-- Walk through the prior design decisions above one at a time. For each: confirm it's still wanted, get a concrete example, get explicit sign-off, and only then fold it into the spec and grammar (this phase can overlap with Phase 1's mechanics, but the decision-making itself is what belongs here).
-- Resolve (or explicitly, permanently defer with a written rationale) the two flagged spec/example inconsistencies.
+- Walk through the prior design decisions above one at a time. For each: confirm it's still wanted, get a concrete example, get explicit sign-off, and only then fold it into the spec and grammar (this phase can overlap with Phase 1's mechanics, but the decision-making itself is what belongs here). *(Not started — waiting on the original design artifact.)*
+- ~~Resolve the two flagged spec/example inconsistencies.~~ Done 2026-09-13.
 - Resolve — or explicitly schedule for later with a rationale — the two open design questions (null semantics; read/write scope). If deferred, write down *why* and what unblocks them, so a future phase doesn't rediscover the same ambiguity from scratch.
 
 **Output:** `docs/query-language-spec.md` contains every construct anyone intends to build, and nothing it doesn't; every internal contradiction is either fixed or logged as a deliberate, explained deferral (a short "Deferred Decisions" section in the spec is enough). No implementation work in Phases 1+ should surface a spec question this phase should have caught.

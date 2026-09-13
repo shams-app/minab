@@ -17,8 +17,6 @@ Required cycle, in order, every time:
 
 Never skip to step 4. Never edit the spec file speculatively "to see what it looks like" or "to keep things consistent" — raise it as a proposal instead, even for things like section renumbering.
 
-Two known inconsistencies between the spec's prose/grammar and its own worked examples are already flagged and tracked in `docs/roadmap.md` Phase 0:
-- §4.3's grouped-query example places `SELECT` before `HAVING`; §4.1 and the §7 grammar require the opposite order.
-- §6.2's field-rule example writes `IN (...)` with parens; §5.1/§5.2 and the §7 grammar only support `IN [...]`.
+Two inconsistencies the initial smoke-test pass found between the spec's prose/grammar and its own worked examples have been resolved (2026-09-13, see `docs/status.md`): §4.3's clause order now matches §4.1/§7 (HAVING before SELECT), and §6.2's `IN` example uses `[...]` per §5.1/§5.2 — plus `IN`'s right-hand side is now documented as accepting any collection-valued expression, not just a list literal (a collection field, or a field on another table via `@Table`).
 
-Don't resolve either of these unilaterally in any direction — they're open questions for Hamed, not typos to silently correct.
+The general rule stands for anything new: don't "fix" a spec/grammar discrepancy in either direction on your own judgment — surface it and follow the cycle above.
