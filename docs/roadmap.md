@@ -65,6 +65,8 @@ Three real defects surfaced during this pass — exactly the kind of empirical v
 
 **Sign-off: Mechanical** (the scoping *rule* is already fully specified in spec §2.2 — this is implementing it, not designing it).
 
+**Status: Done (2026-09-14).**
+
 This is the first real custom Langium service, and everything downstream (validation, hover, go-to-definition, the evaluator's variable resolution) depends on it. Minab's sigils resolve against a scope *stack*, not the lexical/AST-parent scoping Langium assumes by default:
 
 - `.` → the innermost active scope's current record.
@@ -72,10 +74,13 @@ This is the first real custom Langium service, and everything downstream (valida
 - `#alias` → a named scope, regardless of stack depth.
 - `KEY` → the group key, valid only after `GROUPBY`.
 
-**Tasks:**
-- Implement a custom `ScopeProvider` (or equivalent Langium 4.x service — confirm the exact extension point against the installed version's types before assuming an API shape) that maintains this stack as it walks `FROM`/`JOIN` sources, `[...]` filters, subqueries, and inline `#Table` scopes.
-- Wire it into `minab-module.ts` alongside the existing generated services.
-- Write a scoping-specific test suite (separate from the parsing smoke tests) that resolves references in nested filters, correlated subqueries (the `#Booking[... ^...]` pattern from spec §6.1), and multi-level `.field` traversal, and asserts they point at the right declaration/table.
+**A finding that reshaped this phase:** `minab.langium` has zero Langium cross-references (`[Type:ID]`) anywhere — table names, join aliases, `#alias` names are all plain `ID`/string fields — and there are no in-file table/column declarations at all. This is by design, confirmed with Hamed: Minab is embedded in a larger web application (edited in-browser, inside Monaco), and table names, column names, and built-in function signatures are supplied by that host at runtime, not declared in `.minab` source. So a real Langium `ScopeProvider`/Linker (which only fires on `Reference<T>` grammar fields) has nothing to hook into. The implementation below is a standalone resolution service instead, with an explicit host-schema contract as its input — not a grammar change.
+
+**What was built:**
+- `src/language/schema.ts` — the host-schema contract (`MinabSchema`/`SchemaProvider`): tables with columns, and built-in function signatures. A first cut, expected to grow once Phase 4 needs richer types/relations.
+- `src/language/minab-scope-resolver.ts` (`MinabScopeResolver`) — walks a sigil node's AST ancestor chain to reconstruct the §2.2 scope stack (pushed by a `Query`'s clauses, a `[...]` filter's condition, a `for-in` loop's body/guard — never by their own source/receiver/iterable) and resolves `.`/`^`/`#alias`/`KEY`/bare `NameRef` against it, falling back to the `SchemaProvider` for table names not backed by an in-file alias. Resolution is deliberately bounded to one hop of column access off a statically-known table; a multi-hop chain (`.customer.country`) fails explicitly with a "needs the Phase 4 type system" reason rather than guessing. Reporting an unresolved sigil as a diagnostic is Phase 3's job, not this one's — this phase only answers "what does this refer to here?"
+- Wired into `minab-module.ts` as `schema`/`scopeResolver` services; `createMinabServices` now takes an optional `MinabSchema` parameter (defaults to empty for callers, like the parsing suite, that don't need it).
+- `test/scoping.test.ts` (12 tests) — covers a plain `.field` in a `FROM` query, the §6.1 correlated `#Booking[. != ^ ...]` pattern (confirming `^` escapes the filter to the implicit "record under validation," not to `#Booking` itself), the showcase's §14 nested-filter-inside-loop disambiguation (bare `.` vs. the loop's own alias vs. `^` — all landing on the frames the showcase's own commentary describes), `KEY` valid only after `GROUPBY`, and unresolved `#alias`/columns coming back as `{found: false}` rather than throwing.
 
 **Output:** cross-references resolve correctly for every scoping example in the spec, backed by tests — not just "it parses," but "`^` in this nested filter actually points at the row that opened it."
 
