@@ -40,6 +40,22 @@ export interface MinabSchema {
 export const EMPTY_SCHEMA: MinabSchema = { tables: [], functions: [] };
 
 /**
+ * Host-supplied context distinguishing a field-level rule from a record-
+ * level rule or general program (spec §6.2). Minab's own grammar has no
+ * marker for this — a rule that uses `$` is *implicitly* field-level, but
+ * whether `$` is legal at all in the program being validated is a fact
+ * only the host knows (which validation slot this program is attached
+ * to), not something derivable from the source text. See Phase 3's
+ * `Validator`, which is the only consumer of this.
+ */
+export interface MinabRuleContext {
+    /** True when `$` (FieldValue) is valid anywhere in this program. */
+    isFieldRule: boolean;
+}
+
+export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };
+
+/**
  * Thin lookup wrapper around a host-supplied `MinabSchema`. Kept as its own
  * service (rather than folding lookups into the scope resolver) so a host
  * can swap in a live/async-backed implementation later without touching

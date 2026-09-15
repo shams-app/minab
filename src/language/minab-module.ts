@@ -8,7 +8,8 @@ import type {
 import { createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium';
 import { MinabGeneratedModule, MinabGeneratedSharedModule } from './generated/module.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
-import { EMPTY_SCHEMA, SchemaProvider, type MinabSchema } from './schema.js';
+import { registerValidationChecks } from './minab-validator.js';
+import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
 
 /**
  * Declaration of custom services for the Minab language.
@@ -19,10 +20,14 @@ import { EMPTY_SCHEMA, SchemaProvider, type MinabSchema } from './schema.js';
  *  - `scopeResolver`: resolves the scope-stack sigils (`.`/`^`/`#alias`/
  *    `KEY`, spec §2.2) plus bare `NameRef` lookups. Not a Langium
  *    `ScopeProvider` — see `minab-scope-resolver.ts` for why.
+ *  - `ruleContext`: host-supplied fact about whether the program being
+ *    validated is a field-level rule (see `schema.ts`) — consumed by the
+ *    `Validator`'s `$`-placement check.
  *
- * A custom Validator (semantic checks: `$` only valid inside a `field`
- * rule, `KEY` only valid after `GROUPBY`, relation/traversal type-checking
- * per §3) is still a future addition — see `docs/roadmap.md` Phase 3.
+ * The `Validator` (`minab-validator.ts`, Phase 3) checks: `$` only valid
+ * when `ruleContext.isFieldRule`; `KEY` only valid after `GROUPBY`;
+ * `#alias` referencing an undeclared table. Collection-vs-scalar
+ * type-checking (spec §3.4) is deferred to Phase 4's real type system.
  *
  * Note: this module wires only the *core* Langium services (parsing, AST,
  * scoping, validation) — no LSP/IDE services (`langium/lsp`) yet. Add those
@@ -32,6 +37,7 @@ import { EMPTY_SCHEMA, SchemaProvider, type MinabSchema } from './schema.js';
 export type MinabAddedServices = {
     schema: SchemaProvider;
     scopeResolver: MinabScopeResolver;
+    ruleContext: MinabRuleContext;
 };
 
 /**
@@ -45,13 +51,18 @@ export type MinabServices = LangiumCoreServices & MinabAddedServices;
  * partially specified to override only distinct fields, while the
  * custom services must be fully specified.
  *
- * Takes the host-supplied schema as a parameter (rather than a static
- * export) since it's genuinely per-embedding data, not a project constant.
+ * Takes the host-supplied schema and rule context as parameters (rather
+ * than static exports) since both are genuinely per-embedding/per-document
+ * data, not project constants.
  */
-function createMinabModule(schema: MinabSchema): Module<MinabServices, PartialLangiumCoreServices & MinabAddedServices> {
+function createMinabModule(
+    schema: MinabSchema,
+    ruleContext: MinabRuleContext
+): Module<MinabServices, PartialLangiumCoreServices & MinabAddedServices> {
     return {
         schema: () => new SchemaProvider(schema),
-        scopeResolver: services => new MinabScopeResolver(services.schema)
+        scopeResolver: services => new MinabScopeResolver(services.schema),
+        ruleContext: () => ruleContext
     };
 }
 
@@ -69,11 +80,14 @@ function createMinabModule(schema: MinabSchema): Module<MinabServices, PartialLa
  *
  * `schema` is the host application's table/column/function contract (see
  * `schema.ts`); it defaults to empty for callers (e.g. the parsing smoke
- * suite) that don't need scope/schema resolution.
+ * suite) that don't need scope/schema resolution. `ruleContext` says
+ * whether the program being validated is a field-level rule; it defaults
+ * to `false` (record-level/general program).
  */
 export function createMinabServices(
     context: DefaultSharedCoreModuleContext,
-    schema: MinabSchema = EMPTY_SCHEMA
+    schema: MinabSchema = EMPTY_SCHEMA,
+    ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT
 ): {
     shared: LangiumSharedCoreServices;
     Minab: MinabServices;
@@ -85,8 +99,9 @@ export function createMinabServices(
     const Minab = inject(
         createDefaultCoreModule({ shared }),
         MinabGeneratedModule,
-        createMinabModule(schema)
+        createMinabModule(schema, ruleContext)
     );
     shared.ServiceRegistry.register(Minab);
+    registerValidationChecks(Minab);
     return { shared, Minab };
 }
