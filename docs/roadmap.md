@@ -86,7 +86,7 @@ This is the first real custom Langium service, and everything downstream (valida
 
 ---
 
-## Phase 3 — Semantic validation (`Validator`)
+## Phase 3 — Semantic validation (`Validator`) — Done (2026-09-16)
 
 **Sign-off: Mixed** (most checks are unambiguous restatements of the spec; the one design call this touches — how strict to be about implicit relation traversal — is already settled: spec §12 item 7 resolved the collection-traversal boundary at §3.4, so this phase just implements it).
 
@@ -96,6 +96,13 @@ This is the first real custom Langium service, and everything downstream (valida
 - Build a validation test suite of deliberately-invalid snippets, one per rule, asserting the specific diagnostic fires.
 
 **Output:** a program that parses cleanly but violates a semantic rule is rejected with a message pointing at the exact problem, for every rule in the checklist above.
+
+**What actually shipped:** 3 of the 4 checks, decided with Hamed:
+- `$` (`FieldValue`): the spec (§6.2, line 374) says any `$` usage makes the whole program "implicitly a field-level rule" — there's no AST marker for "inside vs. outside" a field rule, since a Minab program has exactly one top-level statement. Per Hamed, `$` is valid *anywhere* in the program (any nesting) as long as the host says up front this program is a field rule — so this became host-supplied context (`schema.ts`'s `MinabRuleContext`/`isFieldRule`), threaded through `createMinabServices` exactly like `MinabSchema` already is, not something derived from the AST.
+- `KEY` (`GroupKeyRef`) outside `GROUPBY`, and `#alias` (`NamedScope`) referencing an undeclared table: thin wrappers around `MinabScopeResolver.resolveGroupKeyRef`/`resolveNamedScope` (Phase 2) — their existing `reason` strings are used as the diagnostic messages verbatim.
+- **The 4th check (collection-vs-scalar) is deferred to Phase 4, not implemented here.** `schema.ts`'s `MinabColumnSchema.type` is still a free-form display string with no structured collection flag; per Hamed, building a throwaway representation just for this check isn't worth it when Phase 4 replaces the whole column-type representation anyway. Phase 4's task list below should pick this check up once a real type system exists to support it.
+
+Implementation: `src/language/minab-validator.ts` (`MinabValidator` + `registerValidationChecks`, wired from `createMinabServices`), `test/validation.test.ts` (7 tests, using Langium's `validationHelper` test helper — first use of the validation pipeline in this repo).
 
 ---
 
@@ -108,6 +115,7 @@ This is the first real custom Langium service, and everything downstream (valida
 - Implement type inference/checking over the expression grammar: literals, sigil types (`.`/`$`/`^`/`#alias`/`KEY`), function return types (aggregates reduce a collection to a scalar; predicates return boolean), and the scalar/ref/collection traversal and broadcast rules from spec §3.
 - Enforce no-implicit-coercion as a validator-level or dedicated type-checker error.
 - Test both the happy path (correctly-typed programs type-check) and the enforcement path (a coercion that should be rejected, is).
+- Pick up the Phase 3 check deferred here: a to-many (`collection`) field used where a scalar is required without an aggregate or predicate-over-filter (spec §3.4). Needs `schema.ts`'s `MinabColumnSchema.type` replaced by this phase's real type representation first — see Phase 3's "what actually shipped" note.
 
 **Output:** every well-typed example in the spec type-checks with no errors; a representative set of ill-typed programs (comparing incompatible types, treating a collection as a scalar without reducing it, etc.) is rejected with a clear message.
 
