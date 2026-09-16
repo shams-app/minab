@@ -2,7 +2,7 @@ import { AstUtils, EmptyFileSystem } from 'langium';
 import { parseHelper } from 'langium/test';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createMinabServices, type MinabServices } from '../src/language/minab-module.js';
-import type { MinabSchema } from '../src/language/schema.js';
+import { scalarType, type MinabSchema } from '../src/language/schema.js';
 import {
     isCurrentRecord,
     isGroupKeyRef,
@@ -18,17 +18,36 @@ import {
 // tables in-file.
 const fixtureSchema: MinabSchema = {
     tables: [
-        { name: 'Customer', columns: [{ name: 'id', type: 'INTEGER' }, { name: 'name', type: 'TEXT' }] },
+        {
+            name: 'Customer',
+            columns: [
+                { name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } },
+                { name: 'name', type: { kind: 'scalar', type: scalarType('TEXT') } }
+            ]
+        },
         {
             name: 'Customers',
             columns: [
-                { name: 'id', type: 'INTEGER' },
-                { name: 'balance', type: 'DECIMAL' },
-                { name: 'flagged', type: 'BOOLEAN' }
+                { name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } },
+                { name: 'balance', type: { kind: 'scalar', type: scalarType('DECIMAL') } },
+                { name: 'flagged', type: { kind: 'scalar', type: scalarType('BOOLEAN') } }
             ]
         },
-        { name: 'Booking', columns: [{ name: 'room_id', type: 'INTEGER' }, { name: 'start_date', type: 'DATE' }, { name: 'end_date', type: 'DATE' }] },
-        { name: 'Order', columns: [{ name: 'customer', type: 'ref(Customer)' }, { name: 'total', type: 'DECIMAL' }] }
+        {
+            name: 'Booking',
+            columns: [
+                { name: 'room_id', type: { kind: 'scalar', type: scalarType('INTEGER') } },
+                { name: 'start_date', type: { kind: 'scalar', type: scalarType('DATE') } },
+                { name: 'end_date', type: { kind: 'scalar', type: scalarType('DATE') } }
+            ]
+        },
+        {
+            name: 'Order',
+            columns: [
+                { name: 'customer', type: { kind: 'ref', table: 'Customer', nullable: false } },
+                { name: 'total', type: { kind: 'scalar', type: scalarType('DECIMAL') } }
+            ]
+        }
     ],
     functions: []
 };

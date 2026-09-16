@@ -6,19 +6,23 @@
  * embedded in a larger web application (editing happens in-browser, inside
  * Monaco) and that host supplies the real table names, column names, and
  * built-in function signatures at runtime; they are never declared in
- * `.minab` source. This is a first cut at that contract, informed by what
- * the scope resolver (`minab-scope-resolver.ts`) needs — expect it to grow
- * once Phase 4's type system needs richer column types and relation info.
+ * `.minab` source. Phase 2 shipped a first cut with a free-form, display-
+ * only `type: string` per column; Phase 4 (the type system) replaces that
+ * with the structured `ColumnType` below, matching spec §3's `scalar` /
+ * `ref(Table)` / `collection(Table)` distinction and §7.2's logical types.
  */
+
+import { scalarType, type MinabType, type ScalarType } from './minab-types.js';
+
+/** A schema column's relational shape (spec §3). */
+export type ColumnType =
+    | { kind: 'scalar'; type: ScalarType }
+    | { kind: 'ref'; table: string; nullable: boolean }
+    | { kind: 'collection'; table: string };
 
 export interface MinabColumnSchema {
     name: string;
-    /**
-     * A provisional, display-only type string (e.g. "INTEGER", "TEXT[]",
-     * "ref(Customer)") — not yet the real logical type from spec §7.2.
-     * Phase 4 should replace this with a proper type representation.
-     */
-    type: string;
+    type: ColumnType;
 }
 
 export interface MinabTableSchema {
@@ -26,10 +30,18 @@ export interface MinabTableSchema {
     columns: MinabColumnSchema[];
 }
 
+/**
+ * `paramTypes`/`returnType` use the same structured `MinabType` as
+ * everything else, for consistency — this field predates Phase 4 and its
+ * actual purpose (beyond the built-in/user-`fn` split, both of which are
+ * resolved without consulting it — see `minab-builtins.ts` and
+ * `FunctionDecl` resolution in `minab-type-checker.ts`) is unclear; it's
+ * left structurally upgraded but unconsumed until a real need surfaces.
+ */
 export interface MinabFunctionSchema {
     name: string;
-    paramTypes: string[];
-    returnType: string;
+    paramTypes: MinabType[];
+    returnType: MinabType;
 }
 
 export interface MinabSchema {
@@ -46,14 +58,38 @@ export const EMPTY_SCHEMA: MinabSchema = { tables: [], functions: [] };
  * whether `$` is legal at all in the program being validated is a fact
  * only the host knows (which validation slot this program is attached
  * to), not something derivable from the source text. See Phase 3's
- * `Validator`, which is the only consumer of this.
+ * `Validator`, which is the only consumer of `isFieldRule`.
  */
 export interface MinabRuleContext {
     /** True when `$` (FieldValue) is valid anywhere in this program. */
     isFieldRule: boolean;
+    /**
+     * `$`'s type inside a field rule — the type of whichever field this
+     * program is attached to. Only meaningful when `isFieldRule` is true;
+     * the host knows it the same way it knows `isFieldRule` itself
+     * (nothing in Minab source names the field). Absent means the type
+     * checker can't type `$` and reports an error.
+     */
+    fieldType?: ScalarType;
+    /**
+     * The table a bare top-level `.`/`^` resolves to (spec §6) — "the
+     * record under validation." `MinabScopeResolver` (Phase 2) can't know
+     * this: a validation rule's source never names its own table, only
+     * wherever the host attaches the rule does. Without this, `.field` at
+     * the top level of *every* validation rule (record- or field-level —
+     * the primary use case in spec §6) would be untypeable; found during
+     * Phase 4 implementation, same "host-supplied fact, same shape as
+     * `isFieldRule`" pattern as `fieldType` above.
+     */
+    recordTable?: string;
 }
 
 export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };
+
+// Re-exported so callers building a `MinabSchema`/`MinabRuleContext`
+// fixture don't need a separate import from `minab-types.ts` just for
+// this one helper.
+export { scalarType };
 
 /**
  * Thin lookup wrapper around a host-supplied `MinabSchema`. Kept as its own

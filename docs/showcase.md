@@ -126,7 +126,7 @@ let top_customer_id: UUID = (
     LIMIT 1
 );
 
-.customer == top_customer_id
+.customer.id == top_customer_id
 ```
 
 ---
@@ -267,13 +267,23 @@ FROM Customer
 SELECT .id, &discountedTotal(.id, .discount_rate) AS discounted
 ```
 
-**A function whose tail is a `Query`, so it returns a table, not a scalar:**
+**A function whose tail is a `Query` always returns `JSON` — a JSON array of the selected shape (§8.6):**
 ```
-fn cancelledOrdersFor(customerId: UUID): UUID {
+fn cancelledOrdersFor(customerId: UUID): JSON {
     FROM Order
-    WHERE .customer == customerId AND .status == "cancelled"
+    WHERE .customer.id == customerId AND .status == "cancelled"
     SELECT .id
 }
+// &cancelledOrdersFor(x) : JSON — an array of UUIDs, one per cancelled order
+```
+
+**Built-ins are bare, user functions need `&` — the two never collide (§5.3):**
+```
+COUNT(.orders) > 0              // built-in, bare
+&discountedTotal(.id, 0.1)      // user-defined, & required
+```
+```
+fn SUM(x: INTEGER[]): INTEGER { 0 }   // ✗ semantic error — SUM is a reserved built-in name
 ```
 
 **Tuple return type, multiple `let`s in a body:**

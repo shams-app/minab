@@ -1,24 +1,59 @@
 /**
- * Semantic validation (roadmap Phase 3). Catches programs that parse
+ * Semantic validation (roadmap Phases 3–4). Catches programs that parse
  * cleanly but violate a rule the grammar can't express:
  *
  *  - `$` (`FieldValue`) used when the host hasn't marked this program as
  *    a field-level rule (`schema.ts`'s `MinabRuleContext`).
  *  - `KEY` (`GroupKeyRef`) used outside a `GROUPBY`-scoped clause.
  *  - `#alias` (`NamedScope`) referencing an undeclared table/scope.
+ *  - Phase 4: no-implicit-coercion (spec §5.5), the §3.4 collection-vs-
+ *    scalar boundary, the §7.7 null-operand rules, unknown-function calls
+ *    and the built-in/`&`-prefixed split (§5.3), and the two `FunctionDecl`
+ *    rules from §5.3/§8.6 (reserved built-in names; a `Query`-tailed
+ *    function's return type must be `JSON`).
  *
- * The latter two are thin wrappers around `MinabScopeResolver`, which
- * already does the scope-stack walking and produces a human-readable
- * `reason` string on failure (Phase 2) — this file's job is only to turn
- * `{found: false}` into a diagnostic. A fourth check from the roadmap
- * (a to-many/`collection` field used where a scalar is required) is
- * deferred to Phase 4: `schema.ts`'s column type is still a free-form
- * display string with no structured collection flag, so there's nothing
- * to check against yet.
+ * The first three are thin wrappers around `MinabScopeResolver` (Phase 2),
+ * which already does the scope-stack walking and produces a human-readable
+ * `reason` string on failure — this file's job is only to turn
+ * `{found: false}` into a diagnostic. The Phase 4 checks follow the same
+ * shape against `MinabTypeChecker.inferType` (Phase 4, `minab-type-
+ * checker.ts`): `{ok: false, reason}` becomes a diagnostic at the node
+ * that produced it. Registering the same "does this expression type-check"
+ * pass at several node types (an operator, and also whatever contains it)
+ * means a single root cause can surface more than one diagnostic — accepted
+ * as a minor tradeoff for pinpointing the actual failing sub-expression
+ * rather than only ever the outermost one.
  */
 
 import type { ValidationAcceptor, ValidationChecks } from 'langium';
-import type { FieldValue, GroupKeyRef, MinabAstType, NamedScope } from './generated/ast.js';
+import {
+    isQuery,
+    isTypeRef,
+    type AssignmentStatement,
+    type BinaryExpression,
+    type CallExpression,
+    type CurrentRecord,
+    type FieldValue,
+    type FilterAccess,
+    type FunctionCall,
+    type FunctionDecl,
+    type GroupByClause,
+    type GroupKeyRef,
+    type HavingClause,
+    type IfExpr,
+    type ListLiteral,
+    type MemberAccess,
+    type MinabAstType,
+    type NamedScope,
+    type SwitchExpr,
+    type TupleAccess,
+    type UnaryExpression,
+    type VariableDecl,
+    type WhereClause
+} from './generated/ast.js';
+import { isBuiltinName } from './minab-builtins.js';
+import { astTypeToMinabType } from './minab-type-checker.js';
+import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
 
 export function registerValidationChecks(services: MinabServices): void {
@@ -27,7 +62,24 @@ export function registerValidationChecks(services: MinabServices): void {
     const checks: ValidationChecks<MinabAstType> = {
         FieldValue: validator.checkFieldValueInFieldRule,
         GroupKeyRef: validator.checkGroupKeyRefScope,
-        NamedScope: validator.checkNamedScopeResolves
+        NamedScope: validator.checkNamedScopeResolves,
+        BinaryExpression: validator.checkExpressionTypeChecks,
+        UnaryExpression: validator.checkExpressionTypeChecks,
+        MemberAccess: validator.checkExpressionTypeChecks,
+        TupleAccess: validator.checkExpressionTypeChecks,
+        FilterAccess: validator.checkExpressionTypeChecks,
+        CallExpression: validator.checkExpressionTypeChecks,
+        FunctionCall: validator.checkExpressionTypeChecks,
+        ListLiteral: validator.checkExpressionTypeChecks,
+        IfExpr: validator.checkExpressionTypeChecks,
+        SwitchExpr: validator.checkExpressionTypeChecks,
+        CurrentRecord: validator.checkExpressionTypeChecks,
+        WhereClause: validator.checkConditionIsBoolean,
+        HavingClause: validator.checkConditionIsBoolean,
+        GroupByClause: validator.checkGroupKeysNotCollection,
+        AssignmentStatement: validator.checkAssignmentTypeCompatible,
+        VariableDecl: validator.checkVariableDeclTypeCompatible,
+        FunctionDecl: [validator.checkFunctionDeclNotReservedName, validator.checkFunctionDeclReturnType]
     };
     registry.register(checks, validator);
 }
@@ -52,6 +104,127 @@ export class MinabValidator {
         const result = this.services.scopeResolver.resolveNamedScope(node);
         if (!result.found) {
             accept('error', result.reason, { node });
+        }
+    }
+
+    // ---- Phase 4: type checking ----------------------------------------
+
+    checkExpressionTypeChecks(
+        node: BinaryExpression | UnaryExpression | MemberAccess | TupleAccess | FilterAccess
+            | CallExpression | FunctionCall | ListLiteral | IfExpr | SwitchExpr | CurrentRecord,
+        accept: ValidationAcceptor
+    ): void {
+        const result = this.services.typeChecker.inferType(node);
+        if (!result.ok) {
+            accept('error', result.reason, { node });
+        }
+    }
+
+    checkConditionIsBoolean(node: WhereClause | HavingClause, accept: ValidationAcceptor): void {
+        const result = this.services.typeChecker.inferType(node.condition);
+        if (!result.ok) {
+            // Already reported at the specific failing sub-expression by
+            // `checkExpressionTypeChecks` (or will be, once that node type
+            // is visited) — don't double up here.
+            return;
+        }
+        if (result.type.kind !== 'scalar' || result.type.base !== 'BOOLEAN' || result.type.array) {
+            accept('error', `expected a BOOLEAN condition, got ${formatType(result.type)}`, { node, property: 'condition' });
+        }
+    }
+
+    checkGroupKeysNotCollection(node: GroupByClause, accept: ValidationAcceptor): void {
+        node.keys.forEach((key, index) => {
+            const result = this.services.typeChecker.inferType(key);
+            if (result.ok && result.type.kind === 'collection') {
+                accept('error', `a to-many collection can't be used as a GROUPBY key (spec §3.4)`, { node, property: 'keys', index });
+            }
+        });
+    }
+
+    checkAssignmentTypeCompatible(node: AssignmentStatement, accept: ValidationAcceptor): void {
+        const targetResult = this.services.typeChecker.inferType(node.target);
+        const valueResult = this.services.typeChecker.inferType(node.value);
+        if (!targetResult.ok || !valueResult.ok) return;
+        const target = targetResult.type;
+        const value = valueResult.type;
+        const isNumericTarget = target.kind === 'scalar' && !target.array && (target.base === 'INTEGER' || target.base === 'DECIMAL');
+        const isTextTarget = target.kind === 'scalar' && !target.array && (target.base === 'TEXT' || target.base === 'CITEXT');
+
+        switch (node.operator) {
+            case '?=':
+                if (!isNullable(target)) {
+                    accept('error', '"?=" requires a nullable target', { node, property: 'operator' });
+                }
+                return;
+            case '-=':
+            case '*=':
+            case '/=':
+                if (!isNumericTarget) {
+                    accept('error', `"${node.operator}" requires a numeric target, got ${formatType(target)}`, { node, property: 'operator' });
+                    return;
+                }
+                break;
+            case '+=':
+                if (!isNumericTarget && !isTextTarget) {
+                    accept('error', `"+=" requires a numeric or text target, got ${formatType(target)}`, { node, property: 'operator' });
+                    return;
+                }
+                break;
+            case '|=':
+                if (!(target.kind === 'record' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
+                    accept('error', `"|=" requires a ref- or JSON-typed target, got ${formatType(target)}`, { node, property: 'operator' });
+                }
+                return;
+            default:
+                break; // '='
+        }
+        if (!isAssignableTo(value, target)) {
+            accept('error', `can't assign ${formatType(value)} to a target of type ${formatType(target)} (no implicit coercion)`, { node, property: 'value' });
+        }
+    }
+
+    checkVariableDeclTypeCompatible(node: VariableDecl, accept: ValidationAcceptor): void {
+        if (!node.value) return;
+        const valueResult = this.services.typeChecker.inferType(node.value);
+        if (!valueResult.ok) return;
+        const target = astTypeToMinabType(node.type);
+        if (!isAssignableTo(valueResult.type, target)) {
+            accept('error', `can't initialize "${node.name}" (${formatType(target)}) with ${formatType(valueResult.type)} (no implicit coercion)`, { node, property: 'value' });
+        }
+    }
+
+    checkFunctionDeclNotReservedName(node: FunctionDecl, accept: ValidationAcceptor): void {
+        if (isBuiltinName(node.name)) {
+            accept('error', `"${node.name}" is a reserved built-in function name and can't be used for a user-defined function`, { node, property: 'name' });
+        }
+    }
+
+    /**
+     * A `Query`-tailed function must declare `JSON` (spec §8.6). A plain-
+     * `Expression`-tailed function's actual result must match its declared
+     * return type — an ordinary `no implicit coercion` check, same as
+     * `VariableDecl`'s, just checked against `returnType` instead of a
+     * `let`'s own declared type.
+     */
+    checkFunctionDeclReturnType(node: FunctionDecl, accept: ValidationAcceptor): void {
+        if (!node.tail) return;
+        if (isQuery(node.tail)) {
+            const isJson = isTypeRef(node.returnType) && node.returnType.base === 'JSON';
+            if (!isJson) {
+                accept('error', 'a function whose body ends in a query must declare its return type as JSON (spec §8.6)', { node, property: 'returnType' });
+            }
+            return;
+        }
+        const tailResult = this.services.typeChecker.inferType(node.tail);
+        if (!tailResult.ok) return;
+        const declared = astTypeToMinabType(node.returnType);
+        if (!isAssignableTo(tailResult.type, declared)) {
+            accept(
+                'error',
+                `function body's result (${formatType(tailResult.type)}) doesn't match its declared return type ${formatType(declared)} (no implicit coercion)`,
+                { node, property: 'returnType' }
+            );
         }
     }
 }
