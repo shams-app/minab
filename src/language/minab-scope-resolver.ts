@@ -98,6 +98,24 @@ export class MinabScopeResolver {
         return this.resolveColumn(level.tableName, node.field, node);
     }
 
+    /**
+     * The innermost scope level's own `{owner, tableName}`, ignoring any
+     * `.field` on `node` — i.e. what bare `.` means at `node`'s position,
+     * regardless of whether `node` itself is a field access. Exposed for
+     * the Phase 4 type checker, which needs the *type* of a `.field`
+     * column (not just whether it exists, which is all `resolveColumn`
+     * exposes) and so does its own `SchemaProvider` lookup instead of
+     * going through `resolveColumn`.
+     */
+    resolveCurrentRecordBase(node: AstNode): ScopeResolution {
+        const stack = this.stackAt(node);
+        if (stack.length === 0) {
+            return { found: false, reason: 'no active scope for "."' };
+        }
+        const level = stack[0];
+        return { found: true, scope: { owner: level.owner, tableName: level.tableName } };
+    }
+
     resolveParentRecord(node: ParentRecord): ScopeResolution {
         const stack = this.stackAt(node);
         if (stack.length < 2) {
@@ -288,10 +306,47 @@ export class MinabScopeResolver {
             }
             return undefined;
         }
-        // CurrentRecord (nested `FROM .field`), MemberAccess, Subquery, etc.
-        // — the receiver's table depends on a relation's target type, which
-        // needs the Phase 4 type system.
+        // CurrentRecord (`FROM .field`) and MemberAccess (`FROM .a.b`) — a
+        // relation traversal chain, now resolvable (Phase 4): walk to the
+        // chain's own base table via the ordinary sigil-resolution methods
+        // below, then follow the schema's `ref`/`collection` column to its
+        // target table. Safe to call here — those methods recompute the
+        // scope stack fresh from the receiver's own AST position, which
+        // sits *outside* (an ancestor of) the level currently being built,
+        // so this can't re-enter the same level. Subquery and other
+        // computed receivers still fall through to `undefined`.
+        return this.tableOfExpression(receiver);
+    }
+
+    private tableOfExpression(expr: Expression): string | undefined {
+        if (isCurrentRecord(expr)) {
+            const base = this.resolveCurrentRecordBase(expr);
+            if (!base.found || !base.scope.tableName) return undefined;
+            return expr.field ? this.followRelationColumn(base.scope.tableName, expr.field) : base.scope.tableName;
+        }
+        if (isParentRecord(expr)) {
+            const res = this.resolveParentRecord(expr);
+            return res.found ? res.scope.tableName : undefined;
+        }
+        if (isNamedScope(expr)) {
+            const res = this.resolveNamedScope(expr);
+            return res.found ? res.scope.tableName : undefined;
+        }
+        if (isNameRef(expr)) {
+            const res = this.resolveNameRef(expr);
+            return res.found ? res.scope.tableName : undefined;
+        }
+        if (isMemberAccess(expr)) {
+            const receiverTable = this.tableOfExpression(expr.receiver);
+            return receiverTable ? this.followRelationColumn(receiverTable, expr.member) : undefined;
+        }
         return undefined;
+    }
+
+    /** A schema `ref`/`collection` column's target table — `undefined` for a scalar column, an unknown column, or an unknown table. */
+    private followRelationColumn(table: string, field: string): string | undefined {
+        const col = this.schema.getColumn(table, field);
+        return col && col.type.kind !== 'scalar' ? col.type.table : undefined;
     }
 
     /** Ordinary lexical lookup for `let`/params/loop variables — these are real in-file declarations, unlike table/column names. */

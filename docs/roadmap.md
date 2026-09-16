@@ -106,7 +106,7 @@ Implementation: `src/language/minab-validator.ts` (`MinabValidator` + `registerV
 
 ---
 
-## Phase 4 — Type system
+## Phase 4 — Type system — Done (2026-09-17)
 
 **Sign-off: Mixed** (the *rules* — no implicit coercion, scalar/ref/collection traversal semantics — are already decided; mapping them onto the type system's logical types (§7.2) and deciding exact coercion-error wording is closer to Design).
 
@@ -118,6 +118,20 @@ Implementation: `src/language/minab-validator.ts` (`MinabValidator` + `registerV
 - Pick up the Phase 3 check deferred here: a to-many (`collection`) field used where a scalar is required without an aggregate or predicate-over-filter (spec §3.4). Needs `schema.ts`'s `MinabColumnSchema.type` replaced by this phase's real type representation first — see Phase 3's "what actually shipped" note.
 
 **Output:** every well-typed example in the spec type-checks with no errors; a representative set of ill-typed programs (comparing incompatible types, treating a collection as a scalar without reducing it, etc.) is rejected with a clear message.
+
+**What actually shipped:**
+
+Two roadmap-blocking open design questions (spec §12 items 10 and 11) were resolved with Hamed before implementation, per the usual spec-governance cycle:
+- **Item 10 (built-in vs. user-function disambiguation):** a closed set of 8 built-in names (`SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`EXISTS`/`ALL`/`ANY`) may only be called bare; any other bare call is an error pointing at `&name(...)`; the 8 names are reserved and can't be used for a user `fn`. Written up in spec §5.3/§5.3.1 (including a formal signature table — none existed before).
+- **Item 11 (query-tailed function return type):** a function whose tail is a `Query` always returns `JSON` — an array of the selected shape (`SELECT *` → array of objects; `SELECT <col>` → array of that column's type). Its declared return type must be `JSON`, checked once at the `FunctionDecl`. Written up in spec §8.6.
+
+Implementation: `src/language/minab-types.ts` (the structured `MinabType` representation — `scalar`/`tuple`/`record`/`collection`/`null` — replacing `schema.ts`'s free-form column-type string), `src/language/minab-builtins.ts` (the 8 built-in signatures), `src/language/minab-type-checker.ts` (`MinabTypeChecker.inferType`, following the same `{ok,reason}` pattern Phase 2's `ScopeResolution` established), and a matching expansion of `src/language/minab-validator.ts`'s check set (coercion, the §3.4 boundary, §7.7 null-operand rules, unknown-function calls, the two `FunctionDecl` rules above). `test/typechecking.test.ts` (39 tests) plus updated fixtures in `test/validation.test.ts`/`test/scoping.test.ts` for the new structured schema shape. `npm run build && npm test`: 107/107 green.
+
+Two findings along the way, each handled the same "confirm scope, fix, document" way Phase 1's empirical pass did:
+- **A design gap, not in the original task list:** a top-level validation rule (spec §6 — the language's primary use case) has no statically-known table under Phase 2's scope resolver (deliberately — nothing in Minab source names it), so `.field` at the top level of *every* record-/field-level rule would have been untypeable. Fixed by extending the host-supplied `MinabRuleContext` (already home to `isFieldRule`) with `recordTable`/`fieldType`, mirroring the existing pattern rather than inventing a new one.
+- **A real defect surfaced empirically, same category as Phase 1's:** three worked examples (spec §4.2's join-condition example, and both `cancelledOrdersFor`-style query-tailed-function examples in §8.2/§8.6, mirrored in `docs/showcase.md` §10 and §6) compared a `ref` field directly against a scalar (`.customer == customerId`) — under the traversal rule (§3.1), `.customer` is the *related record*, not its key, so this is a genuine type mismatch. Fixed all four occurrences to `.customer.id == customerId` (or the join equivalent). A `ref`-to-primary-key comparison shorthand might be a real feature worth having, but it would need a primary-key marker in the schema contract that doesn't exist — flagged as a separate, unimplemented design question rather than added unilaterally.
+
+Two narrower implementation judgment calls, documented in code comments and worth Hamed's attention if they turn out wrong: `INTEGER`/`DECIMAL` are treated as one numeric family, freely inter-comparable without `CAST` (spec §5.5's literal wording is stricter, but applying it literally to bare numeric literals rejected most of the existing showcase corpus); and a query used as a scalar value (a `let` initializer, a comparison operand) infers as its single `SELECT` column's type unconditionally, rather than requiring `LIMIT 1` — with `IN (subquery)` specifically special-cased as the one place a query is read as a set instead.
 
 ---
 

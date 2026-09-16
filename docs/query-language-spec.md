@@ -103,7 +103,7 @@ EXISTS(#Customer[.id == $])
 
 `ref` chains stay fully implicit no matter how deep — `.customer.billing_address.country` is always just a sequence of single-row lookups, so there's no cost boundary to cross and nothing needs to change about how you write it.
 
-**Crossing a `collection` field is different.** The moment a traversal chain touches a `collection` field — directly, or by broadcasting a further `.field` through one (§3.1) — the result is a *collection*, not a scalar. A collection-valued expression **cannot be used directly** anywhere a scalar or boolean is expected: not in a comparison, not in arithmetic, not as a bare `WHERE`/`HAVING` condition or validation rule (§6), not as a `SELECT` column. It must first be reduced by one of:
+**Crossing a `collection` field is different.** The moment a traversal chain touches a `collection` field — directly, or by broadcasting a further `.field` through one (§3.1) — the result is a *collection*, not a scalar. A collection-valued expression **cannot be used directly** anywhere a scalar or boolean is truly required: not in a comparison, not in arithmetic, not as a bare `WHERE`/`HAVING` condition or validation rule (§6). It must first be reduced by one of:
 
 - an **aggregate function** over the (optionally broadcast) collection — `SUM(.orders.total)`, `COUNT(.orders)`, `AVG(.orders.total)`
 - a **predicate function** over an inline-filtered collection — `EXISTS(.orders[.total > 100])`, or `ALL`/`ANY` following the same shape
@@ -122,7 +122,13 @@ WHERE SUM(.orders.total) > 100          // "orders' combined total is over 100"
 WHERE COUNT(.orders[.total > 100]) >= 3 // "at least 3 orders over 100"
 ```
 
-Note this is a **semantic rule, not a syntactic one** — the grammar's `Expression` production (§11) doesn't track whether a chain resolves to a scalar or a collection, so `.orders.total > 100` still parses without error. Catching the violation requires a type-checking pass that follows each `.field` step against the schema's `scalar` / `ref` / `collection` declarations (§3) and flags any collection-valued expression used in a scalar-expecting position — the same kind of post-linking Langium **validation-phase** check used for variable type-checking (§12 item 8).
+**`SELECT` is not one of these positions.** Unlike `WHERE`/`HAVING`/comparison/arithmetic — which need a definite scalar or boolean to evaluate — a `SELECT` item is a projection: it just says what shape this row's output has. A raw `collection` there is a legitimate nested result, not a type error:
+
+```
+FROM Customer SELECT .id, .orders AS orders   // fine — each row's "orders" is that customer's whole order collection, nested
+```
+
+Note the WHERE/comparison/arithmetic restriction is a **semantic rule, not a syntactic one** — the grammar's `Expression` production (§11) doesn't track whether a chain resolves to a scalar or a collection, so `.orders.total > 100` still parses without error. Catching the violation requires a type-checking pass that follows each `.field` step against the schema's `scalar` / `ref` / `collection` declarations (§3) and flags any collection-valued expression used in a scalar-expecting position — the same kind of post-linking Langium **validation-phase** check used for variable type-checking (§12 item 8).
 
 ### 3.5 Positional access
 
@@ -177,7 +183,7 @@ Semantics per clause, in evaluation order:
 
 ```
 FROM Order
-JOIN Customer AS customer ON .customer == customer.id
+JOIN Customer AS customer ON .customer.id == customer.id
 SELECT .id, #customer.name AS customer_name   // '#' disambiguates the alias from Order's own `.customer` field
 ```
 
@@ -279,6 +285,23 @@ EXISTS(.orders[.status == "cancelled"])
 COUNT(.orders) > 0
 AVG(.orders.total)
 ```
+
+**Built-in vs. user-defined, resolved (§12 item 10):** the grammar alone can't tell a built-in call from a user-defined one — `CallExpression` (bare `Name(...)`) parses for any identifier, not just the eight names above. The rule is a closed set, enforced semantically: bare `Name(...)` is legal **only** for the eight built-in names below; any other bare-called name is a semantic error telling the caller to use `&name(...)` instead. `&name(...)` (`FunctionCall`, §8.4), conversely, always resolves against a user-declared `fn` — never one of the built-ins. To keep the two calling conventions from ever colliding, **the eight built-in names are reserved**: declaring `fn SUM(...): ...` (or any other built-in name) is itself a semantic error.
+
+#### 5.3.1 Built-in function signatures
+
+Not previously written down formally — the built-ins were introduced only by example. Each is polymorphic over its collection's element type `T`, not a single fixed signature:
+
+| Function | Signature | Notes |
+|---|---|---|
+| `COUNT` | `(collection<T>) -> INTEGER` | Any `T`. Counts elements. |
+| `SUM` | `(collection<N>) -> N` | `N` is `INTEGER` or `DECIMAL` — preserves the numeric type, no auto-widening. |
+| `AVG` | `(collection<N>) -> DECIMAL` | `N` is `INTEGER` or `DECIMAL`; the average is always fractional regardless of the input type. |
+| `MIN` | `(collection<T>) -> T` | `T` must be orderable: `INTEGER`, `DECIMAL`, `TEXT`, `CITEXT`, `DATE`, `TIME`, or `DATETIME` — not `UUID`, `BOOLEAN`, or `JSON` (§7.2). |
+| `MAX` | `(collection<T>) -> T` | Same orderability constraint as `MIN`. |
+| `EXISTS` | `(collection<T>) -> BOOLEAN` | Any `T`; `true` iff the collection is non-empty. |
+| `ALL` | `(collection<BOOLEAN>) -> BOOLEAN` | Typically a broadcast boolean column, e.g. `ALL(.orders.paid)`. |
+| `ANY` | `(collection<BOOLEAN>) -> BOOLEAN` | Same shape as `ALL`. |
 
 ### 5.4 Subqueries as expressions
 
@@ -613,19 +636,19 @@ fn processOrder(orderId: UUID): BOOLEAN {
 }
 ```
 
-A function can also end in a `Query`, so its "return value" is a table rather than a scalar:
+A function can also end in a `Query`, so its "return value" is a table rather than a scalar — see §8.6 for what its declared return type must be in that case:
 
 ```
-fn cancelledOrdersFor(customerId: UUID): UUID {
+fn cancelledOrdersFor(customerId: UUID): JSON {
     FROM Order
-    WHERE .customer == customerId AND .status == "cancelled"
+    WHERE .customer.id == customerId AND .status == "cancelled"
     SELECT .id
 }
 ```
 
 The tail (whether a `Query` or a bare expression) takes any `Expression`/`Query` shape — a literal, a sigil expression, a call, a subquery, or a full pipeline — exactly like a variable initializer (§7.1) already allows for `let`. Parameters (`orderId`, `rate` above) and any locally-declared `let`s are referenced the same way a top-level variable is: by bare name via `NameRef`.
 
-A function body ends in **exactly one tail** as its result. What the grammar doesn't enforce is that the tail is actually *present*: it's grammatically optional, even though the declared return type is mandatory, so a function with no tail would have nothing to satisfy that type. Requiring a tail whenever a return type is declared is therefore a semantic check, not a parse-time one — same category as the type-checking rules in §12. Whether a scalar `TypeRef` return type (§7.2) is even the right way to describe a `Query`-shaped result (which is a table, not a single value) is a related open question — see §12.
+A function body ends in **exactly one tail** as its result. What the grammar doesn't enforce is that the tail is actually *present*: it's grammatically optional, even though the declared return type is mandatory, so a function with no tail would have nothing to satisfy that type. Requiring a tail whenever a return type is declared is therefore a semantic check, not a parse-time one — same category as the type-checking rules in §12.
 
 **`yield` has been retired.** An earlier iteration of this design let a function body emit any number of `yield <expr>;` statements ahead of its tail, intended as some kind of intermediate/progress value distinct from the final result — but what `&name(...)` should actually produce when a function both `yield`s and has a tail was never resolved (see the now-closed discussion in §12 item 9's history), and Minab has no iterator/generator protocol yet for a caller to actually consume a sequence of yielded values against. Rather than keep a keyword whose call-site semantics were undefined, `yield` and `YieldStatement` have been removed from the grammar entirely. It may come back once iterators are designed properly, but as a different mechanism built for that purpose — not a re-add of this same form.
 
@@ -659,6 +682,35 @@ A function may also call itself or another function via the same `&name(...)` sy
 ### 8.5 Scope
 
 A function's parameters and its own local `let`s are scoped to its body. In addition, a function body can read `let` variables declared **outside** it — at the top level of the script, or (for a nested function) in an enclosing function — the same way a closure captures its surrounding bindings. A parameter or local `let` with the same name as an outer one shadows it within the function body.
+
+### 8.6 Query-tailed functions return `JSON` (resolved — §12 item 11)
+
+A function's declared return type (§8.3) is always a single logical type — built for describing one scalar column — but its tail can be a `Query` (§8.2), which produces a table, possibly many rows. Rather than inventing a separate "table return type" syntax, a `Query`-tailed function's result is simply `JSON`: a JSON array of whatever its `SELECT` produces, one array element per row.
+
+- `SELECT *` → a `JSON` array of objects, one per row.
+- `SELECT <single column>` → a `JSON` array of that column's value type.
+
+A `Query`-tailed function must therefore declare its return type as `JSON` — declaring anything else (`UUID`, `INTEGER`, ...) for a `Query`-tailed body is a semantic error, checked once at the `FunctionDecl` itself, not per call site:
+
+```
+fn cancelledOrdersFor(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId AND .status == "cancelled"
+    SELECT .id
+}
+// &cancelledOrdersFor(x) : JSON — a JSON array of UUIDs (one per cancelled order)
+
+fn recentOrders(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId
+    ORDERBY .placed_at DESC
+    LIMIT 10
+    SELECT *
+}
+// &recentOrders(x) : JSON — a JSON array of order objects
+```
+
+A function whose tail is a plain `Expression` (not a `Query`) is unaffected by this rule — it's scalar-valued exactly as declared, same as always. Because the result is `JSON`, consuming it further needs the ordinary `is`/`isnot` shape-testing rules (§5.6) — e.g. `is array` — the same as any other `JSON` value; there's no separate "query-result" type the checker treats specially beyond this.
 
 ---
 
@@ -1407,8 +1459,8 @@ These are flagged but not yet resolved — worth deciding before the grammar is 
 9. **Function scoping and recursion.**
    - ~~Recursion, closures, and body shape~~ Resolved: recursion (including mutual recursion between two functions, regardless of declaration order) is allowed. There's no `return` keyword — a function body is any number of `let`/`BodyStatement` forms followed by exactly one trailing tail `Expression`/`Query` (no `;`), the same convention used at the top level (§6.3); the grammar's rule shape (`BodyStatement*` then an optional trailing tail) already rules out anything coming after the tail. What it doesn't enforce is that the tail is actually present — it's grammatically optional even though the declared return type is mandatory — so requiring a tail whenever a return type is declared is a semantic check, not a parse-time one. A function body can read `let`s from any enclosing scope (top-level, or an outer function), i.e. it closes over outer bindings; a same-named parameter or local `let` shadows the outer one.
    - **Retired, not resolved:** an earlier iteration of this item asked what `&name(...)` should produce when a function both `yield`s and has a tail. That question is moot now — `yield`/`YieldStatement` have been removed from the grammar entirely (§8.2), rather than answered, since Minab has no iterator/generator protocol for a caller to consume a yielded sequence against in the first place. If something like `yield` returns, it needs its own design pass once iterators exist, not a reinstatement of this same keyword with the same open question attached.
-10. **`&` enforcement is semantic, not grammatical.** The existing `CallExpression` postfix (`NameRef '(' args ')'`) still parses for *any* identifier, so nothing in the grammar stops `cumulativeAdd(...)` (no `&`) from parsing as a bare call, nor stops `&SUM(...)` from parsing as a function call to something named `SUM`. Distinguishing "built-in, no prefix" from "user-defined, `&`-prefixed" therefore has to happen in a name-resolution/semantic pass, not the grammar itself — confirm that's the intended layering, or whether the grammar should restrict bare `CallExpression` callees to a fixed keyword set of built-ins.
-11. **What does a scalar return type mean for a `Query`-tailed function?** A function's tail can now be a `Query` (§8.2), which produces a table (possibly many rows), while the declared return type (§7.2, §8.3) is always a single logical type — built for describing one scalar column. Nothing pins down what "matching" the return type even means here: must the query's `SELECT` reduce to exactly one column (and if so, does the return type check against that column's type)? Is the function's actual result then one scalar (first row? an aggregate collapse?), or is the "return type" better read as "the element type of the returned table," making every such function implicitly collection-valued regardless of what its `TypeRef` says? This needs an answer before `&`-calling a query-tailed function inside a larger expression (e.g. `.total > &recentTotal(.id)`) has defined semantics.
+10. ~~**`&` enforcement is semantic, not grammatical.**~~ **Resolved (§5.3, §5.3.1):** the grammar's own `CallExpression`/`FunctionCall` split (bare vs. `&`-prefixed) stays exactly as it parses today — the layering is confirmed, not changed. What's now pinned down is the semantic side: bare `Name(...)` is legal only for the eight built-in names (§5.3.1's signature table); any other bare name is a semantic error pointing at `&name(...)`. `&name(...)` always resolves against a user-declared `fn`. The two conventions are kept from ever colliding by reserving the eight built-in names — declaring a `fn` with one of them is itself a semantic error.
+11. ~~**What does a scalar return type mean for a `Query`-tailed function?**~~ **Resolved (§8.6):** a `Query`-tailed function's result is `JSON` — a JSON array of whatever its `SELECT` produces (an array of objects for `SELECT *`, an array of that column's value type for a single-column `SELECT`). Its declared return type must therefore be `JSON`, checked once at the `FunctionDecl`, not per call site. A plain-`Expression`-tailed function is unaffected, scalar-valued exactly as declared.
 12. ~~Should `if`/`else` branches accept a block, the way `switch` arms do?~~ **Resolved (§9.1):** `if`/`else` branches are now both `Block` (statements plus a tail), matching `switch` arms. No remaining asymmetry between the two.
 13. **No constants.** `let` is mutable by default (§9.3) — Minab currently has no way to declare a binding that can't be reassigned. Worth deciding later whether a `const`-style immutable declaration is wanted, and if so, whether it's a modifier on `let` or a separate keyword.
 14. ~~`if` as a statement.~~ **Resolved (§9.1.1):** added as `if!`/`IfStatement` — a distinct keyword from `if`/`IfExpr`, resolved at the lexer level (same longest-match mechanism as `isnot` vs. `is`), so there's no ambiguity between "one more `BodyStatement`" and "the tail." `else`/`else if` inside an `if!` reuse plain `if` (`IfStatementElse`), safe since that position is only reached after already committing to the statement form.

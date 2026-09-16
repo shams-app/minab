@@ -2,7 +2,7 @@ import { EmptyFileSystem } from 'langium';
 import { validationHelper } from 'langium/test';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createMinabServices } from '../src/language/minab-module.js';
-import type { MinabSchema } from '../src/language/schema.js';
+import { scalarType, type MinabSchema } from '../src/language/schema.js';
 import type { Model } from '../src/language/generated/ast.js';
 import type { Diagnostic } from 'vscode-languageserver-types';
 
@@ -16,8 +16,21 @@ function messageText(d: Diagnostic): string {
 // tables in-file, so a host-supplied schema stands in for the real one.
 const fixtureSchema: MinabSchema = {
     tables: [
-        { name: 'Customer', columns: [{ name: 'id', type: 'INTEGER' }, { name: 'credit_limit', type: 'DECIMAL' }] },
-        { name: 'Order', columns: [{ name: 'customer', type: 'ref(Customer)' }, { name: 'total', type: 'DECIMAL' }, { name: 'orders', type: 'ref(Order)[]' }] }
+        {
+            name: 'Customer',
+            columns: [
+                { name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } },
+                { name: 'credit_limit', type: { kind: 'scalar', type: scalarType('DECIMAL') } }
+            ]
+        },
+        {
+            name: 'Order',
+            columns: [
+                { name: 'customer', type: { kind: 'ref', table: 'Customer', nullable: false } },
+                { name: 'total', type: { kind: 'scalar', type: scalarType('DECIMAL') } },
+                { name: 'orders', type: { kind: 'collection', table: 'Order' } }
+            ]
+        }
     ],
     functions: []
 };
@@ -26,8 +39,17 @@ let validateRecordRule: ReturnType<typeof validationHelper<Model>>;
 let validateFieldRule: ReturnType<typeof validationHelper<Model>>;
 
 beforeAll(async () => {
-    const record = createMinabServices(EmptyFileSystem, fixtureSchema, { isFieldRule: false });
-    const field = createMinabServices(EmptyFileSystem, fixtureSchema, { isFieldRule: true });
+    // `recordTable: 'Order'` supplies the type checker's Phase 4 fallback
+    // for a bare top-level `.field` (spec §6's "record under validation" —
+    // Phase 2's scope resolver deliberately can't know this on its own).
+    // `fieldType` similarly supplies `$`'s type — `.total` is DECIMAL, so
+    // that's what the field-rule examples below compare `$` against.
+    const record = createMinabServices(EmptyFileSystem, fixtureSchema, { isFieldRule: false, recordTable: 'Order' });
+    const field = createMinabServices(EmptyFileSystem, fixtureSchema, {
+        isFieldRule: true,
+        recordTable: 'Order',
+        fieldType: scalarType('DECIMAL')
+    });
     validateRecordRule = validationHelper<Model>(record.Minab);
     validateFieldRule = validationHelper<Model>(field.Minab);
 });
