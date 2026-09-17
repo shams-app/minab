@@ -139,6 +139,8 @@ Two narrower implementation judgment calls, documented in code comments and wort
 
 **Sign-off: Design → Mechanical.** This is the biggest undecided architectural question in the whole roadmap and should not be implemented before it's explicitly settled.
 
+**Status: ADR drafted (2026-09-17), awaiting Hamed's sign-off.** See `docs/adr/0001-execution-strategy.md` — recommends the hybrid (SQL compiler for the pipeline layer/ad-hoc `#Table` refs/SQL-expressible DML, tree-walking interpreter for validation rules/control flow/functions, with the interpreter pushing relational subexpressions down to SQL rather than fetching tables into memory). No evaluator/codegen code written yet, per the Tasks below.
+
 The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the logical type system already in the design (§7.2)), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream, including the CLI (Phase 6).
 
 Two things Phase 0 already settled make this concrete rather than fully open: null semantics are null-safe/total, not SQL's three-valued logic (spec §9) — so a SQL-compiling strategy must translate `==`/`!=` to a null-safe form, not emit `=`/`<>` directly; and Minab supports declarative writes (spec §1), so the ADR needs to account for a write path, not just queries and validation. The concrete write syntax is now settled (spec §10 — `INSERT`/`UPDATE`/`DELETE`), so this ADR only needs to account for executing it, not design it.
