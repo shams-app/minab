@@ -14,11 +14,25 @@
 
 import { scalarType, type MinabType, type ScalarType } from './minab-types.js';
 
-/** A schema column's relational shape (spec §3). */
+/**
+ * A schema column's relational shape (spec §3).
+ *
+ * `foreignKey` says *how* the two tables are linked, which nothing in
+ * Minab source ever names. Phases 2-4 never needed it — resolution and
+ * typing only care about the target table. Execution (Phase 5) does: to
+ * run `.customer.country` or `COUNT(.orders[...])` at all, something has
+ * to know which column joins the two. It sits on opposite sides for the
+ * two kinds, which is exactly the `ref`/`collection` distinction:
+ *  - `ref`: the column *on this table* holding the target row's key.
+ *  - `collection`: the column *on the target table* holding this row's key.
+ * Optional so existing hosts/fixtures keep working; a traversal across a
+ * relation that doesn't declare one fails with an explicit reason rather
+ * than guessing at a naming convention.
+ */
 export type ColumnType =
     | { kind: 'scalar'; type: ScalarType }
-    | { kind: 'ref'; table: string; nullable: boolean }
-    | { kind: 'collection'; table: string };
+    | { kind: 'ref'; table: string; nullable: boolean; foreignKey?: string }
+    | { kind: 'collection'; table: string; foreignKey?: string };
 
 export interface MinabColumnSchema {
     name: string;
@@ -28,6 +42,15 @@ export interface MinabColumnSchema {
 export interface MinabTableSchema {
     name: string;
     columns: MinabColumnSchema[];
+    /**
+     * The column identifying a row of this table. Needed by Phase 5 to
+     * compare two records (`. != ^`, spec §6.1) and to follow a `ref`
+     * to its target row — both of which are questions about row identity
+     * that Minab source never spells out. This is the "primary-key marker
+     * in the schema contract that doesn't exist yet" Phase 4 flagged when
+     * it found the four `ref`-compared-to-scalar defects.
+     */
+    primaryKey?: string;
 }
 
 /**

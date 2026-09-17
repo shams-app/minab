@@ -1,6 +1,6 @@
 # ADR 0001: Execution strategy for queries, validation rules, and writes
 
-**Status:** Proposed — awaiting Hamed's sign-off (roadmap Phase 5 requires this before any evaluator/codegen code is written).
+**Status:** Accepted (Hamed, 2026-09-17). Implemented in `src/language/minab-sql-compiler.ts` and `src/language/minab-interpreter.ts` — see roadmap Phase 5 for what shipped.
 
 **Date:** 2026-09-17
 
@@ -22,7 +22,7 @@ those phases bound the design space here:
    implement this explicitly; naively emitting SQL `=`/`<>` is wrong.
 3. **The expression language is bigger than relational algebra.** Spec §7-9 give
    Minab closures, recursion, `if`/`switch`, three loop forms with labeled
-   `break`/`continue`, and (§8.1) implicitly-async user functions. None of that is
+   `break`/`continue`, and (§8) implicitly-async user functions. None of that is
    expressible as a single SQL statement in the general case — recursive CTEs
    cover *some* recursion shapes, but not arbitrary user-defined recursive `fn`s
    with side effects. At the same time, the pipeline layer (`FROM`/`JOIN`/`WHERE`/
@@ -143,16 +143,33 @@ Walking through the roadmap's four required concerns:
    same reason Option B's was. One rule (§7.7) implemented twice, once per
    runtime, each in the natural idiom of that runtime — not one shared code path,
    but not two independently-designed semantics either.
-4. **Declarative writes (§10):** an `INSERT`/`UPDATE`/`DELETE` whose target and
-   payload are SQL-expressible (`#Table`, a filtered `#Table[...]`, a `Query`, or
-   a `WHERE`/`ORDERBY`/`LIMIT`-qualified target) compiles straight to SQL DML —
-   the common case, and the performance-sensitive one (bulk `UPDATE .customers
-   WHERE ... SET {...}` should be one SQL statement, not a fetch-mutate-write
-   loop). A single-row `VALUES {...}` payload is evaluated by the interpreter
-   first (its fields may reference `.`/`fn` calls/anything else in the
-   expression language) down to concrete values, then executed as one
-   parameterized `INSERT`. Nothing here needs generated triggers or PL/pgSQL —
-   every DML form in §10 already names a single target table per statement.
+4. **Declarative writes (§10):** §10 gives a DML target three possible shapes —
+   "a relational `collection(Table)` field, a `JSON`-array field, or a whole
+   table via `#Table`" — and the split between them falls on the same seam as
+   everything else here:
+   - **Relational targets** (`#Table`, `#Table[...]`, a `collection(Table)`
+     field) compile straight to SQL DML. This is the common case and the
+     performance-sensitive one: a bulk `UPDATE .customers WHERE ... SET {...}`
+     should be one SQL statement, not a fetch-mutate-write loop. An
+     `INSERT ... VALUES` whose payload is itself relational (`#Customers`, a
+     filtered `#Customers[...]`, or a full `Query`) becomes one
+     `INSERT ... SELECT`.
+   - **`JSON`-array targets** stay on the interpreter side. Mutating one is a
+     read-modify-write of a single column value, not a table operation — and
+     §3.5's `.$index`/positional forms (`DELETE .customers[2]`,
+     `UPDATE ... WHERE .$index > 2`) are *only* legal against a `JSON` array or
+     an in-memory `T[]`, never against a relational collection, precisely
+     because a relational collection has no stable position. So the ordinal
+     DML forms in §10's examples are, by §3.5's own rule, always the
+     interpreted case; they never need a SQL ordinal concept that SQL doesn't
+     have.
+   - A single-row `VALUES {...}` payload is evaluated by the interpreter first
+     (its fields may reference `.`, `fn` calls, or anything else in the
+     expression language) down to concrete values, then executed as one
+     parameterized `INSERT`.
+
+   Nothing here needs generated triggers or PL/pgSQL — every relational DML form
+   in §10 names a single target table per statement.
 
 ## Decision
 
@@ -190,6 +207,38 @@ either pure strategy.
   execute anything for real. Doesn't require deciding *which* concrete host
   driver yet — that can stay behind a small interface the host supplies, the same
   pattern `SchemaProvider` already established for schema.
+- **It commits to a SQL dialect, which the spec deliberately does not.** Spec §7.2
+  calls the type vocabulary "storage-agnostic ... not tied to any particular
+  storage backend," and that stays true — this ADR is choosing a *compilation
+  target*, not a type mapping. But the compiler does emit dialect-specific text:
+  `IS NOT DISTINCT FROM`/`IS DISTINCT FROM` for null-safe `==`/`!=`. That
+  spelling is standard SQL (SQL:1999) and works on Postgres as-is; a host on a
+  backend that lacks it would need the equivalent (`<=>` on MySQL, `IS`/`IS NOT`
+  on SQLite) or the expanded `(a = b OR (a IS NULL AND b IS NULL))` form. Phase 5
+  targets Postgres — consistent with the roadmap's "Postgres-shaped schema" and
+  with `CITEXT` being in §7.2's type table at all — and keeps the emitted
+  operator spellings in one place so a second dialect is a substitution, not a
+  rewrite.
+- **The host schema has to say how tables link, which it previously didn't.**
+  Found while implementing: `ColumnType`'s `ref`/`collection` named the
+  target table but no join key, and `MinabTableSchema` had no primary key —
+  enough for Phases 2-4, which only ever needed to know *what* a traversal
+  lands on. Executing one needs to know *how*: `.customer.country` has to
+  become a join, `COUNT(.orders[...])` a correlated subquery, and §6.1's
+  `. != ^` a comparison of row identities. Both were added as optional
+  fields (`foreignKey`, `primaryKey`), so a relation that declares neither
+  fails with an explicit reason rather than guessing at a naming
+  convention. This also closes the gap Phase 4 flagged when it found the
+  four `ref`-compared-to-scalar defects ("needs a primary-key marker in the
+  schema contract that doesn't exist yet").
+- **`CITEXT` needs the interpreter to honor case-insensitive equality itself.**
+  Compiled to SQL against a real `citext` column, `=` is already case-insensitive
+  and nothing special is needed; interpreted in memory, ordinary host-language
+  equality is case-*sensitive* and would silently disagree with the compiled
+  path. The interpreter therefore has to consult the column's declared type
+  (which `MinabTypeChecker` already infers) rather than comparing raw values —
+  the one place where "implement §7.7 twice, once per runtime" needs care beyond
+  null handling.
 
 ## Phase 5 implementation scope (once signed off)
 
