@@ -129,6 +129,14 @@ export class MinabTypeChecker {
     ) {}
 
     inferType(node: Expression): TypeResult {
+        // A document with syntax errors is still validated — Langium runs
+        // the `Validator` over whatever AST the parser recovered, which is
+        // the whole point in an editor. An incomplete node (`.a >` parses
+        // to a `BinaryExpression` with no `right`) therefore arrives here
+        // as `undefined`, and the alternative to this guard is a
+        // `TypeError` reaching the user as a stack trace. Found by running
+        // the Phase 6 CLI over a file with a typo in it.
+        if (node === undefined) return err('incomplete expression (the program has a syntax error here)');
         if (isStringLiteral(node)) return ok(scalarType('TEXT'));
         if (isBooleanLiteral(node)) return ok(scalarType('BOOLEAN'));
         if (isNullLiteral(node)) return ok(NULL_TYPE);

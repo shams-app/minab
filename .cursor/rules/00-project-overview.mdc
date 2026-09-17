@@ -12,6 +12,8 @@ Read before any non-trivial change:
 - `docs/showcase.md` — a runnable example for every construct in the spec, organized in the same order. Kept in sync with the spec on purpose: when the grammar changes, both files change in the same pass. When in doubt about whether a piece of syntax is valid, check here before guessing.
 - `docs/roadmap.md` — the phased implementation plan, with a defined output per step.
 
+There is a CLI: after `npm run build`, `npm run cli -- check|compile|run <file.minab>` parses/validates, prints the compiled SQL, or evaluates a program against a data source (a `minab.config.json` of canned rows, or `--database <url>` for real PostgreSQL). It's the fastest way to check what a snippet actually does — see the README's Usage section.
+
 Sigils and keywords, current as of the v2 spec (2026-09-13) — don't reach for the older `@alias` sigil or two-token `GROUP BY`/`LEFT JOIN`/`CROSS JOIN`, both superseded:
 - `.` current record, `$` field value (field-level rules only), `^` parent record (one level up), `#alias` a named scope (opens any table inline, or disambiguates a join alias), `KEY` the group key.
 - `GROUPBY`, `ORDERBY`, `LEFTJOIN`, `CROSSJOIN` are each one token — no space, no separate `GROUP`/`BY`/`LEFT`/`CROSS` keywords floating around to collide with identifiers elsewhere.
