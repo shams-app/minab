@@ -87,15 +87,28 @@ export class MinabScopeResolver {
     constructor(private readonly schema: SchemaProvider) {}
 
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
+        const base = this.resolveCurrentRecordScope(node);
+        if (!base.found || !node.field) {
+            return base;
+        }
+        return this.resolveColumn(base.scope.tableName, node.field, node);
+    }
+
+    /**
+     * The *base* scope for `.`/`.field` — the innermost active scope,
+     * independent of whether `node` itself carries a `.field`. Factored out
+     * of `resolveCurrentRecord` so Phase 4's type-checker can reuse it: it
+     * needs the starting table to resolve a field's real column type
+     * (including `ref`/`collection`), not this class's own existence-only
+     * check (`resolveColumn`, deliberately bounded to one hop).
+     */
+    resolveCurrentRecordScope(node: CurrentRecord): ScopeResolution {
         const stack = this.stackAt(node);
         if (stack.length === 0) {
             return { found: false, reason: 'no active scope for "."' };
         }
         const level = stack[0];
-        if (!node.field) {
-            return { found: true, scope: { owner: level.owner, tableName: level.tableName } };
-        }
-        return this.resolveColumn(level.tableName, node.field, node);
+        return { found: true, scope: { owner: level.owner, tableName: level.tableName } };
     }
 
     resolveParentRecord(node: ParentRecord): ScopeResolution {
@@ -219,7 +232,17 @@ export class MinabScopeResolver {
                     receiver: current.source,
                     aliasDefs: [
                         ...(current.alias ? [{ name: current.alias, node: current as AstNode }] : []),
-                        ...current.joins.map(j => ({ name: j.alias, node: j as AstNode, tableName: j.source }))
+                        ...current.joins.map(j => ({ name: j.alias, node: j as AstNode, tableName: j.source })),
+                        // SELECT item aliases (`SUM(.total) AS total_spent`), referenceable
+                        // by name in ORDERBY (spec §4.1's own showcase example — §5 —
+                        // does exactly this: `ORDERBY total_spent DESC`). Registered at
+                        // the whole query's scope level rather than gated to ORDERBY
+                        // specifically, matching this class's existing "resolve what's
+                        // structurally decidable" bias — a false negative (visible one
+                        // clause too early) is preferable to a false positive here.
+                        ...(current.selectClause?.items ?? [])
+                            .filter((i): i is typeof i & { alias: string } => i.alias !== undefined)
+                            .map(i => ({ name: i.alias, node: i as AstNode }))
                     ]
                 });
             } else if (isFilterAccess(current) && current.receiver !== child) {

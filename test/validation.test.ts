@@ -16,8 +16,21 @@ function messageText(d: Diagnostic): string {
 // tables in-file, so a host-supplied schema stands in for the real one.
 const fixtureSchema: MinabSchema = {
     tables: [
-        { name: 'Customer', columns: [{ name: 'id', type: 'INTEGER' }, { name: 'credit_limit', type: 'DECIMAL' }] },
-        { name: 'Order', columns: [{ name: 'customer', type: 'ref(Customer)' }, { name: 'total', type: 'DECIMAL' }, { name: 'orders', type: 'ref(Order)[]' }] }
+        {
+            name: 'Customer',
+            columns: [
+                { name: 'id', type: { kind: 'scalar', base: 'INTEGER', nullable: false } },
+                { name: 'credit_limit', type: { kind: 'scalar', base: 'DECIMAL', nullable: false } }
+            ]
+        },
+        {
+            name: 'Order',
+            columns: [
+                { name: 'customer', type: { kind: 'ref', table: 'Customer', nullable: false } },
+                { name: 'total', type: { kind: 'scalar', base: 'DECIMAL', nullable: false } },
+                { name: 'orders', type: { kind: 'collection', table: 'Order' } }
+            ]
+        }
     ],
     functions: []
 };

@@ -6,19 +6,27 @@
  * embedded in a larger web application (editing happens in-browser, inside
  * Monaco) and that host supplies the real table names, column names, and
  * built-in function signatures at runtime; they are never declared in
- * `.minab` source. This is a first cut at that contract, informed by what
- * the scope resolver (`minab-scope-resolver.ts`) needs — expect it to grow
- * once Phase 4's type system needs richer column types and relation info.
+ * `.minab` source.
+ *
+ * Column/function types are structured (roadmap Phase 4's `types.ts`)
+ * rather than the provisional display strings Phase 2 shipped with — this
+ * is what lets the type-checker actually reason about `ref`/`collection`
+ * traversal and no-implicit-coercion instead of just "does this name exist."
  */
+
+import type { ArrayType, DeclaredType, RefType, ScalarType } from './types.js';
+
+/**
+ * A column's type as the host describes it. `scalar`/`array`/`ref` reuse
+ * `types.ts`'s shapes directly; the `collection` case is host-facing-only
+ * (just the target table — the type-checker fills in the rest, since a
+ * collection's own `element` shape is always derivable from `table`).
+ */
+export type MinabFieldType = ScalarType | ArrayType | RefType | { kind: 'collection'; table: string };
 
 export interface MinabColumnSchema {
     name: string;
-    /**
-     * A provisional, display-only type string (e.g. "INTEGER", "TEXT[]",
-     * "ref(Customer)") — not yet the real logical type from spec §7.2.
-     * Phase 4 should replace this with a proper type representation.
-     */
-    type: string;
+    type: MinabFieldType;
 }
 
 export interface MinabTableSchema {
@@ -28,8 +36,8 @@ export interface MinabTableSchema {
 
 export interface MinabFunctionSchema {
     name: string;
-    paramTypes: string[];
-    returnType: string;
+    paramTypes: DeclaredType[];
+    returnType: DeclaredType;
 }
 
 export interface MinabSchema {
@@ -51,6 +59,14 @@ export const EMPTY_SCHEMA: MinabSchema = { tables: [], functions: [] };
 export interface MinabRuleContext {
     /** True when `$` (FieldValue) is valid anywhere in this program. */
     isFieldRule: boolean;
+    /**
+     * The declared type of the field being validated, when the host
+     * supplies it — lets `$` participate in type-checking (Phase 4), e.g.
+     * `.total > $` needs to know `$`'s type to check the comparison. Left
+     * `undefined` when the host doesn't supply it, in which case `$` types
+     * as `unknown` (no false positives).
+     */
+    fieldType?: MinabFieldType;
 }
 
 export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };

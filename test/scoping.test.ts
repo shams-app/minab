@@ -18,17 +18,36 @@ import {
 // tables in-file.
 const fixtureSchema: MinabSchema = {
     tables: [
-        { name: 'Customer', columns: [{ name: 'id', type: 'INTEGER' }, { name: 'name', type: 'TEXT' }] },
+        {
+            name: 'Customer',
+            columns: [
+                { name: 'id', type: { kind: 'scalar', base: 'INTEGER', nullable: false } },
+                { name: 'name', type: { kind: 'scalar', base: 'TEXT', nullable: false } }
+            ]
+        },
         {
             name: 'Customers',
             columns: [
-                { name: 'id', type: 'INTEGER' },
-                { name: 'balance', type: 'DECIMAL' },
-                { name: 'flagged', type: 'BOOLEAN' }
+                { name: 'id', type: { kind: 'scalar', base: 'INTEGER', nullable: false } },
+                { name: 'balance', type: { kind: 'scalar', base: 'DECIMAL', nullable: false } },
+                { name: 'flagged', type: { kind: 'scalar', base: 'BOOLEAN', nullable: false } }
             ]
         },
-        { name: 'Booking', columns: [{ name: 'room_id', type: 'INTEGER' }, { name: 'start_date', type: 'DATE' }, { name: 'end_date', type: 'DATE' }] },
-        { name: 'Order', columns: [{ name: 'customer', type: 'ref(Customer)' }, { name: 'total', type: 'DECIMAL' }] }
+        {
+            name: 'Booking',
+            columns: [
+                { name: 'room_id', type: { kind: 'scalar', base: 'INTEGER', nullable: false } },
+                { name: 'start_date', type: { kind: 'scalar', base: 'DATE', nullable: false } },
+                { name: 'end_date', type: { kind: 'scalar', base: 'DATE', nullable: false } }
+            ]
+        },
+        {
+            name: 'Order',
+            columns: [
+                { name: 'customer', type: { kind: 'ref', table: 'Customer', nullable: false } },
+                { name: 'total', type: { kind: 'scalar', base: 'DECIMAL', nullable: false } }
+            ]
+        }
     ],
     functions: []
 };

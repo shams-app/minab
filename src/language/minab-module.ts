@@ -8,6 +8,7 @@ import type {
 import { createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium';
 import { MinabGeneratedModule, MinabGeneratedSharedModule } from './generated/module.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
+import { MinabTypeChecker, registerTypeCheckingChecks } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
 import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
 
@@ -21,13 +22,19 @@ import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleConte
  *    `KEY`, spec §2.2) plus bare `NameRef` lookups. Not a Langium
  *    `ScopeProvider` — see `minab-scope-resolver.ts` for why.
  *  - `ruleContext`: host-supplied fact about whether the program being
- *    validated is a field-level rule (see `schema.ts`) — consumed by the
- *    `Validator`'s `$`-placement check.
+ *    validated is a field-level rule, and (Phase 4) the field's declared
+ *    type — see `schema.ts` — consumed by the `Validator`'s `$`-placement
+ *    check and the type-checker's `$` typing.
+ *  - `typeChecker`: type inference/checking over the expression grammar
+ *    (`minab-type-checker.ts`, Phase 4) — supersedes the scope resolver's
+ *    one-hop bound on `.field` traversal with real `ref`/`collection`
+ *    chains, and enforces spec §5.5's no-implicit-coercion rule.
  *
  * The `Validator` (`minab-validator.ts`, Phase 3) checks: `$` only valid
  * when `ruleContext.isFieldRule`; `KEY` only valid after `GROUPBY`;
- * `#alias` referencing an undeclared table. Collection-vs-scalar
- * type-checking (spec §3.4) is deferred to Phase 4's real type system.
+ * `#alias` referencing an undeclared table. `minab-type-checker.ts` (Phase
+ * 4) is a separate, parallel set of checks covering everything type-shaped,
+ * including the collection-vs-scalar boundary (spec §3.4) Phase 3 deferred.
  *
  * Note: this module wires only the *core* Langium services (parsing, AST,
  * scoping, validation) — no LSP/IDE services (`langium/lsp`) yet. Add those
@@ -38,6 +45,7 @@ export type MinabAddedServices = {
     schema: SchemaProvider;
     scopeResolver: MinabScopeResolver;
     ruleContext: MinabRuleContext;
+    typeChecker: MinabTypeChecker;
 };
 
 /**
@@ -62,7 +70,8 @@ function createMinabModule(
     return {
         schema: () => new SchemaProvider(schema),
         scopeResolver: services => new MinabScopeResolver(services.schema),
-        ruleContext: () => ruleContext
+        ruleContext: () => ruleContext,
+        typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext)
     };
 }
 
@@ -103,5 +112,6 @@ export function createMinabServices(
     );
     shared.ServiceRegistry.register(Minab);
     registerValidationChecks(Minab);
+    registerTypeCheckingChecks(Minab);
     return { shared, Minab };
 }
