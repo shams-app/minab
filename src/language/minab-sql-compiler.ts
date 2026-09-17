@@ -1,0 +1,753 @@
+/**
+ * SQL compilation (roadmap Phase 5, ADR 0001) — the relational half of the
+ * hybrid execution strategy.
+ *
+ * Compiles the parts of Minab that *are* relational algebra: a `Query`
+ * pipeline (spec §4), an ad-hoc `#Table` scope (§3.3), a relation
+ * traversal (§3.1), and the built-in aggregates/predicates over either
+ * (§5.3.1). Everything else — `&fn`, `if`/`switch`, loops, tuples — is
+ * deliberately *not* compiled here; it belongs to `MinabInterpreter`, and
+ * this compiler answers `{ok:false, reason}` for it rather than inventing
+ * a SQL encoding. That refusal is load-bearing: it's how the interpreter
+ * knows to evaluate a node itself and push down only its relational parts.
+ *
+ * Two rules from the spec drive most of the non-obvious codegen here:
+ *
+ *  - **Null-safe equality (§7.7).** A user-written `==`/`!=` compiles to
+ *    `IS NOT DISTINCT FROM`/`IS DISTINCT FROM`, never `=`/`<>`, because
+ *    Minab's equality is total (`null == null` is `true`) where SQL's is
+ *    three-valued. Join predicates the *compiler itself* synthesizes are
+ *    the opposite case and use plain `=` — see `refSubquery`.
+ *  - **Null propagation through a `ref` (§7.7 rule 1).** `.customer.name`
+ *    compiles to a correlated scalar subquery rather than a join, so a
+ *    null FK yields `NULL` instead of dropping the row the way an inner
+ *    join would.
+ *
+ * Errors are thrown internally as `CompileError` and converted to the
+ * `{ok, reason}` union at the public entry points — same discriminated
+ * union the rest of the codebase uses, without threading a Result type
+ * through every recursive call.
+ */
+
+import {
+    isBinaryExpression,
+    isBooleanLiteral,
+    isCallExpression,
+    isCastExpr,
+    isCurrentRecord,
+    isFieldValue,
+    isFilterAccess,
+    isGroupKeyRef,
+    isListLiteral,
+    isMemberAccess,
+    isNamedScope,
+    isNameRef,
+    isNullLiteral,
+    isNumberLiteral,
+    isParentRecord,
+    isStringLiteral,
+    isSubquery,
+    isTableRef,
+    isTupleAccess,
+    isUnaryExpression,
+    type BinaryExpression,
+    type CallExpression,
+    type Expression,
+    type Query,
+    type TypeRef,
+    type UnaryExpression
+} from './generated/ast.js';
+import { isBuiltinName } from './minab-builtins.js';
+import type { SqlQuery } from './minab-executor.js';
+import type { LogicalTypeBase } from './minab-types.js';
+import type { MinabColumnSchema, SchemaProvider } from './schema.js';
+
+export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string };
+
+/** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
+export interface OuterRecord {
+    table?: string;
+    key: unknown;
+}
+
+/**
+ * How the compiler asks its caller for anything it can't express in SQL
+ * itself. `MinabInterpreter` implements this with its own runtime scope
+ * stack: an escaping `^`/`^.field`/`$`/variable is evaluated in memory and
+ * bound as a query parameter, which is exactly how a correlated check
+ * inside an interpreted validation rule stays one indexed lookup.
+ *
+ * `depth` is how many scope-stack levels (spec §2.2) the compiled
+ * statement had pushed at the point of the reference. The caller needs it
+ * to land on the right frame: the full stack is the compiler's levels
+ * stacked on top of the caller's, so a `^` escaping from `depth` 1 means
+ * the caller's innermost record, and from `depth` 0 means the one above
+ * that.
+ */
+export interface OuterResolver {
+    /** A scalar the caller already holds (`^.field`, `$`, a `let` variable), to bind as a parameter. */
+    resolve(expr: Expression, depth: number): { found: true; value: unknown } | { found: false; reason: string };
+    /** The record `frameIndex` levels outside the compiled statement, innermost first. */
+    resolveRecord(frameIndex: number): { found: true; record: OuterRecord } | { found: false; reason: string };
+}
+
+const NO_OUTER_REASON = 'reaches outside the query being compiled, with no enclosing runtime scope to supply it';
+
+export const NO_OUTER_SCOPE: OuterResolver = {
+    resolve: () => ({ found: false, reason: NO_OUTER_REASON }),
+    resolveRecord: () => ({ found: false, reason: NO_OUTER_REASON })
+};
+
+class CompileError extends Error {}
+
+function fail(reason: string): never {
+    throw new CompileError(reason);
+}
+
+interface NamedEntry {
+    alias: string;
+    table: string;
+}
+
+interface SqlScope {
+    /** The SQL alias qualifying bare `.field` at this level. */
+    alias: string;
+    table: string;
+    /** `FROM ... AS x` / `JOIN ... AS y` names, reachable as `x.field` or `#x`. */
+    named: Map<string, NamedEntry>;
+    /** Set once a `GROUPBY` is in effect, so `KEY` has something to resolve to. */
+    groupKeys?: Expression[];
+    /** `SELECT ... AS n` names, which `ORDERBY` may reference by name. */
+    selectAliases?: Set<string>;
+}
+
+/** A reference to a *row*, as opposed to a scalar value. */
+type RowRef =
+    | { kind: 'scope'; alias: string; table: string }
+    | { kind: 'key'; table: string; keyExpr: string }
+    | { kind: 'outer'; table: string | undefined; keyExpr: string };
+
+/** A table to read rows from, plus every predicate that narrows it — the shape every aggregate/`EXISTS` subquery is built from. */
+interface CollectionSource {
+    table: string;
+    alias: string;
+    predicates: string[];
+}
+
+const SQL_TYPES: Record<LogicalTypeBase, string> = {
+    TEXT: 'text',
+    CITEXT: 'citext',
+    INTEGER: 'integer',
+    DECIMAL: 'numeric',
+    BOOLEAN: 'boolean',
+    DATE: 'date',
+    TIME: 'time',
+    DATETIME: 'timestamp',
+    UUID: 'uuid',
+    JSON: 'jsonb'
+};
+
+const COMPARISONS: Record<string, string> = {
+    '==': 'IS NOT DISTINCT FROM',
+    '!=': 'IS DISTINCT FROM',
+    '<': '<',
+    '<=': '<=',
+    '>': '>',
+    '>=': '>=',
+    LIKE: 'LIKE'
+};
+
+const ARITHMETIC: Record<string, string> = {
+    '+': '+',
+    '-': '-',
+    '*': '*',
+    '/': '/',
+    '%': '%'
+};
+
+function quoteIdent(name: string): string {
+    return `"${name.replace(/"/g, '""')}"`;
+}
+
+export class MinabSqlCompiler {
+    constructor(private readonly schema: SchemaProvider) {}
+
+    /** Compile a pipeline `Query` (spec §4) to a full `SELECT`. */
+    compileQuery(query: Query, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
+        return this.run(ctx => this.query(query, ctx, []), outer);
+    }
+
+    /**
+     * Compile a single expression as a one-row, one-column `SELECT` —
+     * how the interpreter pushes down a relational subexpression
+     * (`EXISTS(#Booking[...])`, `COUNT(.orders[...])`, a scalar subquery)
+     * and reads one value back.
+     */
+    compileValue(expr: Expression, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
+        return this.run(ctx => `SELECT ${this.expression(expr, ctx, [])} AS "value"`, outer);
+    }
+
+    private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
+        const ctx = new Ctx(outer);
+        try {
+            const text = build(ctx);
+            return { ok: true, query: { text, params: ctx.params } };
+        } catch (e) {
+            if (e instanceof CompileError) {
+                return { ok: false, reason: e.message };
+            }
+            throw e;
+        }
+    }
+
+    // ---- query ---------------------------------------------------------
+
+    private query(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
+        const scope = this.scopeOf(query, ctx, outerScopes);
+        const scopes = [scope, ...outerScopes];
+
+        // Compiled in SQL's own textual order so `$1`, `$2`, ... read left
+        // to right in the emitted statement.
+        const select = this.selectClause(query, ctx, scopes);
+        const from = this.fromClause(query, scope, ctx, scopes);
+        const where = query.whereClause ? ` WHERE ${this.expression(query.whereClause.condition, ctx, scopes)}` : '';
+        const groupBy = query.groupByClause
+            ? ` GROUP BY ${query.groupByClause.keys.map(k => this.expression(k, ctx, scopes)).join(', ')}`
+            : '';
+        const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
+        const orderBy = query.orderByClause
+            ? ` ORDER BY ${query.orderByClause.items
+                  .map(i => `${this.expression(i.expression, ctx, scopes)}${i.direction === 'DESC' ? ' DESC' : ''}`)
+                  .join(', ')}`
+            : '';
+        const limit = query.limitClause
+            ? ` LIMIT ${query.limitClause.limit}${query.limitClause.offset !== undefined ? ` OFFSET ${query.limitClause.offset}` : ''}`
+            : '';
+
+        return `${select}${from}${where}${groupBy}${having}${orderBy}${limit}`;
+    }
+
+    private scopeOf(query: Query, ctx: Ctx, outerScopes: SqlScope[]): SqlScope {
+        const table = this.sourceTable(query, ctx, outerScopes);
+        const alias = query.alias ?? table;
+        const named = new Map<string, NamedEntry>([[alias, { alias, table }]]);
+        for (const join of query.joins) {
+            const joinTable = this.table(join.source).name;
+            named.set(join.alias, { alias: join.alias, table: joinTable });
+        }
+        const scope: SqlScope = { alias, table, named };
+        if (query.groupByClause) {
+            scope.groupKeys = query.groupByClause.keys;
+        }
+        scope.selectAliases = new Set(
+            (query.selectClause?.items ?? []).flatMap(i => (i.alias ? [i.alias] : []))
+        );
+        return scope;
+    }
+
+    private sourceTable(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
+        const source = query.source;
+        if (isTableRef(source)) return this.table(source.name).name;
+        if (isNamedScope(source)) return this.table(source.name).name;
+        // `FROM .orders` — a collection field on an enclosing record.
+        const collection = this.collectionSource(source, ctx, outerScopes);
+        if (collection.predicates.length > 0) {
+            fail('FROM over a related collection is not compiled yet — reach it through an aggregate or EXISTS instead');
+        }
+        return collection.table;
+    }
+
+    private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
+        const source = scope.alias === scope.table
+            ? ` FROM ${quoteIdent(scope.table)}`
+            : ` FROM ${quoteIdent(scope.table)} AS ${quoteIdent(scope.alias)}`;
+        const joins = query.joins.map(join => {
+            const keyword = join.cross ? 'CROSS JOIN' : join.left ? 'LEFT JOIN' : 'JOIN';
+            const target = `${quoteIdent(this.table(join.source).name)} AS ${quoteIdent(join.alias)}`;
+            if (join.cross) return ` ${keyword} ${target}`;
+            if (!join.condition) fail(`"${join.alias}" is joined without an ON condition`);
+            return ` ${keyword} ${target} ON ${this.expression(join.condition, ctx, scopes)}`;
+        });
+        return source + joins.join('');
+    }
+
+    private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
+        const clause = query.selectClause;
+        if (!clause || clause.all || clause.items.length === 0) {
+            return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}*`;
+        }
+        const items = clause.items.map(item => {
+            const sql = this.expression(item.expression, ctx, scopes);
+            return item.alias ? `${sql} AS ${quoteIdent(item.alias)}` : sql;
+        });
+        return `SELECT ${clause.distinct ? 'DISTINCT ' : ''}${items.join(', ')}`;
+    }
+
+    // ---- expressions ---------------------------------------------------
+
+    private expression(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isStringLiteral(expr)) return ctx.bind(expr.value);
+        if (isNumberLiteral(expr)) return ctx.bind(expr.value);
+        if (isBooleanLiteral(expr)) return expr.value === 'true' ? 'TRUE' : 'FALSE';
+        if (isNullLiteral(expr)) return 'NULL';
+        if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes);
+        if (isUnaryExpression(expr)) return this.unary(expr, ctx, scopes);
+        if (isCallExpression(expr)) return this.call(expr, ctx, scopes);
+        if (isCastExpr(expr)) {
+            return `CAST(${this.expression(expr.value, ctx, scopes)} AS ${this.sqlType(expr.targetType)})`;
+        }
+        if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
+        // `$` (spec §6.2) is always the host's, never a column: the value
+        // of the field under validation, bound as a parameter.
+        if (isFieldValue(expr)) return this.outerScalar(expr, ctx, scopes.length);
+        if (isCurrentRecord(expr) || isMemberAccess(expr) || isGroupKeyRef(expr) || isNameRef(expr)) {
+            return this.fieldOrOuter(expr, ctx, scopes);
+        }
+        if (isParentRecord(expr) || isNamedScope(expr)) {
+            fail(`"${expr.$type}" refers to a record, not a value — use one of its fields`);
+        }
+        fail(`"${expr.$type}" has no SQL form (it belongs to the interpreted layer)`);
+    }
+
+    /**
+     * A `.field`/`alias.field`/`KEY.field` chain, or — when its base
+     * reaches outside this statement — a bound parameter carrying the
+     * value the caller already has in memory.
+     */
+    private fieldOrOuter(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isNameRef(expr)) {
+            // An `ORDERBY` item naming a `SELECT ... AS n` column.
+            if (scopes[0]?.selectAliases?.has(expr.name)) return quoteIdent(expr.name);
+            if (this.lookupNamed(expr.name, scopes)) {
+                fail(`"${expr.name}" refers to a record, not a value — use one of its fields`);
+            }
+            return this.outerScalar(expr, ctx, scopes.length);
+        }
+        if (isCurrentRecord(expr)) {
+            if (!expr.field) fail('a bare "." refers to a record, not a value');
+            if (scopes.length === 0) return this.outerScalar(expr, ctx, scopes.length);
+            return this.column({ kind: 'scope', alias: scopes[0].alias, table: scopes[0].table }, expr.field, ctx);
+        }
+        if (isGroupKeyRef(expr)) {
+            const keys = scopes[0]?.groupKeys;
+            if (!keys) fail('KEY is only valid after a GROUPBY clause');
+            if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
+            return this.expression(keys[0], ctx, scopes);
+        }
+        if (isMemberAccess(expr)) {
+            const mark = ctx.mark();
+            const receiver = this.rowRef(expr.receiver, ctx, scopes);
+            // A scalar field of a record the *caller* holds (`^.room_id`)
+            // is already in memory — bind it rather than emitting a
+            // subquery to fetch back something we were handed.
+            const inMemory = receiver?.kind === 'outer'
+                && this.columnSchema(this.tableOf(receiver), expr.member).type.kind === 'scalar';
+            if (!receiver || inMemory) {
+                ctx.reset(mark);
+                return this.outerScalar(expr, ctx, scopes.length);
+            }
+            return this.column(receiver, expr.member, ctx);
+        }
+        fail(`"${expr.$type}" is not a field reference`);
+    }
+
+    /**
+     * The row an expression denotes, or `undefined` when it escapes this
+     * statement entirely (the caller then asks the `OuterResolver` for the
+     * whole chain as a value, rather than trying to build SQL around a row
+     * SQL can't see).
+     */
+    private rowRef(expr: Expression, ctx: Ctx, scopes: SqlScope[]): RowRef | undefined {
+        if (isCurrentRecord(expr)) {
+            const base: RowRef = scopes.length === 0
+                ? this.outerRow(0, ctx)
+                : { kind: 'scope', alias: scopes[0].alias, table: scopes[0].table };
+            return expr.field ? this.follow(base, expr.field, ctx) : base;
+        }
+        if (isParentRecord(expr)) {
+            if (scopes.length < 2) {
+                return this.outerRow(1 - scopes.length, ctx);
+            }
+            return { kind: 'scope', alias: scopes[1].alias, table: scopes[1].table };
+        }
+        if (isNamedScope(expr) || isNameRef(expr)) {
+            const named = this.lookupNamed(expr.name, scopes);
+            if (named) return { kind: 'scope', alias: named.alias, table: named.table };
+            if (isNamedScope(expr)) {
+                // `#Table` with no alias of that name in scope: spec §3.3's
+                // "opens the whole table," which is a collection, not a row.
+                fail(`"#${expr.name}" opens a whole table — use it inside an aggregate, EXISTS, or a filter`);
+            }
+            return undefined;
+        }
+        if (isMemberAccess(expr)) {
+            const receiver = this.rowRef(expr.receiver, ctx, scopes);
+            if (!receiver) return undefined;
+            return this.follow(receiver, expr.member, ctx);
+        }
+        if (isGroupKeyRef(expr)) {
+            const keys = scopes[0]?.groupKeys;
+            if (!keys) fail('KEY is only valid after a GROUPBY clause');
+            if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
+            return this.rowRef(keys[0], ctx, scopes);
+        }
+        return undefined;
+    }
+
+    /**
+     * Step from a row onto one of its `ref` columns — the related row,
+     * identified by the FK value. Answers `undefined` for a scalar column,
+     * which is a *value*, not a row: that distinction is what keeps
+     * `.room_id == ^.room_id` an ordinary comparison rather than an
+     * identity comparison between two things that aren't records.
+     */
+    private follow(receiver: RowRef, field: string, ctx: Ctx): RowRef | undefined {
+        const table = this.tableOf(receiver);
+        if (this.columnSchema(table, field).type.kind !== 'ref') return undefined;
+        return { kind: 'key', table: this.refTable(table, field), keyExpr: this.column(receiver, field, ctx) };
+    }
+
+    private refTable(table: string, field: string): string {
+        const column = this.columnSchema(table, field);
+        if (column.type.kind !== 'ref') fail(`"${field}" is not a reference`);
+        return column.type.table;
+    }
+
+    /** A scalar column off a row: a direct qualified reference when the row is a real SQL alias, a correlated scalar subquery when the row is only identified by a key. */
+    private column(row: RowRef, field: string, ctx: Ctx): string {
+        const table = this.tableOf(row);
+        const schema = this.columnSchema(table, field);
+        if (schema.type.kind === 'collection') {
+            fail(`"${field}" is a collection — use it inside an aggregate, EXISTS, or a filter (spec §3.4)`);
+        }
+        const name = schema.type.kind === 'ref' ? this.refForeignKey(table, schema) : field;
+        if (row.kind === 'scope') {
+            return `${quoteIdent(row.alias)}.${quoteIdent(name)}`;
+        }
+        return this.refSubquery({ table, keyExpr: row.keyExpr }, name, ctx);
+    }
+
+    private tableOf(row: RowRef): string {
+        if (row.kind === 'outer' && !row.table) {
+            fail('the host did not say which table the enclosing record belongs to');
+        }
+        return row.table as string;
+    }
+
+    /**
+     * `(SELECT <alias>.<column> FROM <table> AS <alias> WHERE <alias>.<pk> = <key>)`.
+     *
+     * A subquery rather than a join because spec §7.7 rule 1 makes
+     * traversal through a null `ref` evaluate to `null` — an inner join
+     * would drop the row instead. The `=` here is the compiler's own join
+     * predicate, not a user-written `==`, so it stays plain: a null FK
+     * must match nothing, which is precisely SQL's default behavior and
+     * the opposite of what `IS NOT DISTINCT FROM` would do.
+     */
+    private refSubquery(row: { table: string; keyExpr: string }, column: string, ctx: Ctx): string {
+        const alias = ctx.freshAlias();
+        const pk = this.primaryKey(row.table);
+        return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(row.table)} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
+    }
+
+    private binary(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const op = expr.operator;
+        if (op === 'AND' || op === 'OR') {
+            return `(${this.expression(expr.left, ctx, scopes)} ${op} ${this.expression(expr.right, ctx, scopes)})`;
+        }
+        if (op === 'IN') {
+            return `${this.expression(expr.left, ctx, scopes)} IN ${this.inList(expr.right, ctx, scopes)}`;
+        }
+        if (op === '==' || op === '!=') {
+            const identity = this.identityComparison(expr, ctx, scopes);
+            if (identity) return identity;
+        }
+        const comparison = COMPARISONS[op];
+        if (comparison) {
+            return `${this.expression(expr.left, ctx, scopes)} ${comparison} ${this.expression(expr.right, ctx, scopes)}`;
+        }
+        const arithmetic = ARITHMETIC[op];
+        if (arithmetic) {
+            return `(${this.expression(expr.left, ctx, scopes)} ${arithmetic} ${this.expression(expr.right, ctx, scopes)})`;
+        }
+        fail(`operator "${op}" has no SQL form`);
+    }
+
+    /**
+     * `. != ^` (spec §6.1) compares two *records*, which SQL can only do
+     * by their identity — so both sides compile to their primary key.
+     * Returns `undefined` when neither side is a record, leaving ordinary
+     * value comparison to the caller.
+     */
+    private identityComparison(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        const mark = ctx.mark();
+        const left = this.rowRef(expr.left, ctx, scopes);
+        const right = this.rowRef(expr.right, ctx, scopes);
+        if (!left && !right) {
+            ctx.reset(mark);
+            return undefined;
+        }
+        if (!left || !right) {
+            fail('cannot compare a record against a value — compare one of its fields instead');
+        }
+        const op = expr.operator === '==' ? 'IS NOT DISTINCT FROM' : 'IS DISTINCT FROM';
+        return `${this.identity(left)} ${op} ${this.identity(right)}`;
+    }
+
+    private identity(row: RowRef): string {
+        if (row.kind === 'scope') return `${quoteIdent(row.alias)}.${quoteIdent(this.primaryKey(row.table))}`;
+        return row.keyExpr;
+    }
+
+    private inList(right: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isListLiteral(right)) {
+            return `(${right.items.map(i => this.expression(i, ctx, scopes)).join(', ')})`;
+        }
+        if (isSubquery(right)) {
+            return `(${this.query(right.query, ctx, scopes)})`;
+        }
+        fail('IN is compiled only against a list literal or a subquery');
+    }
+
+    private unary(expr: UnaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const operand = this.expression(expr.operand, ctx, scopes);
+        if (expr.negated) return `(NOT ${operand})`;
+        return `(${expr.operator}${operand})`;
+    }
+
+    // ---- built-in functions (spec §5.3.1) -------------------------------
+
+    private call(expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const callee = expr.callee;
+        if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
+            fail('only the built-in aggregate/predicate functions have a SQL form');
+        }
+        const name = callee.name;
+        const arg = expr.args[0];
+        if (!arg) fail(`${name} takes one argument`);
+
+        const source = this.tryCollectionSource(arg, ctx, scopes);
+        if (source) {
+            return this.aggregateOverSource(name, source, undefined, ctx);
+        }
+        // A broadcast traversal — `SUM(.orders.total)`: the collection is
+        // the receiver, the aggregated value a column on its element.
+        if (isMemberAccess(arg)) {
+            const receiverSource = this.tryCollectionSource(arg.receiver, ctx, scopes);
+            if (receiverSource) {
+                const inner = { alias: receiverSource.alias, table: receiverSource.table };
+                const column = this.column({ kind: 'scope', ...inner }, arg.member, ctx);
+                return this.aggregateOverSource(name, receiverSource, column, ctx);
+            }
+        }
+        if (name === 'EXISTS' || name === 'ALL' || name === 'ANY') {
+            fail(`${name} needs a collection — a table, a relation field, or a filtered one`);
+        }
+        // An ordinary grouped aggregate over the current query scope.
+        const inner = isCurrentRecord(arg) && !arg.field ? '*' : this.expression(arg, ctx, scopes);
+        return `${name}(${inner})`;
+    }
+
+    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined, ctx: Ctx): string {
+        const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
+        const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
+        if (name === 'EXISTS') {
+            return `EXISTS (SELECT 1${from}${where})`;
+        }
+        if (name === 'COUNT') {
+            return `(SELECT COUNT(${column ?? '*'})${from}${where})`;
+        }
+        if (name === 'SUM' || name === 'AVG' || name === 'MIN' || name === 'MAX') {
+            if (!column) fail(`${name} needs a value to aggregate, e.g. ${name}(.orders.total)`);
+            return `(SELECT ${name}(${column})${from}${where})`;
+        }
+        fail(`${name} has no SQL form yet`);
+    }
+
+    /**
+     * `collectionSource`, but answering `undefined` when the expression
+     * simply isn't a collection (`SUM(.total)` in a grouped query, say).
+     * The structural check comes first so that a genuine failure *inside*
+     * a real collection — an undeclared foreign key, an unknown column —
+     * still surfaces its own reason instead of being flattened into
+     * "that isn't a collection".
+     */
+    private tryCollectionSource(expr: Expression, ctx: Ctx, scopes: SqlScope[]): CollectionSource | undefined {
+        if (!this.looksLikeCollection(expr, ctx, scopes)) return undefined;
+        return this.collectionSource(expr, ctx, scopes);
+    }
+
+    private looksLikeCollection(expr: Expression, ctx: Ctx, scopes: SqlScope[]): boolean {
+        if (isTableRef(expr)) return true;
+        if (isNamedScope(expr)) return !this.lookupNamed(expr.name, scopes);
+        if (isFilterAccess(expr)) return this.looksLikeCollection(expr.receiver, ctx, scopes);
+        const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
+        if (!field) return false;
+        const table = isCurrentRecord(expr) ? this.currentTable(ctx, scopes) : this.staticTable(expr, ctx, scopes);
+        if (!table) return false;
+        return this.schema.getColumn(table, field)?.type.kind === 'collection';
+    }
+
+    /** What `.` ranges over: this statement's innermost scope, or — at the top of a validation rule, where there is none — the caller's record. */
+    private currentTable(ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        if (scopes.length > 0) return scopes[0].table;
+        const resolved = ctx.outer.resolveRecord(0);
+        return resolved.found ? resolved.record.table : undefined;
+    }
+
+    /** The table a member-access receiver ranges over, as far as the schema alone can tell — enough to spot a collection without compiling anything. */
+    private staticTable(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        if (!isMemberAccess(expr)) return undefined;
+        const receiver = expr.receiver;
+        if (isCurrentRecord(receiver)) {
+            const table = this.currentTable(ctx, scopes);
+            if (!table) return undefined;
+            if (!receiver.field) return table;
+            const column = this.schema.getColumn(table, receiver.field);
+            return column && column.type.kind !== 'scalar' ? column.type.table : undefined;
+        }
+        if (isParentRecord(receiver)) {
+            if (scopes.length >= 2) return scopes[1].table;
+            const resolved = ctx.outer.resolveRecord(1 - scopes.length);
+            return resolved.found ? resolved.record.table : undefined;
+        }
+        if (isNamedScope(receiver) || isNameRef(receiver)) {
+            return this.lookupNamed(receiver.name, scopes)?.table ?? this.schema.getTable(receiver.name)?.name;
+        }
+        return undefined;
+    }
+
+    /** The rows an expression ranges over: a whole table (`#Booking`), a relation field (`.orders`), or either of those filtered (`[...]`). */
+    private collectionSource(expr: Expression, ctx: Ctx, scopes: SqlScope[]): CollectionSource {
+        if (isNamedScope(expr) && !this.lookupNamed(expr.name, scopes)) {
+            return { table: this.table(expr.name).name, alias: ctx.freshAlias(), predicates: [] };
+        }
+        if (isTableRef(expr)) {
+            return { table: this.table(expr.name).name, alias: ctx.freshAlias(), predicates: [] };
+        }
+        if (isFilterAccess(expr) || isTupleAccess(expr)) {
+            if (isTupleAccess(expr)) {
+                fail('a positional index is only meaningful on a JSON array, which has no SQL form here (spec §3.5)');
+            }
+            const source = this.collectionSource(expr.receiver, ctx, scopes);
+            const inner: SqlScope = {
+                alias: source.alias,
+                table: source.table,
+                named: new Map([[source.alias, { alias: source.alias, table: source.table }]])
+            };
+            const predicate = this.expression(expr.filter, ctx, [inner, ...scopes]);
+            return { ...source, predicates: [...source.predicates, predicate] };
+        }
+        if (isCurrentRecord(expr) || isMemberAccess(expr)) {
+            return this.relationSource(expr, ctx, scopes);
+        }
+        fail(`"${expr.$type}" is not a collection`);
+    }
+
+    /** A to-many relation field (`.orders`): its own table, correlated back to the owning row. */
+    private relationSource(expr: Expression, ctx: Ctx, scopes: SqlScope[]): CollectionSource {
+        const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
+        if (!field) fail('not a relation field');
+        const owner = isCurrentRecord(expr)
+            ? (scopes.length > 0
+                ? ({ kind: 'scope', alias: scopes[0].alias, table: scopes[0].table } as RowRef)
+                : this.outerRow(0, ctx))
+            : this.rowRef((expr as { receiver: Expression }).receiver, ctx, scopes);
+        if (!owner) fail(`"${field}" has no owning row here`);
+        const column = this.columnSchema(this.tableOf(owner), field);
+        if (column.type.kind !== 'collection') fail(`"${field}" is not a to-many relation`);
+        const foreignKey = column.type.foreignKey;
+        if (!foreignKey) {
+            fail(`the schema does not say which column on "${column.type.table}" links back to "${this.tableOf(owner)}" (set foreignKey on the "${field}" column)`);
+        }
+        const alias = ctx.freshAlias();
+        const ownerKey = this.identity(owner);
+        return {
+            table: column.type.table,
+            alias,
+            predicates: [`${quoteIdent(alias)}.${quoteIdent(foreignKey)} = ${ownerKey}`]
+        };
+    }
+
+    // ---- schema lookups ------------------------------------------------
+
+    private table(name: string) {
+        const table = this.schema.getTable(name);
+        if (!table) fail(`unknown table "${name}"`);
+        return table;
+    }
+
+    private columnSchema(table: string, field: string): MinabColumnSchema {
+        const column = this.schema.getColumn(table, field);
+        if (!column) fail(`unknown column "${field}" on table "${table}"`);
+        return column;
+    }
+
+    private primaryKey(table: string): string {
+        const key = this.table(table).primaryKey;
+        if (!key) fail(`the schema does not say which column identifies a row of "${table}" (set primaryKey)`);
+        return key;
+    }
+
+    private refForeignKey(table: string, column: MinabColumnSchema): string {
+        if (column.type.kind !== 'ref') fail(`"${column.name}" is not a relation`);
+        const foreignKey = column.type.foreignKey;
+        if (!foreignKey) {
+            fail(`the schema does not say which column on "${table}" holds the "${column.name}" reference (set foreignKey)`);
+        }
+        return foreignKey;
+    }
+
+    private lookupNamed(name: string, scopes: SqlScope[]): NamedEntry | undefined {
+        for (const scope of scopes) {
+            const entry = scope.named.get(name);
+            if (entry) return entry;
+        }
+        return undefined;
+    }
+
+    private sqlType(type: TypeRef): string {
+        const base = SQL_TYPES[type.base as LogicalTypeBase];
+        if (!base) fail(`unknown type "${type.base}"`);
+        return type.array ? `${base}[]` : base;
+    }
+
+    private outerScalar(expr: Expression, ctx: Ctx, depth: number): string {
+        const resolved = ctx.outer.resolve(expr, depth);
+        if (!resolved.found) fail(resolved.reason);
+        return ctx.bind(resolved.value);
+    }
+
+    private outerRow(frameIndex: number, ctx: Ctx): RowRef {
+        const resolved = ctx.outer.resolveRecord(frameIndex);
+        if (!resolved.found) fail(resolved.reason);
+        return { kind: 'outer', table: resolved.record.table, keyExpr: ctx.bind(resolved.record.key) };
+    }
+}
+
+/** Per-compilation mutable state: bound parameters and generated aliases. */
+class Ctx {
+    readonly params: unknown[] = [];
+    private aliasCount = 0;
+
+    constructor(readonly outer: OuterResolver) {}
+
+    bind(value: unknown): string {
+        this.params.push(value);
+        return `$${this.params.length}`;
+    }
+
+    freshAlias(): string {
+        return `_r${this.aliasCount++}`;
+    }
+
+    mark(): { params: number; aliases: number } {
+        return { params: this.params.length, aliases: this.aliasCount };
+    }
+
+    /** Undo the parameters/aliases a speculative compilation consumed, so an abandoned attempt doesn't leave gaps in `$n` numbering. */
+    reset(mark: { params: number; aliases: number }): void {
+        this.params.length = mark.params;
+        this.aliasCount = mark.aliases;
+    }
+}

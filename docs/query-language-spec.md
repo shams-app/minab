@@ -226,8 +226,8 @@ LIMIT 20
 ```
 FROM Order
 GROUPBY .customer
-SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
 HAVING SUM(.total) > 1000
+SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
 ORDERBY total_spent DESC
 ```
 

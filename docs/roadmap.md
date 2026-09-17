@@ -139,6 +139,8 @@ Two narrower implementation judgment calls, documented in code comments and wort
 
 **Sign-off: Design → Mechanical.** This is the biggest undecided architectural question in the whole roadmap and should not be implemented before it's explicitly settled.
 
+**Status: Done (2026-09-17).** ADR written, signed off, and implemented — see "What actually shipped" below.
+
 The open question: does Minab execute by compiling to SQL against a Postgres-shaped schema (consistent with the logical type system already in the design (§7.2)), by interpreting directly against in-memory or streamed data, or some hybrid (compile the pipeline layer to SQL, interpret validation rules standalone)? This decision affects almost everything downstream, including the CLI (Phase 6).
 
 Two things Phase 0 already settled make this concrete rather than fully open: null semantics are null-safe/total, not SQL's three-valued logic (spec §9) — so a SQL-compiling strategy must translate `==`/`!=` to a null-safe form, not emit `=`/`<>` directly; and Minab supports declarative writes (spec §1), so the ADR needs to account for a write path, not just queries and validation. The concrete write syntax is now settled (spec §10 — `INSERT`/`UPDATE`/`DELETE`), so this ADR only needs to account for executing it, not design it.
@@ -149,6 +151,20 @@ Two things Phase 0 already settled make this concrete rather than fully open: nu
 - Implement a minimal but real evaluator/codegen for the chosen strategy, covering at least: a `FROM`/`WHERE`/`SELECT` pipeline, one aggregate `GROUPBY`/`HAVING` example, and one record-level validation rule with a correlated `#Table` check.
 
 **Output:** the ADR, plus a working evaluator (or SQL codegen, tested by diffing generated SQL against hand-written expected SQL for a few fixtures) proven against at least one non-trivial example from each of the pipeline and validation layers — not a toy that only handles the simplest case.
+
+**What actually shipped:**
+
+`docs/adr/0001-execution-strategy.md` compares all three options and chooses the **hybrid**: pure SQL compilation was rejected because arbitrary recursion, closures, and implicitly-async `fn`s (§8) don't reduce to one SQL statement without a PL/pgSQL-codegen project nobody has scoped; pure interpretation was rejected as the *sole* strategy because it turns this phase's own flagged risk — a correlated `#Table` scan like §6.1's booking-overlap check — into an unconditional full-table fetch on every validated record.
+
+- `src/language/minab-sql-compiler.ts` (`MinabSqlCompiler`) — compiles the relational layer: the full `Query` pipeline (joins, `GROUPBY`/`HAVING`, `DISTINCT`, `ORDERBY` by select alias, `LIMIT`/`OFFSET`), ad-hoc `#Table` scopes, relation traversal, and the built-in aggregates/predicates over either. Emits parameterized SQL. Refusing to compile is load-bearing, not a gap: `{ok:false, reason}` for `&fn`/`if`/`switch`/loops is how the interpreter knows to take a node itself.
+- `src/language/minab-interpreter.ts` (`MinabInterpreter`) — evaluates everything else against the record the host already holds, pushing the *smallest* subexpression that actually needs table data down to the compiler (deliberately not the largest compilable one: pushing `COUNT(.orders) < 5` down whole would leave SQL comparing two untyped placeholders). Async throughout, since every `fn` is implicitly async.
+- `src/language/minab-executor.ts` — `QueryExecutor`/`SqlQuery`, the host connection contract, in the same "the host supplies what Minab source can't say" shape as `SchemaProvider`.
+- `src/language/schema.ts` — `foreignKey` on `ref`/`collection` columns and `primaryKey` on a table. Both optional, both genuinely required to *execute* a traversal (Phases 2-4 only needed the target table, never the join key); a relation missing one fails with an explicit reason instead of guessing a naming convention. This closes the primary-key gap Phase 4 flagged.
+- `test/sql-compilation.test.ts` (18 tests) — generated SQL diffed against hand-written expected SQL, per this phase's Output. `test/evaluation.test.ts` (18 tests) — the §6.1 rule end to end against a recording executor, asserting the *strategy* (one parameterized `EXISTS`, no scan; the local half never reaching the database at all) and not just the answer.
+
+Two spec rules drove most of the non-obvious codegen, and both are covered by their own tests: `==`/`!=` compile to `IS NOT DISTINCT FROM`/`IS DISTINCT FROM`, never `=`/`<>` (§7.7's total equality), while join predicates the *compiler itself* synthesizes stay plain `=` so a null FK matches nothing; and `ref` traversal compiles to a correlated scalar subquery rather than a join, so a null FK yields `null` (§7.7 rule 1) instead of dropping the row.
+
+Deliberately left for the next increment, each failing with an explicit reason rather than a wrong answer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` *execution* (§10 — the ADR settles how they execute; building it is separate), and `.$index` (§3.5).
 
 ---
 

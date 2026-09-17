@@ -7,7 +7,9 @@ import type {
 } from 'langium';
 import { createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium';
 import { MinabGeneratedModule, MinabGeneratedSharedModule } from './generated/module.js';
+import { MinabInterpreter } from './minab-interpreter.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
+import { MinabSqlCompiler } from './minab-sql-compiler.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
 import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
@@ -29,6 +31,12 @@ import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleConte
  *    checker.ts`) over the expression grammar — no-implicit-coercion,
  *    the §3.4 collection-vs-scalar boundary, and the §7.7 null-operand
  *    rules, all enforced as validator checks that call `inferType`.
+ *  - `sqlCompiler`/`interpreter`: the two halves of Phase 5's execution
+ *    strategy (see `docs/adr/0001-execution-strategy.md`) — SQL for the
+ *    relational layer, a tree-walking interpreter for everything else,
+ *    with the interpreter pushing relational subexpressions down to the
+ *    compiler. Both are stateless; the host's connection and the record
+ *    under evaluation are passed per call, to `interpreter.evaluate`.
  *
  * The `Validator` (`minab-validator.ts`) checks: `$` only valid when
  * `ruleContext.isFieldRule`; `KEY` only valid after `GROUPBY`; `#alias`
@@ -45,6 +53,8 @@ export type MinabAddedServices = {
     scopeResolver: MinabScopeResolver;
     ruleContext: MinabRuleContext;
     typeChecker: MinabTypeChecker;
+    sqlCompiler: MinabSqlCompiler;
+    interpreter: MinabInterpreter;
 };
 
 /**
@@ -70,7 +80,9 @@ function createMinabModule(
         schema: () => new SchemaProvider(schema),
         scopeResolver: services => new MinabScopeResolver(services.schema),
         ruleContext: () => ruleContext,
-        typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext)
+        typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
+        sqlCompiler: services => new MinabSqlCompiler(services.schema),
+        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler)
     };
 }
 
