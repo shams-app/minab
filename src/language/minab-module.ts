@@ -1,12 +1,10 @@
-import type {
-    DefaultSharedCoreModuleContext,
-    LangiumCoreServices,
-    LangiumSharedCoreServices,
-    Module,
-    PartialLangiumCoreServices
-} from 'langium';
-import { createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium';
+import type { Module } from 'langium';
+import type { DefaultSharedModuleContext, LangiumServices, LangiumSharedServices, PartialLangiumServices } from 'langium/lsp';
+import { createDefaultModule, createDefaultSharedModule } from 'langium/lsp';
+import { inject } from 'langium';
 import { MinabGeneratedModule, MinabGeneratedSharedModule, MinabLanguageMetaData } from './generated/module.js';
+import { MinabDefinitionProvider } from './lsp/minab-definition-provider.js';
+import { MinabHoverProvider } from './lsp/minab-hover-provider.js';
 import { MinabInterpreter } from './minab-interpreter.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
 import { MinabSqlCompiler } from './minab-sql-compiler.js';
@@ -43,10 +41,15 @@ import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleConte
  * referencing an undeclared table (Phase 3); plus the full set of
  * type-checking diagnostics built on `typeChecker` (Phase 4).
  *
- * Note: this module wires only the *core* Langium services (parsing, AST,
- * scoping, validation) — no LSP/IDE services (`langium/lsp`) yet. Add those
- * (and switch to `LangiumServices`/`createDefaultModule` from `langium/lsp`)
- * once a language server / VS Code extension is actually needed.
+ * Built on `langium/lsp`'s services (roadmap Phase 7), not the core-only
+ * ones: `Minab` includes an `lsp` service group in addition to the ones
+ * below, and `createMinabServices` works the same way for a one-shot CLI
+ * invocation (`langium/node`'s `NodeFileSystem`, no `connection`) as it
+ * does for a long-running language server (`src/language/main.ts`, which
+ * passes a real `connection`). `MinabHoverProvider`/`MinabDefinitionProvider`
+ * (`./lsp/`) override the LSP defaults for `#alias` (`NamedScope`), since
+ * Minab has no Langium cross-references for the default reference-based
+ * providers to key off — see `minab-scope-resolver.ts`.
  */
 export type MinabAddedServices = {
     schema: SchemaProvider;
@@ -58,9 +61,9 @@ export type MinabAddedServices = {
 };
 
 /**
- * Union of Langium default core services and Minab-specific services.
+ * Union of Langium default (core + LSP) services and Minab-specific services.
  */
-export type MinabServices = LangiumCoreServices & MinabAddedServices;
+export type MinabServices = LangiumServices & MinabAddedServices;
 
 /**
  * Per-embedding options that aren't language data.
@@ -97,7 +100,7 @@ function createMinabModule(
     schema: MinabSchema,
     ruleContext: MinabRuleContext,
     options: MinabServiceOptions
-): Module<MinabServices, PartialLangiumCoreServices & MinabAddedServices> {
+): Module<MinabServices, PartialLangiumServices & MinabAddedServices> {
     return {
         ...(options.mode === 'production'
             ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) }
@@ -107,7 +110,11 @@ function createMinabModule(
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),
-        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler)
+        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler),
+        lsp: {
+            HoverProvider: services => new MinabHoverProvider(services),
+            DefinitionProvider: services => new MinabDefinitionProvider(services)
+        }
     };
 }
 
@@ -132,20 +139,20 @@ function createMinabModule(
  * sets to `production` for startup time; see `MinabServiceOptions`.
  */
 export function createMinabServices(
-    context: DefaultSharedCoreModuleContext,
+    context: DefaultSharedModuleContext,
     schema: MinabSchema = EMPTY_SCHEMA,
     ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT,
     options: MinabServiceOptions = {}
 ): {
-    shared: LangiumSharedCoreServices;
+    shared: LangiumSharedServices;
     Minab: MinabServices;
 } {
     const shared = inject(
-        createDefaultSharedCoreModule(context),
+        createDefaultSharedModule(context),
         MinabGeneratedSharedModule
     );
     const Minab = inject(
-        createDefaultCoreModule({ shared }),
+        createDefaultModule({ shared }),
         MinabGeneratedModule,
         createMinabModule(schema, ruleContext, options)
     );

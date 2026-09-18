@@ -17,8 +17,8 @@
  * config typo is the most likely first thing a new user hits.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import {
     scalarType,
@@ -284,4 +284,22 @@ export function loadRecordFile(path: string): Row {
 
 export function matchResponse(responses: FixtureResponse[], query: SqlQuery): FixtureResponse | undefined {
     return responses.find(r => r.match === undefined || query.text.includes(r.match));
+}
+
+/**
+ * Walks up from a `.minab` file's own directory, not from the working
+ * directory: a config belongs with the programs it describes. Shared by the
+ * CLI (from the file given on the command line) and the language server
+ * (from a workspace root), so both resolve the same config for the same
+ * file.
+ */
+export function discoverConfig(startDir: string): string | undefined {
+    let dir = startDir;
+    for (;;) {
+        const candidate = join(dir, DEFAULT_CONFIG_NAME);
+        if (existsSync(candidate)) return candidate;
+        const parent = dirname(dir);
+        if (parent === dir) return undefined;
+        dir = parent;
+    }
 }

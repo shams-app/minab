@@ -294,3 +294,17 @@ describe('list literals must share one type (no implicit coercion)', () => {
         await expectError(`["a", 1]`, /must share one type/);
     });
 });
+
+describe('one mistake, one diagnostic (roadmap Phase 7)', () => {
+    // `ListLiteral` and `IfExpr` are both independently checked node types;
+    // `inferIfExpr` also recurses into its `thenBranch`, which is this same
+    // failing list. Without `origin` tracking, Langium's direct visit to
+    // the `ListLiteral` node and its direct visit to the enclosing `IfExpr`
+    // node would each independently re-infer and report the same "must
+    // share one type" failure.
+    test('a failing list literal nested inside an if-expression is reported exactly once', async () => {
+        const ds = await diagnostics(`if 1 == 1 { ["a", 1] } else { 2 }`);
+        const matching = ds.filter(d => /must share one type/.test(messageText(d)));
+        expect(matching, ds.map(messageText).join('\n')).toHaveLength(1);
+    });
+});
