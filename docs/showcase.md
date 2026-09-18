@@ -591,3 +591,5 @@ Two things worth calling out about *why* it's written this way, not just what it
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.
+
+The runnable, tested counterparts of these snippets live in `examples/` (one directory per program, each with the config it runs against); `test/examples.test.ts` keeps them working. The showcase snippets themselves are parse-tested by `test/parsing.test.ts`, and are written against an implied schema — the examples are the ones you can actually `minab run`.

@@ -24,7 +24,7 @@ Update the **Status** column as phases complete, and update `docs/query-language
 | 5 | Execution strategy + evaluator | Design → Mechanical | An ADR choosing interpret-vs-compile-to-SQL, plus a working evaluator for a real subset |
 | 6 | CLI / runner | Mechanical | **Done** — `minab run`/`compile`/`check`, against a fixture or a real PostgreSQL |
 | 7 | IDE tooling (LSP + VS Code) | Mechanical | Live diagnostics, hover, and syntax highlighting in an editor |
-| 8 | Documentation & examples | Mechanical | Spec marked "Stable", `examples/` directory, README walkthrough |
+| 8 | Documentation & examples | Mechanical | **Done** — spec marked "Stable", `examples/` directory, README walkthrough |
 | 9 | Packaging / release | Mechanical | Versioned, published package(s); CHANGELOG; tagged release |
 
 ---
@@ -39,7 +39,7 @@ The full backlog of prior design decisions has now landed. Hamed supplied the co
 
 Rather than accept it as a finished artifact, it was integrated as real Phase 1 work: replaced `src/language/minab.langium` and `docs/query-language-spec.md` wholesale, ran it through `langium generate` and `tsc -b` for real, and rebuilt `test/parsing.test.ts` from `docs/showcase.md`'s own 14 sections (49 tests). That surfaced three genuine defects the artifact itself hadn't caught — see Phase 1 below for what they were and how each was resolved.
 
-**Output:** `docs/query-language-spec.md` (12 sections) and `src/language/minab.langium` are the single authoritative pair; `docs/showcase.md` is a synced example corpus; no orphaned prior decisions remain. Eighteen items remain logged as genuinely open in spec §12 — those are deliberate deferrals, not oversights, and should go through the same proposal → example → approval cycle whenever picked up.
+**Output:** `docs/query-language-spec.md` (12 sections) and `src/language/minab.langium` are the single authoritative pair; `docs/showcase.md` is a synced example corpus; no orphaned prior decisions remain. Of the eighteen items logged in spec §12, several were resolved in later phases; the rest are deliberate deferrals, not oversights, and should go through the same proposal → example → approval cycle whenever picked up.
 
 ---
 
@@ -186,7 +186,7 @@ Deliberately left for the next increment, each failing with an explicit reason r
 - `src/cli/config.ts` — `minab.config.json`, the stand-in for the host: schema, rule context, the record under validation, canned data, a connection string. Found by walking up from the `.minab` file's own directory, so a config lives with the programs it describes. Columns take a shorthand (`"TEXT?"`, `"INTEGER[]"`, `{"ref": "Customer", "foreignKey": "customer_id"}`) rather than the nested internal `MinabSchema` shape, and every rejection names the JSON path that caused it.
 - `src/cli/executors.ts` — two `QueryExecutor`s: canned responses from the config (running out of them is an error that prints the unanswered statement, not a silent empty result), and PostgreSQL through a dynamically-imported `pg` that is deliberately *not* a dependency of this package.
 - `src/cli/diagnostics.ts` — `file:line:col`, the source line, a caret under the offending span. Lexer, parser, and validator diagnostics all arrive through the same Langium channel, so all three satisfy this phase's "readable output, not stack traces" task by one path.
-- `examples/` — the two programs the README walks through (the §6.1 correlated rule and the §4.3 grouped query) plus their config.
+- `examples/` — the two programs the README walks through (the §6.1 correlated rule and the §4.3 grouped query) plus their config. (Reorganised in Phase 8 into one directory per example.)
 - `test/cli.test.ts` (32 tests) — asserts on what a user sees: exit codes, messages, the caret, the table. `test/postgres.test.ts` (6 tests, opt-in via `MINAB_TEST_DATABASE_URL`) — **executes** the compiled SQL against a real server, which is new: until now the compiler had only ever been diffed against hand-written expected SQL.
 
 Three things surfaced by running the thing, each fixed rather than noted:
@@ -223,7 +223,7 @@ Three things surfaced by running the thing, each fixed rather than noted:
 
 ---
 
-## Phase 8 — Documentation & examples
+## Phase 8 — Documentation & examples — Done (2026-09-19)
 
 **Sign-off: Mechanical.**
 
@@ -233,6 +233,18 @@ Three things surfaced by running the thing, each fixed rather than noted:
 - Update the README with a real walkthrough: install, write a query, run it, read the output.
 
 **Output:** someone unfamiliar with the project can clone the repo, read the README and spec, and successfully write and run their own `.minab` file.
+
+**What actually shipped:**
+
+- **Spec is Stable.** `docs/query-language-spec.md`'s status line flipped from Draft, and §12's intro reworded (with Hamed's sign-off) to say the open items — 1–4, 13, 17, and the second-`let` sub-question of 8 — are deferred additions, not blockers to what is specified today. No grammar or semantic change.
+- **`examples/<name>/`** — eleven directories, each one program plus the `minab.config.json` it needs (the previous shared config was split, since config discovery stops at the first file found walking up). Eight execute against their fixture: `first-query`, `top-customers`, `shipping-report`, `cancelled-orders-limit`, `booking-overlap`, `customer-exists` (a field rule), `discounted-total` (a user `fn`), `order-status-switch`. Three are **check-only** because the evaluator doesn't run loops or writes yet: `overdue-loop`, `order-dml`, `reconcile-overdue-accounts` (showcase §14).
+- **`test/examples.test.ts`** — drives every example through `runCli` in-process: `check` clean; `run --json` equals the documented answer; the `--trace` statement count (strategy, not just result); `compile` either prints SQL or explains it's interpreted. Check-only examples assert that `run` *refuses* with the specific "not executed yet" reason, so the label fails loudly when execution lands. A drift guard fails if a directory and the manifest disagree, and the README's output blocks (query table, compiled SQL, `--trace`) are asserted against real CLI output.
+- **README** — a from-scratch walkthrough (config → query → `check` → a deliberate type error with its caret → `compile` → `run` → a rule), an examples table, corrected Status/layout (the language server and VS Code extension were missing), the full `compile` output. The walkthrough was followed literally in a scratch directory. `vscode-extension/README.md` is new.
+
+Two findings, neither fixed here since both are outside "documentation":
+
+- **A top-level rule filtering a collection doesn't type-check.** `COUNT(.orders[.status == "cancelled"]) < 5` — showcase §1's own example — fails `minab check` with `column "status" needs a statically known table` when written as a bare rule with `rule.recordTable` set; it works inside `FROM Customer WHERE …`. `MinabScopeResolver` doesn't see the host's `recordTable` (only `MinabTypeChecker`'s outermost `.field` does), and `test/evaluation.test.ts` bypasses the validator, so nothing caught it. The example uses the `FROM … WHERE` form; `overdue-loop` loops over `#Order` instead of `.orders` for the same reason. Split out as its own task.
+- **`daysSincePayment` in showcase §14 isn't defined anywhere** — the showcase calls it as if it existed. The check-only example defines it in-file (a small query-tailed `fn`) so the program type-checks on its own; the showcase text is unchanged.
 
 ---
 

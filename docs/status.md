@@ -22,6 +22,8 @@ Roadmap Phase 6 (CLI / runner) is now also done — see the 2026-09-17 entry at 
 
 Roadmap Phase 7 (IDE tooling — LSP + VS Code) is now also done — see the 2026-09-18 log entry below. `src/language/minab-module.ts` is built on `langium/lsp` rather than core-only services; `src/language/main.ts` is a real language server; `src/language/lsp/` adds hand-written hover/go-to-definition for `#alias` (no Langium cross-references exist to hang the defaults off); and `vscode-extension/` is a minimal, separate-package VS Code extension wiring the server plus a generated TextMate grammar. The duplicate-diagnostics issue carried in this section since Phase 6 is also fixed now, at the validator (see the log entry for how) — the CLI's old post-pass workaround is gone.
 
+Roadmap Phase 8 (documentation & examples) is now also done — see the 2026-09-19 log entry at the bottom. The spec is marked **Stable** (with §12's intro reworded so its open items read as deferred additions); `examples/` is eleven one-directory-each programs (eight that execute against a fixture, three check-only for loops and writes), all driven through the real CLI by `test/examples.test.ts`; and the README has a from-scratch walkthrough. One real bug turned up while building the examples — see "Next job".
+
 ## Next job
 
 **Finish the execution layer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` execution (§10), and `.$index` (§3.5).** These were Phase 5's deliberate deferrals, listed here as the job *before* Phase 6, then again before Phase 7 — both were asked for first and shipped first, so this is still outstanding, each still failing with an explicit "not executed yet" reason rather than a wrong answer. ADR 0001 already settles *how* the DML forms execute (relational targets compiling to SQL DML, `JSON`-array targets staying interpreted); building it is what's left. The CLI makes each of them a one-line thing to try.
@@ -30,7 +32,9 @@ One smaller item found while building the CLI (Phase 6), still outstanding, wort
 
 - **A `CITEXT` column can't be compared to a string literal without a `CAST`.** `.email == "ada@example.com"` against a `CITEXT` column is rejected as implicit coercion (TEXT vs. CITEXT), so every case-insensitive comparison in real code needs `CAST(... AS CITEXT)`. That may be correct and deliberate — §5.5 is strict — but it's the same shape as the `INTEGER`/`DECIMAL` question Phase 4 already decided the other way ("one numeric family, freely inter-comparable"), so it's a Design call, not something to quietly relax. Only noticed because a real query against a real database was awkward to write.
 
-Phase 8 (documentation & examples) is otherwise the next roadmap phase — see `docs/roadmap.md`.
+Also found in Phase 8, worth doing before or alongside the above: **a top-level rule that filters a collection doesn't type-check.** `COUNT(.orders[.status == "cancelled"]) < 5` (showcase §1) fails `minab check` with `column "status" needs a statically known table` when `rule.recordTable` is set; the same expression inside `FROM Customer WHERE …` is fine. `MinabScopeResolver` has no view of the host's `recordTable`, and `test/evaluation.test.ts` calls the interpreter without the validator, so it went unnoticed. Two examples are written around it (`cancelled-orders-limit` uses `FROM … WHERE`; `overdue-loop` iterates `#Order`); switch them back to the `.orders` form once fixed.
+
+Phase 9 (packaging / release) is the next roadmap phase — see `docs/roadmap.md`.
 
 ## Session log
 
@@ -179,3 +183,12 @@ Phase 8 (documentation & examples) is otherwise the next roadmap phase — see `
 - **Not automated, deliberately:** opening a `.minab` file in an actual VS Code Extension Development Host to eyeball syntax highlighting and hover/F12 UX — no GUI in this environment. Left as a manual QA checklist in `docs/roadmap.md`'s Phase 7 "What actually shipped" for whoever verifies this next.
 - Updated `docs/roadmap.md` (Phase 7 Done, with "What actually shipped") and this file.
 
+### 2026-09-19
+
+- **Roadmap Phase 8 — documentation & examples — done.** See `docs/roadmap.md` Phase 8 for the full account.
+- Spec status flipped from Draft to **Stable** and §12's intro reworded, per Hamed's sign-off this session. No grammar or semantic change; `.cursor/rules/00-project-overview.mdc`'s stale "eighteen items open" line corrected.
+- `examples/` reorganised to `examples/<name>/{<name>.minab, minab.config.json}` (config discovery stops at the first file walking up, so one shared config couldn't serve both record rules and field rules). Nine new programs. Three are check-only (`overdue-loop`, `order-dml`, `reconcile-overdue-accounts`).
+- New `test/examples.test.ts` (64 tests): check clean, documented `run --json` answer, `--trace` statement count, `compile` behavior, check-only examples must be *refused* by `run` with the exact reason, a drift guard against stray/missing directories, and the README's output blocks compared with real CLI output.
+- README: from-scratch walkthrough (followed literally in a scratch dir), examples table, corrected Status and layout, full compile output. New `vscode-extension/README.md`.
+- **Found:** a top-level collection filter (`COUNT(.orders[...]) < 5` as a bare rule) fails to type-check — details under "Next job"; spun out as its own task, not fixed here. Also: showcase §14 calls `&daysSincePayment(...)` without ever defining it; the check-only example defines it in-file.
+- `npm run build && npm test`: 244 passed, 6 skipped (the database-only suite), up from 180.

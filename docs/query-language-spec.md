@@ -1,6 +1,6 @@
 # Minab Language Specification
 
-**Status:** Draft
+**Status:** Stable
 **Scope:** Language reference for the pipeline query layer and the standalone expression/validation layer.
 
 ---
@@ -1444,7 +1444,7 @@ hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 
 ## 12. Open Design Questions
 
-These are flagged but not yet resolved — worth deciding before the grammar is considered final:
+The language as specified in §§1–11 is stable: everything the grammar accepts has defined behavior, and the checker and evaluator implement it. The items below are questions and extensions that were deliberately deferred — each still open one is marked as such, and none changes what an existing, valid program means. Resolving one goes through the usual proposal → example → approval cycle and, when it does change the language, updates this spec and `docs/showcase.md` together.
 
 1. **`CurrentRecord` AST shape for `.field` chains.** `.orders.total` currently collapses into `CurrentRecord(field: orders)` followed by a `MemberAccess(member: total)`. Confirm this shape matches evaluator expectations, versus a more uniform nested-member-access tree.
 2. **`NOT` precedence relative to comparison.** As specified, `NOT x == y` parses as `NOT (x == y)`. Confirm this matches intent versus `(NOT x) == y`.

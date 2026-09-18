@@ -1,0 +1,13 @@
+// Joins (spec §4.3, showcase §4): delivered orders with their shipment,
+// most valuable first. `JOIN … ON` is declared explicitly here — unlike a
+// `ref` traversal, nothing in the schema says how Order and Shipment link.
+//
+//   minab compile shipping-report.minab
+//   minab run shipping-report.minab
+
+FROM Order AS o
+JOIN Shipment AS s ON o.tracking_code == s.tracking_code
+WHERE s.status == "delivered"
+SELECT o.id, o.total, s.delivered_at AS shipped_at
+ORDERBY o.total DESC
+LIMIT 20
