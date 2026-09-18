@@ -1,0 +1,10 @@
+// A filter inside a WHERE (spec §3.4): customers with fewer than five
+// cancelled orders. The filter narrows `.orders`, and COUNT reduces the
+// collection to a scalar — a bare collection can't be compared.
+//
+//   minab compile cancelled-orders-limit.minab
+//   minab run cancelled-orders-limit.minab
+
+FROM Customer
+WHERE COUNT(.orders[.status == "cancelled"]) < 5
+SELECT .id, .name

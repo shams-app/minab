@@ -1,0 +1,16 @@
+// Loops (spec §9.4, showcase §12): a `for-in` over a table, with a guard.
+// Entering the loop makes `.` the current order, and `order` is a named alias
+// for the same row.
+//
+// CHECK-ONLY: this parses, resolves, and type-checks, but the evaluator does
+// not execute loops yet — `minab run` says so rather than guessing.
+//
+//   minab check overdue-loop.minab
+
+let shippedTotal: DECIMAL = 0;
+
+loop order in #Order where .status == "shipped" AND order.total > 0 {
+    shippedTotal = shippedTotal + order.total;
+}
+
+shippedTotal > 500

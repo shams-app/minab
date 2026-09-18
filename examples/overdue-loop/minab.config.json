@@ -1,0 +1,26 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customer",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "orders": {
+            "collection": "Order",
+            "foreignKey": "customer_id"
+          }
+        }
+      },
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "status": "TEXT",
+          "total": "DECIMAL"
+        }
+      }
+    ]
+  }
+}
