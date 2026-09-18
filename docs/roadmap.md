@@ -22,7 +22,7 @@ Update the **Status** column as phases complete, and update `docs/query-language
 | 3 | Semantic validation (`Validator`) | Mixed | Invalid-but-parseable programs rejected with clear diagnostics; validation test suite |
 | 4 | Type system | Mixed | A type-checking pass enforcing §3's traversal rules and no-implicit-coercion |
 | 5 | Execution strategy + evaluator | Design → Mechanical | An ADR choosing interpret-vs-compile-to-SQL, plus a working evaluator for a real subset |
-| 6 | CLI / runner | Mechanical | A `minab` command that runs or compiles a `.minab` file against a data source |
+| 6 | CLI / runner | Mechanical | **Done** — `minab run`/`compile`/`check`, against a fixture or a real PostgreSQL |
 | 7 | IDE tooling (LSP + VS Code) | Mechanical | Live diagnostics, hover, and syntax highlighting in an editor |
 | 8 | Documentation & examples | Mechanical | Spec marked "Stable", `examples/` directory, README walkthrough |
 | 9 | Packaging / release | Mechanical | Versioned, published package(s); CHANGELOG; tagged release |
@@ -168,7 +168,7 @@ Deliberately left for the next increment, each failing with an explicit reason r
 
 ---
 
-## Phase 6 — CLI / runner
+## Phase 6 — CLI / runner — Done (2026-09-17)
 
 **Sign-off: Mechanical.**
 
@@ -178,6 +178,22 @@ Deliberately left for the next increment, each failing with an explicit reason r
 - A short "Usage" section in the README covering the common cases (run a validation rule, run a query, see compiled SQL).
 
 **Output:** `minab run some-query.minab` (or equivalent) works end-to-end against a real or fixture data source, documented well enough that someone other than the implementer can use it from the README alone.
+
+**What actually shipped:**
+
+`src/cli/` — three commands over the services Phases 1-5 already built, adding no language behavior of its own: `check` (parse + validate + type-check), `compile` (print the SQL, run nothing), `run` (evaluate, printing rows as a table and a rule's answer as a value). `bin` in `package.json` points at the built `out/src/cli/bin.js`; `runCli(argv, io)` in `src/cli/main.ts` takes its argv and output sinks as parameters so the suite drives whole commands in-process.
+
+- `src/cli/config.ts` — `minab.config.json`, the stand-in for the host: schema, rule context, the record under validation, canned data, a connection string. Found by walking up from the `.minab` file's own directory, so a config lives with the programs it describes. Columns take a shorthand (`"TEXT?"`, `"INTEGER[]"`, `{"ref": "Customer", "foreignKey": "customer_id"}`) rather than the nested internal `MinabSchema` shape, and every rejection names the JSON path that caused it.
+- `src/cli/executors.ts` — two `QueryExecutor`s: canned responses from the config (running out of them is an error that prints the unanswered statement, not a silent empty result), and PostgreSQL through a dynamically-imported `pg` that is deliberately *not* a dependency of this package.
+- `src/cli/diagnostics.ts` — `file:line:col`, the source line, a caret under the offending span. Lexer, parser, and validator diagnostics all arrive through the same Langium channel, so all three satisfy this phase's "readable output, not stack traces" task by one path.
+- `examples/` — the two programs the README walks through (the §6.1 correlated rule and the §4.3 grouped query) plus their config.
+- `test/cli.test.ts` (32 tests) — asserts on what a user sees: exit codes, messages, the caret, the table. `test/postgres.test.ts` (6 tests, opt-in via `MINAB_TEST_DATABASE_URL`) — **executes** the compiled SQL against a real server, which is new: until now the compiler had only ever been diffed against hand-written expected SQL.
+
+Three things surfaced by running the thing, each fixed rather than noted:
+
+- **A crash on a partial AST.** `MinabTypeChecker.inferType` assumed every child node exists, so a file with a syntax error (`.a >> .b` leaves a `BinaryExpression` with no `right`) produced a `TypeError` and a stack trace instead of a diagnostic. Guarded in `minab-type-checker.ts`; it would have hit the Phase 7 language server on every keystroke mid-expression.
+- **A 2.8-second startup.** Langium's `development` mode (what `langium generate` writes into `generated/module.ts`) has Chevrotain re-validate the whole grammar on every parser construction — measured at ~2.8s against this grammar, versus ~80ms in `production`. `createMinabServices` gained a `MinabServiceOptions` parameter and the CLI asks for `production`; the test suite stays on `development`, where the ambiguity warnings that mode exists to produce are actually wanted. CLI startup is now ~0.25s.
+- **Duplicate diagnostics.** `MinabValidator` registers its type checks on every expression node, so one mistake is reported again by each enclosing node that re-infers it — the same message over a widening range. The CLI keeps the innermost, which is the one pointing at the mistake. This is presentation only; the underlying re-reporting is untouched and would be worth a look when Phase 7 puts the same diagnostics in an editor.
 
 ---
 

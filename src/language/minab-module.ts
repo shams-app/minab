@@ -6,7 +6,7 @@ import type {
     PartialLangiumCoreServices
 } from 'langium';
 import { createDefaultCoreModule, createDefaultSharedCoreModule, inject } from 'langium';
-import { MinabGeneratedModule, MinabGeneratedSharedModule } from './generated/module.js';
+import { MinabGeneratedModule, MinabGeneratedSharedModule, MinabLanguageMetaData } from './generated/module.js';
 import { MinabInterpreter } from './minab-interpreter.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
 import { MinabSqlCompiler } from './minab-sql-compiler.js';
@@ -63,6 +63,27 @@ export type MinabAddedServices = {
 export type MinabServices = LangiumCoreServices & MinabAddedServices;
 
 /**
+ * Per-embedding options that aren't language data.
+ *
+ * `mode` is Langium's own development/production distinction, and it is
+ * worth more than it looks: in `development` (what `langium generate`
+ * writes into `generated/module.ts`) Chevrotain re-validates the whole
+ * grammar every time a parser is constructed and reports lookahead
+ * ambiguities. That check belongs in grammar work — it's the safety net
+ * `.cursor/rules/language-implementation.mdc` step 4 relies on, and the
+ * test suite runs in `development` for exactly that reason — but it costs
+ * ~2.8s per services instance against this grammar, measured, versus
+ * ~80ms in `production`. An end-user entry point that creates services,
+ * parses one file, and exits (the Phase 6 CLI) should not pay three
+ * seconds for a check on a grammar the test suite already validated, so
+ * it asks for `production` explicitly. Anything doing grammar work should
+ * leave this alone.
+ */
+export interface MinabServiceOptions {
+    mode?: 'development' | 'production';
+}
+
+/**
  * Dependency injection module that overrides Langium default services and
  * contributes the declared custom services. The Langium defaults can be
  * partially specified to override only distinct fields, while the
@@ -74,9 +95,13 @@ export type MinabServices = LangiumCoreServices & MinabAddedServices;
  */
 function createMinabModule(
     schema: MinabSchema,
-    ruleContext: MinabRuleContext
+    ruleContext: MinabRuleContext,
+    options: MinabServiceOptions
 ): Module<MinabServices, PartialLangiumCoreServices & MinabAddedServices> {
     return {
+        ...(options.mode === 'production'
+            ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) }
+            : {}),
         schema: () => new SchemaProvider(schema),
         scopeResolver: services => new MinabScopeResolver(services.schema),
         ruleContext: () => ruleContext,
@@ -102,12 +127,15 @@ function createMinabModule(
  * `schema.ts`); it defaults to empty for callers (e.g. the parsing smoke
  * suite) that don't need scope/schema resolution. `ruleContext` says
  * whether the program being validated is a field-level rule; it defaults
- * to `false` (record-level/general program).
+ * to `false` (record-level/general program). `options` carries anything
+ * that isn't language data — today just the parser `mode`, which the CLI
+ * sets to `production` for startup time; see `MinabServiceOptions`.
  */
 export function createMinabServices(
     context: DefaultSharedCoreModuleContext,
     schema: MinabSchema = EMPTY_SCHEMA,
-    ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT
+    ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT,
+    options: MinabServiceOptions = {}
 ): {
     shared: LangiumSharedCoreServices;
     Minab: MinabServices;
@@ -119,7 +147,7 @@ export function createMinabServices(
     const Minab = inject(
         createDefaultCoreModule({ shared }),
         MinabGeneratedModule,
-        createMinabModule(schema, ruleContext)
+        createMinabModule(schema, ruleContext, options)
     );
     shared.ServiceRegistry.register(Minab);
     registerValidationChecks(Minab);
