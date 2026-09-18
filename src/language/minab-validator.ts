@@ -18,11 +18,14 @@
  * `{found: false}` into a diagnostic. The Phase 4 checks follow the same
  * shape against `MinabTypeChecker.inferType` (Phase 4, `minab-type-
  * checker.ts`): `{ok: false, reason}` becomes a diagnostic at the node
- * that produced it. Registering the same "does this expression type-check"
- * pass at several node types (an operator, and also whatever contains it)
- * means a single root cause can surface more than one diagnostic — accepted
- * as a minor tradeoff for pinpointing the actual failing sub-expression
- * rather than only ever the outermost one.
+ * that produced it. `checkExpressionTypeChecks` is registered on several
+ * container expression types whose own inference recurses into their
+ * children's — so the same failing child would once get re-inferred and
+ * re-reported by every registered ancestor above it. `inferType`'s `origin`
+ * (roadmap Phase 7) fixes that: a failure only gets accepted at the node
+ * where it actually originates, so an ancestor re-inferring the same
+ * subexpression sees `origin` pointing elsewhere and stays quiet — one
+ * mistake, one diagnostic.
  */
 
 import type { ValidationAcceptor, ValidationChecks } from 'langium';
@@ -109,13 +112,21 @@ export class MinabValidator {
 
     // ---- Phase 4: type checking ----------------------------------------
 
+    /**
+     * `inferType`'s `origin` (see `minab-type-checker.ts`) is the node
+     * whose own inference first produced a failure — accepting only when
+     * `origin === node` is what keeps this from reporting once per
+     * enclosing node in the list above: an ancestor re-inferring the same
+     * failing subexpression sees `origin` pointing at its descendant and
+     * stays quiet, so one mistake produces exactly one diagnostic.
+     */
     checkExpressionTypeChecks(
         node: BinaryExpression | UnaryExpression | MemberAccess | TupleAccess | FilterAccess
             | CallExpression | FunctionCall | ListLiteral | IfExpr | SwitchExpr | CurrentRecord,
         accept: ValidationAcceptor
     ): void {
         const result = this.services.typeChecker.inferType(node);
-        if (!result.ok) {
+        if (!result.ok && result.origin === node) {
             accept('error', result.reason, { node });
         }
     }
@@ -124,8 +135,7 @@ export class MinabValidator {
         const result = this.services.typeChecker.inferType(node.condition);
         if (!result.ok) {
             // Already reported at the specific failing sub-expression by
-            // `checkExpressionTypeChecks` (or will be, once that node type
-            // is visited) — don't double up here.
+            // `checkExpressionTypeChecks` — don't double up here.
             return;
         }
         if (result.type.kind !== 'scalar' || result.type.base !== 'BOOLEAN' || result.type.array) {

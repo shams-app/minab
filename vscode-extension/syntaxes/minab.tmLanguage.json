@@ -1,0 +1,71 @@
+{
+  "name": "minab",
+  "scopeName": "source.minab",
+  "fileTypes": [
+    ".minab"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.minab",
+      "match": "\\b(CROSSJOIN|continue|DATETIME|DISTINCT|LEFTJOIN|boolean|BOOLEAN|DECIMAL|GROUPBY|INTEGER|ORDERBY|CITEXT|DELETE|HAVING|INSERT|number|object|OFFSET|SELECT|string|switch|UPDATE|VALUES|array|break|false|isnot|LIMIT|where|WHERE|CAST|DATE|DESC|else|from|FROM|JOIN|JSON|LIKE|loop|null|NULL|TEXT|TIME|true|UUID|AND|ASC|KEY|let|NOT|SET|AS|by|fn|if|in|IN|is|ON|OR|to)\\b|\\B(\\.\\$index)\\b|\\b(if!)\\B"
+    },
+    {
+      "name": "string.quoted.double.minab",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.minab",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "begin": "//",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.minab"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.minab"
+        },
+        {
+          "name": "comment.block.minab",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.minab"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.minab"
+            }
+          }
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.minab",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

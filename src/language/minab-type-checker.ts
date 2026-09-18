@@ -97,7 +97,15 @@ import {
 } from './minab-types.js';
 import type { MinabRuleContext, SchemaProvider } from './schema.js';
 
-export type TypeResult = { ok: true; type: MinabType } | { ok: false; reason: string };
+/**
+ * `origin` is the AST node whose own inference first produced the failure —
+ * left `undefined` by every `err(...)` call site and stamped once, by
+ * `inferType`'s public wrapper, on the innermost node in a recursive chain.
+ * `MinabValidator` uses it to report a failure exactly once, at the node
+ * that actually caused it, rather than once per enclosing node that
+ * re-infers the same failing subexpression.
+ */
+export type TypeResult = { ok: true; type: MinabType } | { ok: false; reason: string; origin?: AstNode };
 
 function ok(type: MinabType): TypeResult {
     return { ok: true, type };
@@ -128,7 +136,19 @@ export class MinabTypeChecker {
         private readonly ruleContext: MinabRuleContext
     ) {}
 
+    /**
+     * Stamps `origin` on a failure the dispatch didn't already tag — which,
+     * since every recursive call in this file goes back through this same
+     * public method, happens exactly once: at the innermost node whose own
+     * inference first failed. Outer nodes that re-infer that subexpression
+     * see the same failure with `origin` already set, and leave it alone.
+     */
     inferType(node: Expression): TypeResult {
+        const result = this.inferTypeDispatch(node);
+        return (!result.ok && result.origin === undefined) ? { ...result, origin: node } : result;
+    }
+
+    private inferTypeDispatch(node: Expression): TypeResult {
         // A document with syntax errors is still validated — Langium runs
         // the `Validator` over whatever AST the parser recovered, which is
         // the whole point in an editor. An incomplete node (`.a >` parses

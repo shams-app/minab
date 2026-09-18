@@ -35,12 +35,13 @@ import type { MinabServices } from '../language/minab-module.js';
 import {
     DEFAULT_CONFIG_NAME,
     ConfigError,
+    discoverConfig,
     emptyConfig,
     loadConfigFile,
     loadRecordFile,
     type LoadedConfig
 } from './config.js';
-import { formatDiagnostic, isError, messageText, summarize } from './diagnostics.js';
+import { formatDiagnostic, isError, summarize } from './diagnostics.js';
 import { DataSourceError, FixtureExecutor, PostgresExecutor, traced } from './executors.js';
 
 export interface CliIo {
@@ -205,7 +206,7 @@ async function execute(options: Options, io: CliIo): Promise<number> {
     const services = createMinabServices(NodeFileSystem, config.schema, config.ruleContext, { mode: 'production' }).Minab;
 
     const document = await buildDocument(services, filePath);
-    const diagnostics = dedupe(document.diagnostics ?? []);
+    const diagnostics = document.diagnostics ?? [];
     const source = readFileSync(filePath, 'utf8');
     const label = displayPath(filePath, io.cwd);
     for (const diagnostic of diagnostics) {
@@ -311,22 +312,6 @@ function loadConfig(options: Options, programPath: string, io: CliIo): LoadedCon
     return config;
 }
 
-/**
- * Walks up from the program's own directory, not from the working
- * directory: a config belongs with the `.minab` files it describes, and
- * `minab run examples/rule.minab` should work from anywhere in the repo.
- */
-function discoverConfig(startDir: string): string | undefined {
-    let dir = startDir;
-    for (;;) {
-        const candidate = join(dir, DEFAULT_CONFIG_NAME);
-        if (existsSync(candidate)) return candidate;
-        const parent = dirname(dir);
-        if (parent === dir) return undefined;
-        dir = parent;
-    }
-}
-
 /** `--field 42` and `--field '"paid"'` are both JSON; a bare word is taken as the string it plainly is. */
 function parseFieldValue(text: string): unknown {
     try {
@@ -347,59 +332,6 @@ async function buildDocument(services: MinabServices, path: string): Promise<Lan
         validation: { stopAfterLexingErrors: true, stopAfterParsingErrors: true }
     });
     return document as LangiumDocument<Model>;
-}
-
-/**
- * One mistake, one message. `MinabValidator` registers its type checks on
- * every expression node, so an error inside a subexpression is reported
- * again by each enclosing node that re-infers it — the same message over a
- * range that contains the original. Only the innermost one points at the
- * actual mistake, so the ones wrapping it are dropped. Two identical
- * messages over ranges that *don't* nest are two real errors, and both
- * survive.
- */
-function dedupe(diagnostics: Diagnostic[]): Diagnostic[] {
-    const groups = new Map<string, Diagnostic[]>();
-    for (const diagnostic of diagnostics) {
-        const key = `${diagnostic.severity ?? 1}|${messageText(diagnostic)}`;
-        const group = groups.get(key);
-        if (group) group.push(diagnostic);
-        else groups.set(key, [diagnostic]);
-    }
-    const innermost = new Set<Diagnostic>();
-    for (const group of groups.values()) {
-        for (const diagnostic of group) {
-            if (!group.some(other => other !== diagnostic && contains(diagnostic, other))) {
-                innermost.add(diagnostic);
-            }
-        }
-    }
-    // A group of identical ranges would keep every copy by the rule above,
-    // since none strictly contains another; the Set of ranges settles it.
-    const seen = new Set<string>();
-    return diagnostics.filter(diagnostic => {
-        if (!innermost.has(diagnostic)) return false;
-        const key = `${diagnostic.severity ?? 1}|${rangeKey(diagnostic)}|${messageText(diagnostic)}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-}
-
-function rangeKey(diagnostic: Diagnostic): string {
-    const { start, end } = diagnostic.range;
-    return `${start.line}:${start.character}-${end.line}:${end.character}`;
-}
-
-/** True when `outer`'s range strictly encloses `inner`'s. */
-function contains(outer: Diagnostic, inner: Diagnostic): boolean {
-    const a = outer.range;
-    const b = inner.range;
-    const startsBefore = a.start.line < b.start.line
-        || (a.start.line === b.start.line && a.start.character <= b.start.character);
-    const endsAfter = a.end.line > b.end.line
-        || (a.end.line === b.end.line && a.end.character >= b.end.character);
-    return startsBefore && endsAfter && rangeKey(outer) !== rangeKey(inner);
 }
 
 /** SQL, then its parameters as SQL comments — so the whole block can be pasted into psql and edited, not just read. */

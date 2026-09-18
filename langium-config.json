@@ -4,7 +4,10 @@
     {
       "id": "minab",
       "grammar": "src/language/minab.langium",
-      "fileExtensions": [".minab"]
+      "fileExtensions": [".minab"],
+      "textMate": {
+        "out": "vscode-extension/syntaxes/minab.tmLanguage.json"
+      }
     }
   ],
   "out": "src/language/generated"
