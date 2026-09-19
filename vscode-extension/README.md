@@ -1,15 +1,27 @@
 # Minab for VS Code
 
-Syntax highlighting, live diagnostics, and `#alias` hover / go-to-definition for `.minab` files. It is a thin client: it starts the Minab language server (`src/language/main.ts` in the repo root) and wires up a TextMate grammar generated from the language's own grammar. It is not published — you run it from a checkout.
+Syntax highlighting, live diagnostics, and `#alias` hover / go-to-definition for `.minab` files. It is a thin client: it starts the Minab language server (`src/language/main.ts` in the repo root, bundled into the extension as `server/main.mjs`) and wires up a TextMate grammar generated from the language's own grammar.
 
-## Build and launch
+## Install
+
+Build the `.vsix` from a checkout (there is no marketplace listing yet):
 
 ```bash
-# 1. Build the language server (repo root) — produces out/src/language/main.js
+npm install && npm run build:release        # repo root — generates the grammar
+cd vscode-extension && npm install && npm run package
+code --install-extension minab-vscode-*.vsix
+```
+
+The `.vsix` is self-contained: it carries the language server and needs neither the repo nor `npm install` at runtime.
+
+## Build and launch (development)
+
+```bash
+# 1. Build the root package (repo root) — generates the grammar the bundle needs
 npm install && npm run build
 
-# 2. Build the extension
-cd vscode-extension && npm install && npm run build
+# 2. Build the extension and bundle the server into server/main.mjs
+cd vscode-extension && npm install && npm run build && npm run bundle
 ```
 
 Then open the repo in VS Code and press **F5** (or run *Run Extension* from the Debug panel) to open an Extension Development Host. Open any `examples/<name>/<name>.minab` there.
