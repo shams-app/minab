@@ -29,7 +29,6 @@ import { URI, type LangiumDocument } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { isQuery, type Model } from '../language/generated/ast.js';
-import type { SqlQuery } from '../language/minab-executor.js';
 import { createMinabServices } from '../language/minab-module.js';
 import type { MinabServices } from '../language/minab-module.js';
 import {
@@ -43,6 +42,9 @@ import {
 } from './config.js';
 import { formatDiagnostic, isError, summarize } from './diagnostics.js';
 import { DataSourceError, FixtureExecutor, PostgresExecutor, traced } from './executors.js';
+import { formatSql, formatValue } from '../host/format.js';
+
+export { formatSql, formatValue } from '../host/format.js';
 
 export interface CliIo {
     out(text: string): void;
@@ -332,53 +334,6 @@ async function buildDocument(services: MinabServices, path: string): Promise<Lan
         validation: { stopAfterLexingErrors: true, stopAfterParsingErrors: true }
     });
     return document as LangiumDocument<Model>;
-}
-
-/** SQL, then its parameters as SQL comments — so the whole block can be pasted into psql and edited, not just read. */
-export function formatSql(query: SqlQuery): string {
-    if (query.params.length === 0) return query.text;
-    const params = query.params.map((value, index) => `--   $${index + 1} = ${JSON.stringify(value) ?? 'null'}`);
-    return `${query.text}\n-- parameters\n${params.join('\n')}`;
-}
-
-/**
- * A validation rule answers with one value; a pipeline query answers with
- * rows. Printing rows as a table rather than as JSON is the difference
- * between reading a result and parsing one.
- */
-export function formatValue(value: unknown): string {
-    if (Array.isArray(value) && value.length > 0 && value.every(isPlainRow)) {
-        return formatTable(value as Record<string, unknown>[]);
-    }
-    if (Array.isArray(value) && value.length === 0) return '(no rows)';
-    return JSON.stringify(value ?? null, null, 2);
-}
-
-function isPlainRow(value: unknown): boolean {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function formatTable(rows: Record<string, unknown>[]): string {
-    const columns: string[] = [];
-    for (const row of rows) {
-        for (const key of Object.keys(row)) if (!columns.includes(key)) columns.push(key);
-    }
-    const cells = rows.map(row => columns.map(column => renderCell(row[column])));
-    const widths = columns.map((column, index) =>
-        Math.max(column.length, ...cells.map(row => row[index].length))
-    );
-    const line = (values: string[]) => values.map((v, i) => v.padEnd(widths[i])).join('  ').trimEnd();
-    return [
-        line(columns),
-        widths.map(w => '-'.repeat(w)).join('  '),
-        ...cells.map(line)
-    ].join('\n');
-}
-
-function renderCell(value: unknown): string {
-    if (value === null || value === undefined) return 'null';
-    if (typeof value === 'object') return JSON.stringify(value);
-    return String(value);
 }
 
 function resolvePath(path: string, cwd: string): string {

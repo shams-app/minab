@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/shams-app/minab/minab.config.schema.json",
+  "title": "minab.config.json",
+  "description": "What a host application supplies to Minab: the schema, the rule context, the record under validation, and canned data. Used by the minab CLI and the web playground.",
+  "type": "object",
+  "properties": {
+    "schema": { "$ref": "#/definitions/schema" },
+    "rule": {
+      "type": "object",
+      "description": "Which table a rule guards, and — for a field-level rule — the type of $.",
+      "properties": {
+        "recordTable": { "type": "string" },
+        "fieldType": { "$ref": "#/definitions/scalarType" },
+        "isFieldRule": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "record": { "type": "object", "description": "The record under validation." },
+    "fieldValue": { "description": "The value of $ in a field-level rule." },
+    "data": {
+      "type": "object",
+      "properties": {
+        "responses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "match": { "type": "string", "description": "A substring of the generated SQL this response answers." },
+              "rows": { "type": "array", "items": { "type": "object" } },
+              "value": { "description": "Shorthand for a single row with one column, value." }
+            }
+          }
+        }
+      }
+    },
+    "database": { "type": "string", "description": "A PostgreSQL connection string (CLI only)." },
+    "seed": {
+      "type": "object",
+      "description": "Playground only: rows to load into the in-browser database, per table.",
+      "additionalProperties": { "type": "array", "items": { "type": "object" } }
+    }
+  },
+  "definitions": {
+    "scalarType": {
+      "type": "string",
+      "pattern": "^(TEXT|CITEXT|INTEGER|DECIMAL|BOOLEAN|DATE|TIME|DATETIME|UUID|JSON)(\\?)?(\\[\\])?(\\?)?$",
+      "description": "A base type, optionally ? (nullable), [] (array), and ? after [] (nullable array)."
+    },
+    "column": {
+      "oneOf": [
+        { "$ref": "#/definitions/scalarType" },
+        {
+          "type": "object",
+          "properties": { "ref": { "type": "string" }, "foreignKey": { "type": "string" }, "nullable": { "type": "boolean" } },
+          "required": ["ref"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "collection": { "type": "string" }, "foreignKey": { "type": "string" } },
+          "required": ["collection"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "type": { "$ref": "#/definitions/scalarType" } },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "schema": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "primaryKey": { "type": "string" },
+              "columns": { "type": "object", "additionalProperties": { "$ref": "#/definitions/column" } }
+            },
+            "required": ["name", "columns"],
+            "additionalProperties": false
+          }
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "params": { "type": "array", "items": { "$ref": "#/definitions/scalarType" } },
+              "returns": { "$ref": "#/definitions/scalarType" }
+            },
+            "required": ["name", "returns"]
+          }
+        }
+      },
+      "required": ["tables"]
+    }
+  }
+}

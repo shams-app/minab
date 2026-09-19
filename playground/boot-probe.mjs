@@ -1,0 +1,14 @@
+import { PGlite } from '@electric-sql/pglite';
+import { citext } from '@electric-sql/pglite/contrib/citext';
+let t = performance.now();
+const db = await PGlite.create({ extensions: { citext } });
+console.log('create (initdb)', Math.round(performance.now() - t)); t = performance.now();
+await db.exec('CREATE EXTENSION IF NOT EXISTS citext; CREATE TABLE a (id text primary key, e citext); INSERT INTO a VALUES (\'x\', \'Y\');');
+console.log('ddl', Math.round(performance.now() - t)); t = performance.now();
+const dump = await db.dumpDataDir('gzip');
+console.log('dump', Math.round(performance.now() - t), 'bytes', dump.size); t = performance.now();
+await db.close();
+t = performance.now();
+const db2 = await PGlite.create({ extensions: { citext }, loadDataDir: dump });
+console.log('create from dump', Math.round(performance.now() - t)); t = performance.now();
+console.log((await db2.query('select * from a')).rows);

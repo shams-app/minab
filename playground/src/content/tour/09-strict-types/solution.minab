@@ -1,0 +1,5 @@
+// Orders placed in September 2026 or later.
+FROM Order
+WHERE .placed_on >= CAST("2026-09-01" AS DATE)
+SELECT .id, .placed_on
+ORDERBY .placed_on

@@ -8,7 +8,8 @@
  *
  *  - `FixtureExecutor` — canned rows from the config file, so a rule or a
  *    query can be run, and its *strategy* inspected, with no database
- *    anywhere. This is the same trick `test/evaluation.test.ts` uses.
+ *    anywhere. It lives in `src/host/` because it needs no Node APIs and
+ *    the web playground uses it too.
  *  - `PostgresExecutor` — a real connection, for the case the fixture
  *    can't answer: whether the SQL this compiler emits is actually valid
  *    SQL. `pg` is loaded dynamically and is not a dependency of this
@@ -16,43 +17,10 @@
  *    should not force one on someone who only wants `compile`/`check`.
  */
 
-import { matchResponse, type FixtureResponse } from './config.js';
+import { DataSourceError } from '../host/fixture-executor.js';
 import type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
 
-/** Thrown for a data-source problem (no fixture answer, a driver that isn't installed, a database that rejects the SQL). Reported as a message, never a stack trace. */
-export class DataSourceError extends Error {}
-
-/**
- * Answers from the config's `data.responses`, in order: the first response
- * whose `match` appears in the generated SQL wins, and a response with no
- * `match` answers anything.
- *
- * Running out of answers is an error rather than an empty result. A silent
- * `[]` would look exactly like "the database says no rows", which is the
- * wrong answer to the question the fixture was asked; the message prints
- * the SQL that went unanswered so the missing response can be written.
- */
-export class FixtureExecutor implements QueryExecutor {
-    readonly statements: SqlQuery[] = [];
-
-    constructor(private readonly responses: FixtureResponse[]) {}
-
-    async execute(query: SqlQuery): Promise<Row[]> {
-        this.statements.push(query);
-        const response = matchResponse(this.responses, query);
-        if (!response) {
-            throw new DataSourceError(
-                this.responses.length === 0
-                    ? `this program needs data, and no data source was configured.\n` +
-                      `Add a "data" section to the config, or pass --database <url>.\n` +
-                      `Unanswered statement:\n  ${query.text}`
-                    : `no configured response matches this statement:\n  ${query.text}\n` +
-                      `Add a response with a "match" substring of it, or one with no "match" at all.`
-            );
-        }
-        return response.rows;
-    }
-}
+export { DataSourceError, FixtureExecutor, traced } from '../host/fixture-executor.js';
 
 /** What the CLI needs from `pg`'s `Client`, and all it uses — kept explicit since the import is untyped. */
 interface PgClientLike {
@@ -111,14 +79,4 @@ export class PostgresExecutor implements QueryExecutor {
     async close(): Promise<void> {
         await this.client.end();
     }
-}
-
-/** Wraps an executor so every statement it runs is reported (`--trace`) as it happens, rather than only after the program finishes. */
-export function traced(executor: QueryExecutor, onStatement: (query: SqlQuery) => void): QueryExecutor {
-    return {
-        async execute(query: SqlQuery): Promise<Row[]> {
-            onStatement(query);
-            return await executor.execute(query);
-        }
-    };
 }

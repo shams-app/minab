@@ -1,0 +1,6 @@
+// A booking must end after it starts, and must not overlap
+// another booking of the same room.
+.end_date > .start_date AND NOT EXISTS(
+    #Booking[. != ^ AND .room_id == ^.room_id
+             AND .start_date < ^.end_date AND .end_date > ^.start_date]
+)

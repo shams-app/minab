@@ -1,0 +1,4 @@
+// Shipped orders. Each order has a `customer`: a ref to a Customer row.
+FROM Order
+WHERE .status == "shipped"
+SELECT .id, .total

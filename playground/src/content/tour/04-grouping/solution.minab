@@ -1,0 +1,6 @@
+// Customers who spent more than 1000, with their order count.
+FROM Order
+GROUPBY .customer
+HAVING SUM(.total) > 1000
+SELECT KEY.name AS customer, COUNT(.) AS orders, SUM(.total) AS spent
+ORDERBY spent DESC

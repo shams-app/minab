@@ -259,6 +259,8 @@ Two findings, neither fixed here since both are outside "documentation":
 
 **Output:** an installable, versioned artifact with release notes — the point at which "Minab" stops being only a repo you have to clone and build.
 
+**Started early, 2026-09-19 — the web playground (`playground/`).** Not a published package, but the first way to use Minab without cloning anything: a static site that runs the whole toolchain in the browser against PGlite. Built ahead of the packaging decision because it needed only two small, backwards-compatible core changes (`src/host/` extracted from `src/cli/`; `EvalContext.onStatement`). Its visual design is pending (a Claude Design pass — `playground/design/README.md`), then deployment.
+
 ---
 
 ## Cross-cutting: keeping Cursor and Claude in sync

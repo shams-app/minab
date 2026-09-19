@@ -1,0 +1,3 @@
+// `.orders` is a collection: every order of this customer.
+FROM Customer
+SELECT .name, COUNT(.orders) AS orders

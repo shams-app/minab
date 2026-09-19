@@ -1,0 +1,2 @@
+// A booking must end after it starts.
+.end_date > .start_date

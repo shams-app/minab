@@ -1,0 +1,7 @@
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    total - (total * rate / 100)
+}
+
+let rate: DECIMAL = 20;
+
+&discounted(1302.5, rate)

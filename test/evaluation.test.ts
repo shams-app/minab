@@ -210,6 +210,45 @@ describe('a pipeline query as the document tail (spec §4)', () => {
     });
 });
 
+describe('onStatement names the source node behind each statement', () => {
+    test('a rule reports the pushed-down EXISTS, not the whole rule', async () => {
+        const executor = new RecordingExecutor(() => [{ value: false }]);
+        const seen: Array<{ text: string; origin: string }> = [];
+        await value(OVERLAP_RULE, {
+            executor,
+            record: BOOKING,
+            recordTable: 'Booking',
+            onStatement: (query, origin) => seen.push({ text: query.text, origin: origin.$cstNode!.text })
+        });
+        expect(seen).toHaveLength(1);
+        expect(seen[0].text).toBe(executor.only.text);
+        expect(seen[0].origin).toMatch(/^EXISTS\(\s*#Booking\[/);
+        expect(seen[0].origin).toMatch(/\]\s*\)$/);
+    });
+
+    test('a query program reports the query itself', async () => {
+        const executor = new RecordingExecutor(() => []);
+        const origins: string[] = [];
+        await value(`FROM Order WHERE .status == "shipped" SELECT .id`, {
+            executor,
+            onStatement: (_query, origin) => origins.push(origin.$type)
+        });
+        expect(origins).toEqual(['Query']);
+    });
+
+    test('a rule settled from the record alone reports nothing', async () => {
+        const executor = new RecordingExecutor();
+        const origins: string[] = [];
+        await value(`.end_date > .start_date`, {
+            executor,
+            record: BOOKING,
+            recordTable: 'Booking',
+            onStatement: (_query, origin) => origins.push(origin.$type)
+        });
+        expect(origins).toEqual([]);
+    });
+});
+
 describe('the interpreter implements spec §7.7 in its own idiom (ADR 0001)', () => {
     test('null == null is true, not SQL’s unknown', async () => {
         const executor = new RecordingExecutor();

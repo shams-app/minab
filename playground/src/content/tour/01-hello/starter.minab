@@ -1,0 +1,3 @@
+// Every order in the shop.
+FROM Order
+SELECT .id, .status, .total

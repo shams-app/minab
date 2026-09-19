@@ -1,0 +1,350 @@
+/*
+ * Minab Playground — design tokens.
+ *
+ * THIS FILE IS THE DESIGN CONTRACT (see design/contract.md). Every color,
+ * size and duration the app uses is a custom property here; components
+ * never hard-code them. The values below are a neutral WIREFRAME palette,
+ * meant to be replaced wholesale by the Claude Design handoff — keep the
+ * names, change the values. The Monaco editor reads the --editor-* and
+ * --syntax-* tokens at runtime (src/monaco/theme.ts), so it follows too.
+ *
+ * Light is the default; dark applies when the OS prefers it (unless the
+ * visitor picked light) or when <html data-theme="dark">.
+ */
+
+:root {
+    color-scheme: light;
+
+    /* ---- surfaces ---------------------------------------------------- */
+    --bg-canvas: #f6f7f9;
+    --bg-surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-overlay: #ffffff;
+    --surface-sunken: #eef0f3;
+    --surface-hover: #f0f2f5;
+    --surface-selected: #e6ecfb;
+
+    /* ---- text ---------------------------------------------------------- */
+    --text-primary: #16181d;
+    --text-secondary: #474d59;
+    --text-muted: #6b7280;
+    --text-inverse: #ffffff;
+    --text-link: #2f5bd3;
+
+    /* ---- lines --------------------------------------------------------- */
+    --border-subtle: #e5e7eb;
+    --border-default: #d4d8df;
+    --border-strong: #9aa1ad;
+
+    /* ---- brand & state ------------------------------------------------- */
+    --accent: #2f5bd3;
+    --accent-hover: #264bb0;
+    --accent-contrast: #ffffff;
+    --accent-soft: #e6ecfb;
+    --focus-ring: #2f5bd3;
+
+    --success: #177245;
+    --success-soft: #e3f4ea;
+    --danger: #b42318;
+    --danger-soft: #fdecea;
+    --warning: #9a6700;
+    --warning-soft: #fff4d6;
+    --info: #2f5bd3;
+    --info-soft: #e6ecfb;
+
+    /* A rule's answer. Never color-only: pair with an icon and a word. */
+    --verdict-pass: #177245;
+    --verdict-pass-soft: #e3f4ea;
+    --verdict-fail: #b42318;
+    --verdict-fail-soft: #fdecea;
+
+    /* The hybrid execution map: spans that reached the database vs. constructs that only check. */
+    --pushdown: #7a3fd1;
+    --pushdown-soft: #f1e9fd;
+    --check-only: #9a6700;
+    --check-only-soft: #fff4d6;
+    --highlight-soft: #fff1a8;
+
+    /* ---- editor ---------------------------------------------------------- */
+    --editor-bg: #ffffff;
+    --editor-fg: #16181d;
+    --editor-gutter-fg: #a0a6b1;
+    --editor-gutter-fg-active: #474d59;
+    --editor-line-highlight: #f5f7fa;
+    --editor-selection: #cfdcfb;
+    --editor-selection-inactive: #e3e8f3;
+    --editor-cursor: #2f5bd3;
+    --editor-indent-guide: #eceef2;
+    --editor-bracket-match: #e6ecfb;
+    --editor-bracket-match-border: #9fb4ee;
+    --editor-scrollbar: #d4d8df80;
+    --editor-scrollbar-hover: #9aa1ad80;
+    --editor-font-size: 14px;
+    --editor-line-height: 22px;
+
+    /* ---- syntax: one color per lexical category ------------------------- */
+    --syntax-keyword-pipeline: #2f5bd3;
+    --syntax-keyword-dml: #b42318;
+    --syntax-keyword-operator: #6b4fbb;
+    --syntax-keyword-control: #8a3ffc;
+    --syntax-type: #0e7490;
+    --syntax-constant: #b45309;
+    --syntax-builtin: #0f766e;
+    --syntax-sigil-record: #1d4ed8;
+    --syntax-sigil-field: #c2410c;
+    --syntax-sigil-parent: #be185d;
+    --syntax-sigil-alias: #7c3aed;
+    --syntax-sigil-call: #047857;
+    --syntax-sigil-key: #a16207;
+    --syntax-sigil-index: #a16207;
+    --syntax-member: #1f2937;
+    --syntax-identifier: #16181d;
+    --syntax-string: #15803d;
+    --syntax-number: #b45309;
+    --syntax-comment: #8b919c;
+    --syntax-operator: #474d59;
+    --syntax-delimiter: #6b7280;
+    --syntax-invalid: #b42318;
+
+    /* ---- type -------------------------------------------------------------- */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-display: var(--font-sans);
+    --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-md: 0.9375rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.375rem;
+    --text-2xl: 1.75rem;
+    --text-3xl: 2.25rem;
+    --text-4xl: 3rem;
+
+    --leading-tight: 1.2;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.65;
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+    --tracking-tight: -0.015em;
+
+    /* ---- space (4px grid) -------------------------------------------------- */
+    --space-0: 0;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* ---- shape & depth ----------------------------------------------------- */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 16px;
+    --radius-full: 999px;
+
+    --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
+    --shadow-md: 0 4px 12px rgb(16 24 40 / 0.08);
+    --shadow-lg: 0 12px 32px rgb(16 24 40 / 0.12);
+    --shadow-overlay: 0 20px 48px rgb(16 24 40 / 0.18);
+
+    /* ---- motion ------------------------------------------------------------ */
+    --duration-fast: 120ms;
+    --duration-normal: 200ms;
+    --duration-slow: 360ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-emphasized: cubic-bezier(0.3, 0, 0, 1.2);
+
+    /* ---- layout ------------------------------------------------------------ */
+    --topbar-height: 52px;
+    --content-max: 1200px;
+    --gutter: 16px;
+    --z-sticky: 10;
+    --z-dropdown: 40;
+    --z-overlay: 60;
+    --z-toast: 80;
+}
+
+@media (min-width: 768px) {
+    :root {
+        --gutter: 24px;
+    }
+}
+
+/* Dark: follows the OS unless the visitor chose light… */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        color-scheme: dark;
+        --bg-canvas: #0f1115;
+        --bg-surface: #161920;
+        --surface-raised: #1b1f27;
+        --surface-overlay: #1f232c;
+        --surface-sunken: #0b0d11;
+        --surface-hover: #222733;
+        --surface-selected: #23304f;
+        --text-primary: #eceef2;
+        --text-secondary: #b6bcc8;
+        --text-muted: #868d9a;
+        --text-inverse: #0f1115;
+        --text-link: #8fb0ff;
+        --border-subtle: #242934;
+        --border-default: #2e3441;
+        --border-strong: #4b5263;
+        --accent: #7fa2ff;
+        --accent-hover: #9db8ff;
+        --accent-contrast: #0f1115;
+        --accent-soft: #1f2a44;
+        --focus-ring: #8fb0ff;
+        --success: #4fc488;
+        --success-soft: #16301f;
+        --danger: #ff7b72;
+        --danger-soft: #3a1a18;
+        --warning: #e3b341;
+        --warning-soft: #33280e;
+        --info: #8fb0ff;
+        --info-soft: #1f2a44;
+        --verdict-pass: #4fc488;
+        --verdict-pass-soft: #16301f;
+        --verdict-fail: #ff7b72;
+        --verdict-fail-soft: #3a1a18;
+        --pushdown: #c49bff;
+        --pushdown-soft: #2b2140;
+        --check-only: #e3b341;
+        --check-only-soft: #33280e;
+        --highlight-soft: #4a4020;
+        --editor-bg: #13161c;
+        --editor-fg: #e6e8ec;
+        --editor-gutter-fg: #4b5263;
+        --editor-gutter-fg-active: #b6bcc8;
+        --editor-line-highlight: #181c24;
+        --editor-selection: #2a3a5e;
+        --editor-selection-inactive: #232b3d;
+        --editor-cursor: #8fb0ff;
+        --editor-indent-guide: #1f232c;
+        --editor-bracket-match: #23304f;
+        --editor-bracket-match-border: #4d6bb3;
+        --editor-scrollbar: #4b526380;
+        --editor-scrollbar-hover: #6b728080;
+        --syntax-keyword-pipeline: #8fb0ff;
+        --syntax-keyword-dml: #ff8f87;
+        --syntax-keyword-operator: #b9a4ff;
+        --syntax-keyword-control: #d2a8ff;
+        --syntax-type: #67d4e6;
+        --syntax-constant: #ffb86b;
+        --syntax-builtin: #5fe0c5;
+        --syntax-sigil-record: #79c0ff;
+        --syntax-sigil-field: #ffa657;
+        --syntax-sigil-parent: #ff7eb6;
+        --syntax-sigil-alias: #c4a2ff;
+        --syntax-sigil-call: #56d364;
+        --syntax-sigil-key: #e3b341;
+        --syntax-sigil-index: #e3b341;
+        --syntax-member: #d7dbe2;
+        --syntax-identifier: #e6e8ec;
+        --syntax-string: #7ee787;
+        --syntax-number: #ffb86b;
+        --syntax-comment: #6e7681;
+        --syntax-operator: #b6bcc8;
+        --syntax-delimiter: #868d9a;
+        --syntax-invalid: #ff7b72;
+        --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+        --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+        --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
+        --shadow-overlay: 0 20px 48px rgb(0 0 0 / 0.6);
+    }
+}
+
+/* …and always when the visitor chose dark. Keep in sync with the block above. */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg-canvas: #0f1115;
+    --bg-surface: #161920;
+    --surface-raised: #1b1f27;
+    --surface-overlay: #1f232c;
+    --surface-sunken: #0b0d11;
+    --surface-hover: #222733;
+    --surface-selected: #23304f;
+    --text-primary: #eceef2;
+    --text-secondary: #b6bcc8;
+    --text-muted: #868d9a;
+    --text-inverse: #0f1115;
+    --text-link: #8fb0ff;
+    --border-subtle: #242934;
+    --border-default: #2e3441;
+    --border-strong: #4b5263;
+    --accent: #7fa2ff;
+    --accent-hover: #9db8ff;
+    --accent-contrast: #0f1115;
+    --accent-soft: #1f2a44;
+    --focus-ring: #8fb0ff;
+    --success: #4fc488;
+    --success-soft: #16301f;
+    --danger: #ff7b72;
+    --danger-soft: #3a1a18;
+    --warning: #e3b341;
+    --warning-soft: #33280e;
+    --info: #8fb0ff;
+    --info-soft: #1f2a44;
+    --verdict-pass: #4fc488;
+    --verdict-pass-soft: #16301f;
+    --verdict-fail: #ff7b72;
+    --verdict-fail-soft: #3a1a18;
+    --pushdown: #c49bff;
+    --pushdown-soft: #2b2140;
+    --check-only: #e3b341;
+    --check-only-soft: #33280e;
+    --highlight-soft: #4a4020;
+    --editor-bg: #13161c;
+    --editor-fg: #e6e8ec;
+    --editor-gutter-fg: #4b5263;
+    --editor-gutter-fg-active: #b6bcc8;
+    --editor-line-highlight: #181c24;
+    --editor-selection: #2a3a5e;
+    --editor-selection-inactive: #232b3d;
+    --editor-cursor: #8fb0ff;
+    --editor-indent-guide: #1f232c;
+    --editor-bracket-match: #23304f;
+    --editor-bracket-match-border: #4d6bb3;
+    --editor-scrollbar: #4b526380;
+    --editor-scrollbar-hover: #6b728080;
+    --syntax-keyword-pipeline: #8fb0ff;
+    --syntax-keyword-dml: #ff8f87;
+    --syntax-keyword-operator: #b9a4ff;
+    --syntax-keyword-control: #d2a8ff;
+    --syntax-type: #67d4e6;
+    --syntax-constant: #ffb86b;
+    --syntax-builtin: #5fe0c5;
+    --syntax-sigil-record: #79c0ff;
+    --syntax-sigil-field: #ffa657;
+    --syntax-sigil-parent: #ff7eb6;
+    --syntax-sigil-alias: #c4a2ff;
+    --syntax-sigil-call: #56d364;
+    --syntax-sigil-key: #e3b341;
+    --syntax-sigil-index: #e3b341;
+    --syntax-member: #d7dbe2;
+    --syntax-identifier: #e6e8ec;
+    --syntax-string: #7ee787;
+    --syntax-number: #ffb86b;
+    --syntax-comment: #6e7681;
+    --syntax-operator: #b6bcc8;
+    --syntax-delimiter: #868d9a;
+    --syntax-invalid: #ff7b72;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.5);
+    --shadow-overlay: 0 20px 48px rgb(0 0 0 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --duration-fast: 0ms;
+        --duration-normal: 0ms;
+        --duration-slow: 0ms;
+    }
+}

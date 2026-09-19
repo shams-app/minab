@@ -1,0 +1,2 @@
+// The total must be positive and within the customer's credit limit.
+$ >= 0 AND $ <= .customer.credit_limit
