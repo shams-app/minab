@@ -22,7 +22,22 @@ Not executed yet, each failing with an explicit reason rather than a wrong answe
 
 The language spec is **Stable**. Its §12 lists a handful of open questions; those are deferred additions to the language, not gaps in what's specified today.
 
-## Setup
+## Install
+
+Requires Node.js 20.10 or newer.
+
+```bash
+npm install -g @shamsine/minab    # puts `minab` on your PATH
+minab --version
+```
+
+Or run it without installing: `npx @shamsine/minab check my-rule.minab`.
+
+The package contains the CLI and the language server. The VS Code extension is a separate download: build or download `minab-vscode-<version>.vsix` and install it with `code --install-extension minab-vscode-<version>.vsix` (see [`vscode-extension/`](vscode-extension/README.md)).
+
+## Setup (working on Minab itself)
+
+Everything above is for using Minab; this is for changing it. Clone the repo, then:
 
 ```bash
 npm install
@@ -34,7 +49,7 @@ npm test         # the full suite (6 more tests run with a database — see belo
 
 ## Walkthrough: write and run your own program
 
-Nothing here needs a database. Start in an empty directory (any name), with Minab built as above and `minab` on your `PATH` (`npm link` in this repo), or substitute `npm run cli --` run from the repo.
+Nothing here needs a database. Start in an empty directory (any name), with `minab` on your `PATH` (`npm install -g @shamsine/minab`, or `npm link` in a checkout), or substitute `npm run cli --` run from the repo.
 
 **1. Describe your data.** Minab source never names its tables or columns — the host supplies them, and on a command line that host is a `minab.config.json` next to your program (details [below](#the-config-file)). Save this as `minab.config.json`:
 
@@ -130,7 +145,7 @@ Each directory under [`examples/`](examples/) holds one program and the `minab.c
 
 ## Usage
 
-After `npm run build`, the CLI is at `out/src/cli/bin.js`. Use it through `npm run cli --`, or put it on your `PATH` with `npm link` and call it `minab`:
+Installed from npm, the CLI is just `minab`. In a checkout, after `npm run build` it is at `out/src/cli/bin.js`: use it through `npm run cli --`, or put it on your `PATH` with `npm link`:
 
 ```bash
 npm run cli -- check examples/booking-overlap/booking-overlap.minab

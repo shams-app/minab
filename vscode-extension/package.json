@@ -2,19 +2,31 @@
   "name": "minab-vscode",
   "displayName": "Minab",
   "description": "Syntax highlighting and live diagnostics for Minab (.minab) files",
-  "version": "0.1.0",
-  "private": true,
+  "publisher": "shamsine",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/shams-app/minab.git",
+    "directory": "vscode-extension"
+  },
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:minab"],
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:minab"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "minab",
-        "extensions": [".minab"],
+        "extensions": [
+          ".minab"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -27,12 +39,18 @@
     ]
   },
   "scripts": {
-    "build": "tsc -b tsconfig.json"
+    "build": "tsc -b tsconfig.json",
+    "bundle": "npm run bundle:client && npm run bundle:server",
+    "bundle:client": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=out/extension.js",
+    "bundle:server": "esbuild ../src/language/main.ts --bundle --platform=node --format=esm --outfile=server/main.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
+    "package": "npm run bundle && vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
     "@types/vscode": "^1.85.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "esbuild": "^0.25.0",
+    "@vscode/vsce": "^3.0.0"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

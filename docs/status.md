@@ -24,7 +24,11 @@ Roadmap Phase 7 (IDE tooling — LSP + VS Code) is now also done — see the 202
 
 Roadmap Phase 8 (documentation & examples) is now also done — see the 2026-09-19 log entry at the bottom. The spec is marked **Stable** (with §12's intro reworded so its open items read as deferred additions); `examples/` is eleven one-directory-each programs (eight that execute against a fixture, three check-only for loops and writes), all driven through the real CLI by `test/examples.test.ts`; and the README has a from-scratch walkthrough. One real bug turned up while building the examples — see "Next job".
 
+Roadmap Phase 9 (packaging / release) is now also done — see the 2026-09-19 (continued) log entry at the bottom. Minab is packaged as **0.2.0** under MIT: one npm package (`@shamsine/minab`, CLI + language server) and a self-contained VS Code `.vsix`, with a CHANGELOG and a test that guards the tarball's contents. The release is **prepared, not published**: no `npm publish`, tag, or GitHub release has happened. That leaves the roadmap complete through Phase 9.
+
 ## Next job
+
+**Publish 0.2.0** (Hamed's to run — outward-facing): `npm publish` from the repo root (`prepack` builds first), `git tag -a v0.2.0 -m "Minab 0.2.0" && git push origin v0.2.0`, then publish or upload the `.vsix` (`cd vscode-extension && npm run package`). Confirm first that the `@shamsine` npm scope and a `shamsine` Marketplace publisher are yours; the extension's `publisher` is a placeholder.
 
 **Finish the execution layer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` execution (§10), and `.$index` (§3.5).** These were Phase 5's deliberate deferrals, listed here as the job *before* Phase 6, then again before Phase 7 — both were asked for first and shipped first, so this is still outstanding, each still failing with an explicit "not executed yet" reason rather than a wrong answer. ADR 0001 already settles *how* the DML forms execute (relational targets compiling to SQL DML, `JSON`-array targets staying interpreted); building it is what's left. The CLI makes each of them a one-line thing to try.
 
@@ -34,7 +38,7 @@ One smaller item found while building the CLI (Phase 6), still outstanding, wort
 
 Also found in Phase 8, worth doing before or alongside the above: **a top-level rule that filters a collection doesn't type-check.** `COUNT(.orders[.status == "cancelled"]) < 5` (showcase §1) fails `minab check` with `column "status" needs a statically known table` when `rule.recordTable` is set; the same expression inside `FROM Customer WHERE …` is fine. `MinabScopeResolver` has no view of the host's `recordTable`, and `test/evaluation.test.ts` calls the interpreter without the validator, so it went unnoticed. Two examples are written around it (`cancelled-orders-limit` uses `FROM … WHERE`; `overdue-loop` iterates `#Order`); switch them back to the `.orders` form once fixed.
 
-Phase 9 (packaging / release) is the next roadmap phase — see `docs/roadmap.md`.
+After publishing, the roadmap has no phase left; the three execution gaps above are the natural 0.3 (and the collection-filter fix a 0.2.1).
 
 ## Session log
 
@@ -192,3 +196,13 @@ Phase 9 (packaging / release) is the next roadmap phase — see `docs/roadmap.md
 - README: from-scratch walkthrough (followed literally in a scratch dir), examples table, corrected Status and layout, full compile output. New `vscode-extension/README.md`.
 - **Found:** a top-level collection filter (`COUNT(.orders[...]) < 5` as a bare rule) fails to type-check — details under "Next job"; spun out as its own task, not fixed here. Also: showcase §14 calls `&daysSincePayment(...)` without ever defining it; the check-only example defines it in-file.
 - `npm run build && npm test`: 244 passed, 6 skipped (the database-only suite), up from 180.
+
+### 2026-09-19 (continued) — Phase 9: packaging / release
+
+- Picked up "Next job" (Phase 9). Decided with Hamed before writing anything: one npm package for CLI + language server, the extension as a separate `.vsix` with the server bundled in; version **0.2.0** rather than 1.0 (spec Stable, but three execution features and one type-check bug are still open); MIT; **prepare only** — no publish, no pushed tag.
+- Found while surveying: `package.json` was `private` with no `files`, so a pack would have shipped compiled tests (including a stale `out/test/_scratch-showcase.test.js`); `engines.node` said `>=18` while Langium 4.4 requires `>=20.10`; and the extension located the server at `../out/src/language/main.js`, which only exists in a clone, so it couldn't have been packaged as a `.vsix` at all.
+- Fixes: `tsconfig.build.json` + `build:release`/`prepack` (source-only build, `rootDir` kept at `.` so paths don't move), a `files` allowlist, `engines` corrected. The extension bundles client and server with esbuild (`server/main.mjs` needs a `createRequire` banner because it inlines CJS dependencies); `extension.ts` now loads that. Added `LICENSE`, `CHANGELOG.md` (root and extension), `.vscodeignore`, a README Install section, and `test/release.test.ts`.
+- One slip worth recording: the first `.vsix` was built before `.vscodeignore` existed (a `&&` chain died on an earlier failing `sed`, silently skipping the file), so it shipped `src/`, `bun.lock`, and sourcemaps. Caught by reading the `vsce` file listing rather than trusting "DONE"; rebuilt at 9 files.
+- Verified: tarball installed into an empty directory and `minab --version`/`check`/`run --json` run against a copied example; the bundled server answers an LSP `initialize` and publishes diagnostics for a `didOpen`, same as the unbundled build.
+- Not automatable here: installing the `.vsix` into a real VS Code (checklist in `docs/roadmap.md` Phase 9).
+- Updated `docs/roadmap.md`, this file, `README.md`, `vscode-extension/README.md`, `.cursor/rules/language-implementation.mdc`.
