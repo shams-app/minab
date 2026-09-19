@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minab — a query and validation language</title>
+    <meta name="description" content="Minab is a small language for querying relational data and validating records. Write it, check it, compile it to PostgreSQL and run it — all in your browser." />
+    <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Minab — a query and validation language" />
+    <meta property="og:description" content="One small language for querying relational data and validating records. Try it live: a real PostgreSQL runs in your browser." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // Apply a saved theme before first paint, so dark-mode visitors never see a white flash.
+      try {
+        var t = JSON.parse(localStorage.getItem('minab-playground:theme') || 'null');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>The Minab playground runs the language in your browser, so it needs JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

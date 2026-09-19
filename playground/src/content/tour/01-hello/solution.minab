@@ -1,0 +1,4 @@
+// Only the shipped orders.
+FROM Order
+WHERE .status == "shipped"
+SELECT .id, .status, .total

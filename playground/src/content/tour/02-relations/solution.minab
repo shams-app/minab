@@ -1,0 +1,4 @@
+// Shipped orders from US customers, with the customer's name.
+FROM Order
+WHERE .status == "shipped" AND .customer.country == "US"
+SELECT .id, .total, .customer.name AS customer

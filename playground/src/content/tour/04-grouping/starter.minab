@@ -1,0 +1,4 @@
+// How many orders each customer placed.
+FROM Order
+GROUPBY .customer
+SELECT KEY.name AS customer, COUNT(.) AS orders

@@ -1,0 +1,9 @@
+// The minimum total an order needs depends on its priority.
+let minimum: DECIMAL = switch .status {
+    "urgent" => 0,
+    "high" => 500,
+    "normal", "low" => 5000,
+    _ => 100000
+};
+
+.total > minimum

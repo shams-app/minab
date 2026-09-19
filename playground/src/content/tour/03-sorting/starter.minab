@@ -1,0 +1,4 @@
+// Every order that wasn't cancelled.
+FROM Order
+WHERE .status != "cancelled"
+SELECT .id, .total, .customer.name AS customer

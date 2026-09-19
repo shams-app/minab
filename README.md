@@ -17,6 +17,7 @@ Minab parses, resolves, validates, type-checks, compiles, and runs. [`docs/roadm
 - **Execution** — a hybrid ([ADR 0001](docs/adr/0001-execution-strategy.md)): the relational layer compiles to parameterized SQL, everything else is interpreted against the record the host holds, with the interpreter pushing the smallest table-touching subexpression down to the compiler.
 - **A CLI** — `minab run` / `compile` / `check`, documented below.
 - **Editor support** — a language server (live diagnostics, `#alias` hover and go-to-definition) and a VS Code extension with syntax highlighting; see [`vscode-extension/`](vscode-extension/README.md).
+- **A web playground** — write, check, compile and run Minab in the browser against a real PostgreSQL (PGlite, WebAssembly), with a guided tour and a verified example gallery; see [`playground/`](playground/README.md).
 
 Not executed yet, each failing with an explicit reason rather than a wrong answer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` (§10), and `.$index` (§3.5). They still parse, resolve, and type-check, so `minab check` works on them.
 
@@ -283,6 +284,7 @@ docs/
   adr/                     # architecture decision records
 examples/<name>/           # one program + its minab.config.json each; tested by test/examples.test.ts
 vscode-extension/          # the VS Code extension (a separate package — see its README)
+playground/                # the web playground (a separate package — see its README and design/)
 src/
   language/
     main.ts                # the language server entry point

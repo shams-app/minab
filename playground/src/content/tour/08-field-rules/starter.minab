@@ -1,0 +1,2 @@
+// A field rule checks one value: `$` — here, the order total being entered.
+$ >= 0

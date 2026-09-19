@@ -270,6 +270,8 @@ Two findings, neither fixed here since both are outside "documentation":
 
 **Not done, deliberately (outward-facing):** `npm publish`, pushing a `v0.2.0` tag, a GitHub release, and a Marketplace publish. Also unverified: that the `@shamsine` npm scope and a `shamsine` Marketplace publisher are Hamed's to publish under, and opening the `.vsix` in a real VS Code (manual QA: `code --install-extension` the `.vsix`, open an `examples/*/` folder, confirm highlighting, a live squiggle on a type error, and hover/F12 on `#alias`).
 
+**Started early, 2026-09-19 — the web playground (`playground/`).** Not a published package, but the first way to use Minab without cloning anything: a static site that runs the whole toolchain in the browser against PGlite. Built ahead of the packaging decision because it needed only two small, backwards-compatible core changes (`src/host/` extracted from `src/cli/`; `EvalContext.onStatement`). Its visual design is pending (a Claude Design pass — `playground/design/README.md`), then deployment.
+
 ---
 
 ## Cross-cutting: keeping Cursor and Claude in sync

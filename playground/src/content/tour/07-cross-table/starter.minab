@@ -1,0 +1,3 @@
+// A booking must end after it starts…
+// …and must not overlap another booking of the same room.
+.end_date > .start_date

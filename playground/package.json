@@ -1,0 +1,42 @@
+{
+  "name": "minab-playground",
+  "version": "0.1.0",
+  "description": "The Minab web playground — write, check, compile and run Minab in the browser, against a real in-browser Postgres",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:language": "node scripts/prepare.mjs",
+    "predev": "npm run prepare:language",
+    "dev": "vite",
+    "prebuild": "npm run prepare:language",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "pretest": "npm run prepare:language",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "fflate": "^0.8.3",
+    "langium": "~4.4.0",
+    "lz-string": "^1.5.0",
+    "marked": "^18.0.13",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-resizable-panels": "^4.12.4",
+    "react-router": "^8.4.0",
+    "vscode-languageserver-types": "^3.17.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "~5.0.0"
+  }
+}

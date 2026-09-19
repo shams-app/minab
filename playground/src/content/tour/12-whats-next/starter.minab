@@ -1,0 +1,8 @@
+// Add up the totals of shipped orders with a loop.
+let shippedTotal: DECIMAL = 0;
+
+loop order in #Order where .status == "shipped" AND order.total > 0 {
+    shippedTotal = shippedTotal + order.total;
+}
+
+shippedTotal > 500

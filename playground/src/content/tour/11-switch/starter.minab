@@ -1,0 +1,8 @@
+// The minimum total an order needs depends on its priority.
+let minimum: DECIMAL = if .status == "urgent" {
+    0
+} else {
+    500
+};
+
+.total > minimum

@@ -71,7 +71,8 @@ import {
     type SwitchExpr
 } from './generated/ast.js';
 import { isBuiltinName } from './minab-builtins.js';
-import type { QueryExecutor, Row } from './minab-executor.js';
+import type { AstNode } from 'langium';
+import type { QueryExecutor, Row, SqlQuery } from './minab-executor.js';
 import type { MinabSqlCompiler, OuterRecord, OuterResolver } from './minab-sql-compiler.js';
 import type { SchemaProvider } from './schema.js';
 
@@ -85,6 +86,14 @@ export interface EvalContext {
     record?: Row;
     recordTable?: string;
     fieldValue?: MinabValue;
+    /**
+     * Called just before each statement goes to the executor, with the AST
+     * node it was compiled from — the whole `Query` for a query program,
+     * or the smallest subexpression pushed down for a rule. The executor
+     * only ever sees SQL; this is how a host shows *which part* of the
+     * source reached the database and which was answered in memory.
+     */
+    onStatement?: (query: SqlQuery, origin: AstNode) => void;
 }
 
 class EvalError extends Error {}
@@ -140,6 +149,7 @@ export class MinabInterpreter {
         if (isQuery(statement)) {
             const compiled = this.compiler.compileQuery(statement, this.outerResolver(state));
             if (!compiled.ok) fail(compiled.reason);
+            state.context.onStatement?.(compiled.query, statement);
             return await state.context.executor.execute(compiled.query);
         }
         return await this.expression(statement, state);
@@ -163,6 +173,7 @@ export class MinabInterpreter {
     private async pushDown(expr: Expression, state: State): Promise<{ pushed: true; value: MinabValue } | { pushed: false }> {
         const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
         if (!compiled.ok) return { pushed: false };
+        state.context.onStatement?.(compiled.query, expr);
         const rows = await state.context.executor.execute(compiled.query);
         return { pushed: true, value: rows.length > 0 ? rows[0].value : null };
     }

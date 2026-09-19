@@ -1,0 +1,6 @@
+// The three biggest orders that weren't cancelled.
+FROM Order
+WHERE .status != "cancelled"
+SELECT .id, .total, .customer.name AS customer
+ORDERBY .total DESC
+LIMIT 3

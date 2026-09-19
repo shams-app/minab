@@ -38,6 +38,8 @@ One smaller item found while building the CLI (Phase 6), still outstanding, wort
 
 Also found in Phase 8, worth doing before or alongside the above: **a top-level rule that filters a collection doesn't type-check.** `COUNT(.orders[.status == "cancelled"]) < 5` (showcase §1) fails `minab check` with `column "status" needs a statically known table` when `rule.recordTable` is set; the same expression inside `FROM Customer WHERE …` is fine. `MinabScopeResolver` has no view of the host's `recordTable`, and `test/evaluation.test.ts` calls the interpreter without the validator, so it went unnoticed. Two examples are written around it (`cancelled-orders-limit` uses `FROM … WHERE`; `overdue-loop` iterates `#Order`); switch them back to the `.orders` form once fixed.
 
+Found on 2026-09-19 while building the playground's example gallery against a real Postgres: **grouping by a traversed column produces SQL Postgres rejects.** `FROM Order WHERE .status != "cancelled" GROUPBY .customer.country SELECT KEY AS country, SUM(.total) AS revenue` compiles to `… GROUP BY (SELECT "_r0"."country" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")`, and the `SELECT` repeats the subquery, so Postgres reports *subquery uses ungrouped column "Order"."customer_id" from outer query*. Grouping by the relation itself (`GROUPBY .customer`, then `KEY.country`) works. It passes `minab check`, so it's a compiler gap, not a checker one — probably group by the foreign key and project through it. The gallery avoids it.
+
 After publishing, the roadmap has no phase left; the three execution gaps above are the natural 0.3 (and the collection-filter fix a 0.2.1).
 
 ## Session log
@@ -206,3 +208,27 @@ After publishing, the roadmap has no phase left; the three execution gaps above 
 - Verified: tarball installed into an empty directory and `minab --version`/`check`/`run --json` run against a copied example; the bundled server answers an LSP `initialize` and publishes diagnostics for a `didOpen`, same as the unbundled build.
 - Not automatable here: installing the `.vsix` into a real VS Code (checklist in `docs/roadmap.md` Phase 9).
 - Updated `docs/roadmap.md`, this file, `README.md`, `vscode-extension/README.md`, `.cursor/rules/language-implementation.mdc`.
+
+### 2026-09-19 (continued) — The web playground (merged after Phase 9)
+
+- New `playground/`: a standalone Vite + React + TypeScript package (like `vscode-extension/`, not a workspace). It runs the whole toolchain in the browser: the Langium services in a Web Worker, with [PGlite](https://pglite.dev) (PostgreSQL compiled to WebAssembly) as the database. Pages: a landing page with live snippets; `/play`, a workbench with Monaco, output tabs Result/SQL/Execution/Problems/AST, and a host panel Schema/Data/Record/Field; a 12-lesson tour whose goals are checked against the engine; a 29-example gallery; a cheat sheet; and `/embed` for iframes. Share links carry the program in the URL fragment. "Download for the CLI" exports the program, a `minab.config.json` and a `seed.sql`.
+- Two small, backwards-compatible core changes, each with tests:
+  - **`src/host/`**, extracted from `src/cli/`: `parseConfig` (the config shape without a file system), `FixtureExecutor`/`traced`/`DataSourceError`, and `formatSql`/`formatValue`. The CLI modules re-export them, so no caller changed. `test/host.test.ts` covers what only a file-less host sees.
+  - **`EvalContext.onStatement(query, origin)`** in the interpreter. It's called just before each statement goes to the executor, with the AST node it was compiled from: the whole `Query`, or the pushed-down subexpression. This is what lets the playground's Execution tab highlight exactly which span of a rule became which SQL. Three cases were added to `test/evaluation.test.ts`.
+- The playground has its own suite (`cd playground && npm test`, 126 tests):
+  - every gallery example, record preset and tour lesson is run against the real engine and an in-process Postgres (a lesson's starter must *not* meet its goal, and its solution must);
+  - the highlighter's keyword lists are diffed against the Langium-generated keyword union, so a grammar change can't leave a keyword uncolored;
+  - DDL generation, share links, and the engine's editor intelligence (hover, completion, AST).
+- **What running every example against a real database found:**
+  - the `GROUPBY .customer.country` compiler gap ("Next job" above);
+  - a confirmation that a rule's related rows are read through the record's primary key. A record with a new, unsaved id traverses to `null`, so the traversal examples validate existing orders.
+  - The already-known bare-rule collection bug also bit two gallery ideas. The gallery uses the equivalent `COUNT(#Order[.customer == ^ AND …])`, which works.
+- The visual design is deliberately a wireframe, meant to be replaced by a Claude Design pass. `playground/design/` has:
+  - the brief;
+  - user flows;
+  - per-screen state specs;
+  - the design contract (tokens plus component props; engine, state and hooks are off limits);
+  - ready-to-paste Claude Design prompts;
+  - a launch kit.
+- Root: `npm run build && npm test` — 253 passed, 6 skipped. Playground: 126 passed; `npm run build` green.
+- Updated `README.md` (status, layout), `docs/roadmap.md` (a Phase 9 note), and `.cursor/rules/language-implementation.mdc` (layout).

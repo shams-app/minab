@@ -1,0 +1,4 @@
+// Customers who cancelled at least once.
+FROM Customer
+WHERE COUNT(.orders[.status == "cancelled"]) > 0
+SELECT .name, COUNT(.orders) AS orders, COUNT(.orders[.status == "cancelled"]) AS cancelled

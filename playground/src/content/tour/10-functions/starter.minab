@@ -1,0 +1,5 @@
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    total - (total * rate / 100)
+}
+
+&discounted(200, 15)
