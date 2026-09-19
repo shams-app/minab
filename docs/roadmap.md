@@ -248,7 +248,7 @@ Two findings, neither fixed here since both are outside "documentation":
 
 ---
 
-## Phase 9 — Packaging / release
+## Phase 9 — Packaging / release — Done (2026-09-19; not yet published)
 
 **Sign-off: Mechanical.**
 
@@ -258,6 +258,17 @@ Two findings, neither fixed here since both are outside "documentation":
 - Tag a release once Phase 8's documentation bar is met.
 
 **Output:** an installable, versioned artifact with release notes — the point at which "Minab" stops being only a repo you have to clone and build.
+
+**What actually shipped:**
+
+- **What gets published (decided with Hamed):** one npm package, `@shamsine/minab`, holding the CLI and the language server together; and the VS Code extension as a separate `.vsix` with the server bundled in. Not two npm packages — that needs workspaces, which this repo has deliberately avoided. Both are versioned together at **0.2.0**, not 1.0: the spec is Stable, but loops, DML execution, and `.$index` still refuse to run and the top-level collection-filter bug is open. License **MIT**.
+- **npm package.** `package.json` is no longer `private`; it has `license`, `repository`, `files` (an allowlist: `out/src`, README, LICENSE, CHANGELOG, `docs`, `examples`), `publishConfig.access: public`, and `engines.node` corrected from `>=18` to `>=20.10.0` (what Langium 4.4 itself requires — the old value was a lie). `tsconfig.build.json` compiles `src/` only, keeping `rootDir` at `.` so the `out/src/...` layout (and `bin`) doesn't move; `npm run build:release` wipes `out/` first and `prepack` calls it, so a tarball can't pick up stale compiled tests (`out/test/_scratch-showcase.test.js` was sitting in `out/` from a since-deleted file). `pg` is still not bundled or depended on.
+- **VS Code extension.** It used to find the server at `../out/src/language/main.js`, which only exists in a clone. `npm run bundle` now uses esbuild to produce the client (`out/extension.js`, CJS) and the server as one ESM file (`server/main.mjs`, with a `createRequire` banner for the CJS dependencies it inlines); `extension.ts` points at `server/main.mjs`. `npm run package` builds `minab-vscode-0.2.0.vsix` (9 files, ~350 KB, no sources or `node_modules`). Publisher is the placeholder `shamsine`.
+- **`CHANGELOG.md`** (root and extension), Keep-a-Changelog format, with a "Known limitations" list; **`LICENSE`**; README "Install" section ahead of a "Setup (working on Minab itself)" section.
+- **`test/release.test.ts`** — versions match across both packages and the changelog; the tarball (via `npm pack --dry-run`) contains the bin target, the language server, the generated grammar, and docs, and contains no tests, source maps, or extension files.
+- **Verified:** the tarball installed into an empty directory runs `minab --version` (0.2.0), `check`, and `run --json` on a copied example with no repo present; the bundled server completes an LSP `initialize` + `didOpen` → `publishDiagnostics` handshake over stdio, same as the unbundled one.
+
+**Not done, deliberately (outward-facing):** `npm publish`, pushing a `v0.2.0` tag, a GitHub release, and a Marketplace publish. Also unverified: that the `@shamsine` npm scope and a `shamsine` Marketplace publisher are Hamed's to publish under, and opening the `.vsix` in a real VS Code (manual QA: `code --install-extension` the `.vsix`, open an `examples/*/` folder, confirm highlighting, a live squiggle on a type error, and hover/F12 on `#alias`).
 
 **Started early, 2026-09-19 — the web playground (`playground/`).** Not a published package, but the first way to use Minab without cloning anything: a static site that runs the whole toolchain in the browser against PGlite. Built ahead of the packaging decision because it needed only two small, backwards-compatible core changes (`src/host/` extracted from `src/cli/`; `EvalContext.onStatement`). Its visual design is pending (a Claude Design pass — `playground/design/README.md`), then deployment.
 

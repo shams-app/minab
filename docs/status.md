@@ -24,7 +24,11 @@ Roadmap Phase 7 (IDE tooling — LSP + VS Code) is now also done — see the 202
 
 Roadmap Phase 8 (documentation & examples) is now also done — see the 2026-09-19 log entry at the bottom. The spec is marked **Stable** (with §12's intro reworded so its open items read as deferred additions); `examples/` is eleven one-directory-each programs (eight that execute against a fixture, three check-only for loops and writes), all driven through the real CLI by `test/examples.test.ts`; and the README has a from-scratch walkthrough. One real bug turned up while building the examples — see "Next job".
 
+Roadmap Phase 9 (packaging / release) is now also done — see the 2026-09-19 (continued) log entry at the bottom. Minab is packaged as **0.2.0** under MIT: one npm package (`@shamsine/minab`, CLI + language server) and a self-contained VS Code `.vsix`, with a CHANGELOG and a test that guards the tarball's contents. The release is **prepared, not published**: no `npm publish`, tag, or GitHub release has happened. That leaves the roadmap complete through Phase 9.
+
 ## Next job
+
+**Publish 0.2.0** (Hamed's to run — outward-facing): `npm publish` from the repo root (`prepack` builds first), `git tag -a v0.2.0 -m "Minab 0.2.0" && git push origin v0.2.0`, then publish or upload the `.vsix` (`cd vscode-extension && npm run package`). Confirm first that the `@shamsine` npm scope and a `shamsine` Marketplace publisher are yours; the extension's `publisher` is a placeholder.
 
 **Finish the execution layer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` execution (§10), and `.$index` (§3.5).** These were Phase 5's deliberate deferrals, listed here as the job *before* Phase 6, then again before Phase 7 — both were asked for first and shipped first, so this is still outstanding, each still failing with an explicit "not executed yet" reason rather than a wrong answer. ADR 0001 already settles *how* the DML forms execute (relational targets compiling to SQL DML, `JSON`-array targets staying interpreted); building it is what's left. The CLI makes each of them a one-line thing to try.
 
@@ -36,7 +40,7 @@ Also found in Phase 8, worth doing before or alongside the above: **a top-level 
 
 Found on 2026-09-19 while building the playground's example gallery against a real Postgres: **grouping by a traversed column produces SQL Postgres rejects.** `FROM Order WHERE .status != "cancelled" GROUPBY .customer.country SELECT KEY AS country, SUM(.total) AS revenue` compiles to `… GROUP BY (SELECT "_r0"."country" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")`, and the `SELECT` repeats the subquery, so Postgres reports *subquery uses ungrouped column "Order"."customer_id" from outer query*. Grouping by the relation itself (`GROUPBY .customer`, then `KEY.country`) works. It passes `minab check`, so it's a compiler gap, not a checker one — probably group by the foreign key and project through it. The gallery avoids it.
 
-Phase 9 (packaging / release) is the next roadmap phase — see `docs/roadmap.md`.
+After publishing, the roadmap has no phase left; the three execution gaps above are the natural 0.3 (and the collection-filter fix a 0.2.1).
 
 ## Session log
 
@@ -195,7 +199,17 @@ Phase 9 (packaging / release) is the next roadmap phase — see `docs/roadmap.md
 - **Found:** a top-level collection filter (`COUNT(.orders[...]) < 5` as a bare rule) fails to type-check — details under "Next job"; spun out as its own task, not fixed here. Also: showcase §14 calls `&daysSincePayment(...)` without ever defining it; the check-only example defines it in-file.
 - `npm run build && npm test`: 244 passed, 6 skipped (the database-only suite), up from 180.
 
-### 2026-09-19 (continued) — The web playground
+### 2026-09-19 (continued) — Phase 9: packaging / release
+
+- Picked up "Next job" (Phase 9). Decided with Hamed before writing anything: one npm package for CLI + language server, the extension as a separate `.vsix` with the server bundled in; version **0.2.0** rather than 1.0 (spec Stable, but three execution features and one type-check bug are still open); MIT; **prepare only** — no publish, no pushed tag.
+- Found while surveying: `package.json` was `private` with no `files`, so a pack would have shipped compiled tests (including a stale `out/test/_scratch-showcase.test.js`); `engines.node` said `>=18` while Langium 4.4 requires `>=20.10`; and the extension located the server at `../out/src/language/main.js`, which only exists in a clone, so it couldn't have been packaged as a `.vsix` at all.
+- Fixes: `tsconfig.build.json` + `build:release`/`prepack` (source-only build, `rootDir` kept at `.` so paths don't move), a `files` allowlist, `engines` corrected. The extension bundles client and server with esbuild (`server/main.mjs` needs a `createRequire` banner because it inlines CJS dependencies); `extension.ts` now loads that. Added `LICENSE`, `CHANGELOG.md` (root and extension), `.vscodeignore`, a README Install section, and `test/release.test.ts`.
+- One slip worth recording: the first `.vsix` was built before `.vscodeignore` existed (a `&&` chain died on an earlier failing `sed`, silently skipping the file), so it shipped `src/`, `bun.lock`, and sourcemaps. Caught by reading the `vsce` file listing rather than trusting "DONE"; rebuilt at 9 files.
+- Verified: tarball installed into an empty directory and `minab --version`/`check`/`run --json` run against a copied example; the bundled server answers an LSP `initialize` and publishes diagnostics for a `didOpen`, same as the unbundled build.
+- Not automatable here: installing the `.vsix` into a real VS Code (checklist in `docs/roadmap.md` Phase 9).
+- Updated `docs/roadmap.md`, this file, `README.md`, `vscode-extension/README.md`, `.cursor/rules/language-implementation.mdc`.
+
+### 2026-09-19 (continued) — The web playground (merged after Phase 9)
 
 - New `playground/`: a standalone Vite + React + TypeScript package (like `vscode-extension/`, not a workspace). It runs the whole toolchain in the browser: the Langium services in a Web Worker, with [PGlite](https://pglite.dev) (PostgreSQL compiled to WebAssembly) as the database. Pages: a landing page with live snippets; `/play`, a workbench with Monaco, output tabs Result/SQL/Execution/Problems/AST, and a host panel Schema/Data/Record/Field; a 12-lesson tour whose goals are checked against the engine; a 29-example gallery; a cheat sheet; and `/embed` for iframes. Share links carry the program in the URL fragment. "Download for the CLI" exports the program, a `minab.config.json` and a `seed.sql`.
 - Two small, backwards-compatible core changes, each with tests:

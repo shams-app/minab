@@ -1,14 +1,39 @@
 {
   "name": "@shamsine/minab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Minab — a pipeline query and validation language, implemented with Langium",
-  "private": true,
+  "license": "MIT",
+  "author": "Hamed Zakery Miab",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/shams-app/minab.git"
+  },
+  "keywords": [
+    "minab",
+    "query-language",
+    "validation",
+    "langium",
+    "language-server",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "minab": "./out/src/cli/bin.js"
   },
+  "files": [
+    "out/src",
+    "!out/src/**/*.map",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "docs",
+    "examples"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.10.0"
   },
   "scripts": {
     "langium:generate": "langium generate",
@@ -18,7 +43,9 @@
     "build:watch": "tsc -b tsconfig.json --watch",
     "cli": "node out/src/cli/bin.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json",
+    "prepack": "npm run build:release"
   },
   "dependencies": {
     "langium": "~4.4.0",
