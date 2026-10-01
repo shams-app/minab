@@ -1,6 +1,6 @@
 # Remaining work after v0.2.0
 
-> This file is the **inventory**. [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md) is the **plan** — the same items as twelve ordered phases, one job each, with the decisions that block them pulled to the front.
+> This file is the **inventory**. [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md) is the **plan** — the same items as eighteen ordered phases, one job each, with the decisions that block them pulled to the front.
 
 A survey of everything still open once Minab **0.2.0** is out: what to finish, fix, decide, and build, in a suggested order. Written 2026-09-20 from a read of the spec, roadmap, status log, ADR, source, tests, CI and the playground, plus a set of probes run against the built CLI and a real PostgreSQL engine (PGlite). Anything marked **verified** was reproduced during this survey; the reproduction is in [Appendix A](#appendix-a--reproductions).
 
@@ -75,7 +75,7 @@ To do: hand the resolver the rule context's `recordTable`, add a `check`-level r
 
 ---
 
-## 3. The execution layer (P2, the natural 0.3)
+## 3. The execution layer (P2, planned for 0.4)
 
 Phase 5's deliberate deferrals. Each currently parses, resolves and type-checks, and `minab run` refuses with a reason. [ADR 0001](../adr/0001-execution-strategy.md) already settles *how* DML executes, so most of this is Mechanical.
 
@@ -133,6 +133,19 @@ Also housekeeping: items 1–3 and 17 read as open questions but describe behavi
 - [ ] **`daysSincePayment` in showcase §14 is called but never defined.** The check-only example defines it in-file; the showcase text is unchanged. Define it in the showcase.
 - [ ] The spec's §11 grammar block is a hand-copied duplicate of `src/language/minab.langium`. Add a test that diffs them, so they can't drift again.
 
+### 4.4 Decided: remove the `&` call prefix (added 2026-09-24)
+
+Hamed decided that user functions will be called by name, `name(...)`, exactly like built-ins; `&name(...)` goes away entirely. This reverses the "two calling conventions" half of §12 item 10. (Design decided; follow-on questions open; P1 because it should land before 0.2.0 is published.)
+
+- **Scope.** Delete the `FunctionCall` grammar rule; the bare form already parses as a `CallExpression`. Merge the checker's and interpreter's two call paths. Rewrite §5.3, §8, §8.4, §11 and §12 item 10 of the spec (19 call sites) and the showcase (6). Update 14 call sites in `test/`, 3 in `examples/`, the playground's tokenizer, completion, hover, tour lesson 10, cheat sheet and gallery, the CHANGELOG entry, and the Cursor rules.
+- **Open questions it creates.**
+  - How do built-ins and user functions stay apart without the sigil? A future built-in (the library planned in §3) would otherwise break any program with a `fn` of that name.
+  - May a `let`, parameter or table share a name with a `fn`?
+- **Timing.** 0.2.0 is unpublished (no tag; npm 404 on 2026-09-24), so landing this first means no public release ever has `&`.
+- Wherever this file writes `&name(...)` (for example the §3 table), that is the 0.2.0 syntax at survey time.
+
+Details and options: [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md), Phase 10.
+
 ---
 
 ## 5. Editor tooling
@@ -142,9 +155,9 @@ Also housekeeping: items 1–3 and 17 read as open questions but describe behavi
 Today it offers diagnostics, plus hover and go-to-definition for `#alias` only.
 
 - [ ] **Per-document schema.** The server reads one `minab.config.json` at startup and shares it across all open documents, so two folders with different schemas in one workspace get the wrong one. Re-discover per document (config discovery already walks up from a file's directory), and watch config files for changes; today a schema edit needs a server restart. Listed in the CHANGELOG's known limitations. (Mixed)
-- [ ] **Completion.** Columns after `.`, tables after `FROM`/`#`, built-ins, `&fn` names, keywords. The playground's `engine/intel.ts` already implements hover, completion and go-to-definition against the same services, so this is largely porting, not inventing. (Mechanical)
+- [ ] **Completion.** Columns after `.`, tables after `FROM`/`#`, built-ins, user `fn` names, keywords. The playground's `engine/intel.ts` already implements hover, completion and go-to-definition against the same services, so this is largely porting, not inventing. (Mechanical)
 - [ ] **Hover beyond `#alias`:** a field's type, a function's signature, the inferred type of any expression.
-- [ ] Rename, find-references and document symbols for `let`/`fn`/aliases; signature help for `&fn(`; formatting; semantic tokens; code actions (for example "did you mean `&name(...)`", "add `CAST`"). Order by value: completion, hover, symbols, then the rest.
+- [ ] Rename, find-references and document symbols for `let`/`fn`/aliases; signature help for user functions; formatting; semantic tokens; code actions (for example "unknown function — did you mean …", "add `CAST`"). Order by value: completion, hover, symbols, then the rest.
 - [ ] **A real JSON-RPC test.** `test/lsp.test.ts` calls the providers directly; the only end-to-end proof is the manual `initialize` + `didOpen` handshake done during Phase 9. Add an automated stdio test.
 
 ### 5.2 VS Code extension (P2)
@@ -195,7 +208,7 @@ The playground works end to end; what remains is design, hosting and content. Fu
 - [ ] **[`roadmap.md`](../roadmap.md) ends at Phase 9.** Add a short "After 0.2.0" pointer to `docs/release-future/`, and mark Phase 9 as complete once the release is actually out (it currently says "not yet published").
 - [ ] **The README's status blurb** says the CLI "compiles, and runs" and lists three unexecuted features. Once section 2's wrong-answer bugs are fixed or documented, make sure that text and the CHANGELOG's "Known limitations" stay identical. Add the four new limitations from this file (CAST, text `+`, `switch`/`is`/JSON in a query, multi-key `KEY`) to the CHANGELOG now.
 - [ ] `.cursor/rules/*.mdc` carries a copy of the layout and "current implementation status" line; update it whenever a phase-sized change lands (the cross-cutting rule in the roadmap).
-- [ ] **An API/embedding guide.** The README documents the CLI. The other consumer, a host application embedding the services (the actual reason Minab exists: "embedded in a larger web application… inside Monaco"), has only code comments: `createMinabServices`, `MinabSchema`, `MinabRuleContext`, `QueryExecutor`, `interpreter.evaluate`. Note also that `package.json` `files` publishes `out/src` but there is no `exports`/`types` map, so an importer today reaches into deep paths. Decide the public API surface and document it. (P2, Mixed)
+- [ ] **An API/embedding guide.** The README documents the CLI. The other consumer, a host application embedding the services (the actual reason Minab exists: "embedded in a larger web application… inside Monaco"), has only code comments: `createMinabServices`, `MinabSchema`, `MinabRuleContext`, `QueryExecutor`, `interpreter.evaluate`. Note also that `package.json` `files` publishes `out/src` but there is no `exports`/`types` map, so an importer today reaches into deep paths. Decide the public API surface and document it. (P2, Mixed) Now part of the runtime work in section 9.
 - [ ] A docs site or at least a `docs/README.md` index. There are five documents plus an ADR, and no map between them beyond the root README.
 
 ---
@@ -206,12 +219,65 @@ Grouped by release below; broken into workable phases in [`phases-after-v0.2.0.m
 
 | Release | Theme | Contents |
 |---|---|---|
-| **0.2.0** | Ship what's built | Section 1 in full; add the four new limitations to the CHANGELOG first. |
+| **0.2.0** | Ship what's built | Remove `&` first (4.4), so no release ever teaches it; then section 1 in full, with the four new limitations added to the CHANGELOG. |
 | **0.2.1** | Stop giving wrong answers | 2.1 `CAST` and text `+`; 2.2 top-level collection filter and traversed `GROUPBY`; CITEXT decision; CI Postgres job (7.1); revert the example workarounds. |
-| **0.3.0** | The execution layer | Section 3: loops, DML, assignment, `.$index`, block/function-body statements, `switch`/`is`/JSON in queries, multi-key `KEY`; the transaction/`--apply` design. Promote the three check-only examples and update `examples.test.ts` (it asserts they *refuse*, so it fails loudly on purpose). |
-| **0.4.0** | Editor and embedding | Section 5: per-document schema, completion, hover, symbols, automated LSP test; documented embedding API. |
+| **0.3.0** | Embeddable | Section 10: `LOG`. Section 9: one runtime API with ports, a NestJS host and a browser host, packaged with an embedding guide (this absorbs 7.3's embedding item). |
+| **0.4.0** | The execution layer | Section 3: loops, DML, assignment, `.$index`, block/function-body statements, `switch`/`is`/JSON in queries, multi-key `KEY`; the transaction/`--apply` design. Promote the three check-only examples and update `examples.test.ts` (it asserts they *refuse*, so it fails loudly on purpose). |
+| **0.5.0** | Editor tooling | Section 5: per-document schema, completion, hover, symbols, automated LSP test. |
 | **Playground launch** (parallel) | Design + deploy | Section 6, independent of language releases. |
-| **1.0.0** | Stable | Spec stable (already) **and** every construct the grammar accepts runs, or is deliberately removed; no known wrong-answer bug; Postgres suite in CI; public API documented and versioned; the §12 items closed or explicitly moved to a "post-1.0" list. |
+| **1.0.0** | Stable | Spec stable (already) **and** every construct the grammar accepts runs, or is deliberately removed; no known wrong-answer bug; Postgres suite in CI; public API documented and versioned, and running in a browser and in NestJS through the same calls; the §12 items closed or explicitly moved to a "post-1.0" list. |
+
+---
+
+## 9. Embedding: run Minab in the browser and in NestJS (added 2026-10-01)
+
+Hamed's goal is one Minab runtime used from a web app and from a NestJS server. The host gives Minab what it needs; Minab calls out for anything else (data, and possibly host functions) and waits for the answer. The open question was whether hexagonal architecture (ports and adapters) fits. It does: the core is already shaped that way, and what's missing is at its edges.
+
+### 9.1 What already fits
+
+- **The core does no I/O.** In `src/language/`, only the language-server entry (`main.ts`) imports anything Node-specific: `langium/node` and `process.cwd()`. `src/host/` imports nothing Node-specific and already runs inside the playground's Web Worker.
+- **There is one driven port.** With `QueryExecutor` (`src/language/minab-executor.ts`), the interpreter hands out a parameterized statement and awaits rows. `EvalContext` supplies the record, `$` and an `onStatement` hook.
+- **The host already supplies the schema and rule context** as data (`MinabSchema`, `MinabRuleContext`), not as source.
+
+### 9.2 What's missing
+
+- **No runtime API.** The CLI (`src/cli/main.ts`) and the playground (`playground/src/engine/engine.ts`) each hand-roll parse → build → validate → compile or evaluate over raw Langium services. A NestJS host would be a third copy. (P2, Mixed)
+- **No prepare-once, run-many.** Every run re-parses and re-checks. A server validating many records against one stored rule should check that rule once.
+- **Only one thing to call out for.** There are no host functions (`MinabFunctionSchema` exists in `schema.ts`, but nothing consumes it), no clock, and no write port (Phase 23 needs one). (Design)
+- **No cancellation or limits.** There is no `AbortSignal`, timeout, or statement or row cap, so a user-authored program on a server can run as long as it likes.
+- **Unstructured failures.** `EvalResult` is `{ ok: false, reason: string }`: no code, and no source range to map to an HTTP status or an editor marker.
+- **Server concurrency is unverified.** The playground runs one program at a time against a fixed document URI. Nobody has tested whether concurrent runs on one Langium workspace are safe.
+
+### 9.3 Browser-specific
+
+- **The playground's worker bridge is one-way**, main → worker, because its database (PGlite) lives inside the worker. In an app, the ports live on the main thread, so the worker has to call out and wait.
+- **SQL must not travel from a browser to a server to be executed.** With today's SQL-shaped data port, a browser run that needs server data has to send the *program* to the server, not the statement. The alternative is a structured, non-SQL data request, which is a design decision.
+- **No bundle-size budget**, and nothing stops a Node-only module from reaching a browser bundle.
+
+### 9.4 NestJS-specific
+
+- **ESM-only.** Minab is `"type": "module"`, and Langium exports only an `import` condition, while Nest's default template compiles to CommonJS. `require()` of an ES module works unflagged only from Node 20.19 / 22.12, but `engines` says `>=20.10`.
+- **No adapters for the ORMs a Nest app uses** (TypeORM, Prisma), and no way to run inside the request's existing transaction.
+- **Security.** The schema handed to Minab is the read surface of every program. A server running user-authored rules must scope it per user or tenant.
+
+### 9.5 Packaging
+
+- No `exports` map (see 7.3), so a host imports deep paths. The optional peers (`pg`, `@nestjs/common`, `@electric-sql/pglite`) are undeclared, and there are no consumer smoke tests.
+
+The plan for all of this is Phases 16–20 of [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md).
+
+## 10. Debugging output: `LOG` (added 2026-10-01)
+
+Hamed asked for something like JavaScript's `console.log`: a way to print values while a program runs, written somewhere such as stdout or stderr. Nothing like it exists today; the only runtime visibility is `--trace` (the SQL sent to the database) and the playground's Execution tab. (P2, Design → Mechanical)
+
+What shapes the design, from the code:
+- **Most programs are a single expression**, and `BodyStatement` has no expression-statement form (`minab.langium:81`). So a `log x;` statement couldn't be used inside a rule, a filter or a `WHERE`. An expression that logs and returns its value (`LOG(value, label?)`) can go anywhere.
+- **Built-ins take exactly one argument** (`minab-type-checker.ts:423`), so a label argument or a variadic form changes the built-in signature machinery.
+- **Part of every program runs as SQL**, where nothing can call back to the host per row.
+- **The CLI prints results on stdout** (`--json` is meant to be piped), and `--trace` already uses stderr (`src/cli/main.ts:278`). Logs belong on stderr.
+- **`EvalContext.onStatement` is the precedent** for a host callback, and it later becomes the runtime's `trace` port.
+
+The plan is Phase 15 of [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md) (the language, the CLI and the playground), with the `log` port and its Nest and browser adapters in Phases 16–19. The open questions are in that file's "Notes for review" (Q6, N1–N4, S1, S6).
 
 ---
 
