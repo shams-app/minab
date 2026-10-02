@@ -519,7 +519,7 @@ export class MinabSqlCompiler {
 
         const source = this.tryCollectionSource(arg, ctx, scopes);
         if (source) {
-            return this.aggregateOverSource(name, source, undefined, ctx);
+            return this.aggregateOverSource(name, source, undefined);
         }
         // A broadcast traversal — `SUM(.orders.total)`: the collection is
         // the receiver, the aggregated value a column on its element.
@@ -528,7 +528,7 @@ export class MinabSqlCompiler {
             if (receiverSource) {
                 const inner = { alias: receiverSource.alias, table: receiverSource.table };
                 const column = this.column({ kind: 'scope', ...inner }, arg.member, ctx);
-                return this.aggregateOverSource(name, receiverSource, column, ctx);
+                return this.aggregateOverSource(name, receiverSource, column);
             }
         }
         if (name === 'EXISTS' || name === 'ALL' || name === 'ANY') {
@@ -539,7 +539,7 @@ export class MinabSqlCompiler {
         return `${name}(${inner})`;
     }
 
-    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined, ctx: Ctx): string {
+    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined): string {
         const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
         const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
         if (name === 'EXISTS') {

@@ -48,6 +48,7 @@
     "test:watch": "vitest",
     "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json",
     "prepack": "npm run build:release",
+    "prelint": "npm run langium:generate",
     "lint": "oxlint --type-aware src test scripts && oxlint vscode-extension/src",
     "format": "oxfmt --write src test scripts vscode-extension/src",
     "format:check": "oxfmt --check src test scripts vscode-extension/src"
