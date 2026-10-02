@@ -1,0 +1,25 @@
+# Checks dependencies for known security problems (high or worse).
+name: Audit
+
+on:
+  pull_request:
+    paths:
+      - '**/package-lock.json'
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [., playground, vscode-extension]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm audit --audit-level=high
+        working-directory: ${{ matrix.dir }}

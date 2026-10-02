@@ -22,7 +22,7 @@ split rule, the protected files and when to stop and ask the owner.
 
 ## House rules
 
-- npm only. Do not use bun or yarn, and do not commit their lockfiles.
+- npm is the main package manager (CI uses `npm ci`). When dependencies change, update `bun.lock` too (`bun install`). Do not use yarn.
 - `playground/` and `vscode-extension/` are separate npm packages, each with its
   own `node_modules`. Run `npm ci` inside each one before you build or test it.
 - Never edit `src/language/generated/`. Run `npm run langium:generate` instead.
