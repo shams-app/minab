@@ -74,7 +74,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [L1](L1.md) | Call functions by name: remove `&` | Design → Mechanical | M | [B1](B1.md) |
 | [L2](L2.md) | Spec examples under test | Mechanical | S | [L1](L1.md) |
 | [L3](L3.md) | Names in any language, quoted names, physical names | Design → Mechanical | M | [L2](L2.md), [C1](C1.md) |
-| [L4](L4.md) | Close the language backlog | Design → Mechanical | M | [L3](L3.md), [C5](C5.md) |
+| [L4](L4.md) | Close the language backlog | Design → Mechanical | M | [L3](L3.md), [C5](C5.md), [C4](C4.md) |
 | [L5](L5.md) | Built-ins with several arguments: text, null and number functions | Design → Mechanical | M | [L1](L1.md), [C2](C2.md) |
 | [L6](L6.md) | Date and time built-ins | Design → Mechanical | M | [L5](L5.md), [R3](R3.md) |
 | [L7](L7.md) | `LOG` and the call statement | Design → Mechanical | M | [L4](L4.md), [L5](L5.md), [R7](R7.md), [R8](R8.md), [X3](X3.md) |

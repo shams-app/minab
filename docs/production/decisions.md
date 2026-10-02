@@ -23,7 +23,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **Confirm this picture. Recommended.** Every program is untrusted input: limits are always on, the server never accepts SQL or a schema from a browser, and the schema given to a program is its whole read surface.
 - (b) Programs are written only by trusted developers and reviewed in a repository. (Then Q3's limits and the run-by-id endpoint could be lighter.)
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d02"></a>
 ### D02 — What must be ready for the TV launch?
@@ -37,7 +37,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (b) Everything waits for 1.0.
 - (c) Shamsine launches without Minab evaluation (expressions stored only) and adds it later.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d03"></a>
 ### D03 — What goes into the first public release?
@@ -50,7 +50,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **Fix first. Recommended.** The first published version is `0.2.0` and contains: `&` removed (L1), the correctness fixes (C1–C8), CI (Q1) and release automation (Q2). Nobody ever installs the wrong answers.
 - (b) Publish `0.2.0` now, as it is, with the bugs listed as known limitations, and fix them in `0.2.1`.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d04"></a>
 ### D04 — Where is Minab published, and is the repository public?
@@ -64,7 +64,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 4. **Open VSX** (used by Cursor, VSCodium and other VS Code forks): also publish there, namespace `shamsine`. **Recommended**, because Cursor users cannot install from the Microsoft Marketplace.
 5. **Secrets the workflows need:** npm trusted publishing (no token) or `NPM_TOKEN`; `VSCE_PAT`; `OVSX_PAT`.
 
-**Answer:** _(open)_
+**Answer:** 1. npm: publish `@shamsine/minab` publicly; the owner owns the npm org `shamsine`. 2. **The repository stays private** (differs from the recommendation): publish **without** npm provenance. 3. Marketplace publisher `shamsine` is the owner's. 4. Also publish to Open VSX, namespace `shamsine`. 5. npm trusted publishing (no `NPM_TOKEN`); secrets `VSCE_PAT` and `OVSX_PAT` — 2026-10-02
 
 <a id="d05"></a>
 ### D05 — A `next` prerelease channel?
@@ -75,7 +75,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **Yes. Recommended.** Every merge to `main` that changes the package publishes `X.Y.Z-next.N` under the npm tag `next`. Shamsine can integrate early (for example right after R4) without waiting for a release. `npm install @shamsine/minab` still gets only real releases.
 - (b) No: only tagged releases.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d06"></a>
 ### D06 — Which Node.js versions?
@@ -88,7 +88,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **`engines: >=22.12.0`; CI on Node 22 and 24; a Bun smoke test for the package (H1). Recommended.**
 - (b) Keep `>=20.10.0` and add Node 20.10 to CI (the old plan). Not recommended: a production 1.0 should not promise an unsupported runtime.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d07"></a>
 ### D07 — One package manager
@@ -99,7 +99,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **npm only. Recommended.** CI already uses `npm ci` and `package-lock.json`. Delete `bun.lock` and `playground/bun.lock`, and ignore them in `.gitignore`.
 - (b) Keep both lockfiles (they drift; one is already stale).
 
-**Answer:** _(open)_
+**Answer:** (b) **keep both lockfiles** (differs from the recommendation). npm stays the main tool (CI uses `npm ci`). Q1 adds a CI job that runs `bun install --frozen-lockfile` in the root and in `playground/`, so `bun.lock` cannot drift, and changes the CLAUDE.md line to: "npm is the main package manager; when dependencies change, update `bun.lock` too (`bun install`)" — 2026-10-02
 
 <a id="d08"></a>
 ### D08 — Formatter and linter
@@ -110,7 +110,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 - (a) **Prettier + ESLint (typescript-eslint with type-aware rules such as `no-floating-promises`, `no-misused-promises`, `await-thenable`). Recommended.** The interpreter is async everywhere, and a forgotten `await` is a real bug class. Prettier is set to today's style (4 spaces, single quotes, semicolons), so the one-time format is small. It runs once, in B1, before the parallel lanes start.
 - (b) No tools; write that down so it stops being an open question.
 
-**Answer:** _(open)_
+**Answer:** "If it's possible to use OXC then use it, otherwise use Prettier + ESLint" (differs from the recommendation). So: `oxlint` with type-aware rules (`oxlint-tsgolint`: `no-floating-promises`, `no-misused-promises`, `await-thenable`) and `oxfmt` set to today's style. B1 checks that OXC covers these rules and the style; if it does not, B1 uses Prettier + ESLint (option (a)) and says why in its status file — 2026-10-02
 
 <a id="d09"></a>
 ### D09 — Approved new dependencies
@@ -135,7 +135,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 | `@lhci/cli`, `@axe-core/playwright` | dev (`playground`) | W4 | Lighthouse and accessibility checks |
 | NestJS, TypeORM, `pg`, Jest, `supertest` | `examples/nestjs` own package | H3 | The example app (TypeORM because Shamsine's Dynodb uses it) |
 
-**Answer:** _(open)_
+**Answer:** (a) the list as written; because of D08, B1 may use `oxlint`, `oxlint-tsgolint` and `oxfmt` instead of `prettier`, `eslint`, `typescript-eslint` — 2026-10-02
 
 ---
 
@@ -167,7 +167,7 @@ fn tax(x: DECIMAL): DECIMAL { x }   // fine
 foo(1)                              // error: unknown function "foo"
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d11"></a>
 ### D11 — May other names be the same as a function name?
@@ -189,7 +189,7 @@ fn check(total: DECIMAL): BOOLEAN { true }    // error: parameter "total" has a 
 fn Customer(): INTEGER { 1 }                  // error: "Customer" is a table name
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d12"></a>
 ### D12 — Names in other languages, and names with spaces
@@ -221,7 +221,7 @@ COUNT(.`Line items`[.qty > 10]) > 0
 .İl == "İzmir"
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d13"></a>
 ### D13 — Does `+` join text?
@@ -242,7 +242,7 @@ COUNT(.`Line items`[.qty > 10]) > 0
 "a" + 1                                 // error: + needs two numbers or two texts
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d14"></a>
 ### D14 — Division and `%`
@@ -268,7 +268,7 @@ FLOOR(7 / 2)    // 3
 5 / 0           // error: division by zero
 ```
 
-**Answer:** _(open)_
+**Answer:** "`/` gives decimal even for integers, `\` gives integers even for decimals, `%` for the remainder (`7 % 3` → 1)" (differs from the recommendation: a **new operator `\`** for integer division, instead of `FLOOR(a / b)`). Details agreed: `\` rounds toward zero and gives `INTEGER` even for `DECIMAL` operands (`7 \ 2` → 3, `-7 \ 2` → -3, `7.9 \ 2` → 3; outside the safe range → `eval.integerOutOfRange`); `%` takes the sign of the left side, also for `DECIMAL` (`-7 % 3` → -1, `7.5 % 2` → 1.5), so `a == (a \ b) * b + a % b`; `/` gives `DECIMAL` with 16 digits after the point, rounded half away from zero, in both runtimes; `/`, `\` and `%` by zero → `eval.divisionByZero`; `\` has the same precedence as `*`, `/`, `%`. C4 does `/`, `%` and division by zero; L4 (grammar chain) adds `\` — 2026-10-02
 
 <a id="d15"></a>
 ### D15 — `CITEXT` compared with text
@@ -289,7 +289,7 @@ FLOOR(7 / 2)    // 3
 .name == .email                 // TEXT vs CITEXT: allowed, ignores case
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d16"></a>
 ### D16 — Exact `CAST` rules
@@ -318,7 +318,7 @@ CAST(2.50 AS TEXT)         // "2.5"
 CAST("yes" AS BOOLEAN)     // true
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d17"></a>
 ### D17 — Exact decimals and the integer range
@@ -342,7 +342,7 @@ CAST("yes" AS BOOLEAN)     // true
 9007199254740991 + 1        // error: integer out of range
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d18"></a>
 ### D18 — `ORDERBY` on something that is not a `SELECT` alias
@@ -362,7 +362,7 @@ SELECT .id AS id, .total AS total
 ORDERBY .created_at DESC        // allowed: a column that is not selected
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d19"></a>
 ### D19 — `LOG` for debugging
@@ -391,7 +391,7 @@ fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
 ```
 CLI stderr: `rule.minab:1:1 cancelled: 2`
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d20"></a>
 ### D20 — Built-in library, part 1: text, null and numbers
@@ -427,7 +427,7 @@ ROUND(.total * 1.09, 2)
 COALESCE(.nickname, .name)
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d21"></a>
 ### D21 — Built-in library, part 2: dates, times and time zones
@@ -465,7 +465,7 @@ DATE_ADD(.start, 1, "month") > .end
 YEAR(.created_at) == 2026
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d22"></a>
 ### D22 — `KEY` when `GROUPBY` has several keys
@@ -486,7 +486,7 @@ GROUPBY .status, .customer.country AS country
 SELECT KEY.status AS status, KEY.country AS country, COUNT(.) AS orders
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d23"></a>
 ### D23 — A user function inside a query
@@ -505,7 +505,7 @@ FROM Order WHERE net(.total) > 100 SELECT .id AS id
 // compiles to: WHERE ("Order"."total" * $1) > $2
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d24"></a>
 ### D24 — The rest of spec §12
@@ -534,7 +534,7 @@ let x: INTEGER = 2;              // error: "x" is already declared here
 if .vip { let x: INTEGER = 3; x } else { x }     // fine: inner block
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d25"></a>
 ### D25 — Compare a relation with a key directly
@@ -553,7 +553,7 @@ if .vip { let x: INTEGER = 3; x } else { x }     // fine: inner block
 .customer IN [idA, idB]
 ```
 
-**Answer:** _(open)_
+**Answer:** (b) **long form only** (differs from the recommendation): a relation is not compared with a key; programs keep writing `.customer.id == customerId`. L4 pins this with a test, and the type error names the long form — 2026-10-02
 
 <a id="d26"></a>
 ### D26 — Writes: safety, rules and transactions
@@ -576,7 +576,7 @@ dry run: 2 statements, nothing written (use --apply to write)
   INSERT INTO "Shipment" ("order_id", "carrier") VALUES ($1, $2)   -- ["o-104", "DHL"]
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 ---
 
@@ -604,7 +604,7 @@ dry run: 2 statements, nothing written (use --apply to write)
 let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 ```
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d28"></a>
 ### D28 — What the data port carries
@@ -615,7 +615,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **SQL text plus parameters, as today. Recommended.** It is right on a server and with an in-browser database (PGlite). A browser **never** sends SQL to a server: when a browser program needs server data, the browser sends the program's **id and inputs**, and the server runs it itself (D34). A structured, non-SQL data request is written into ADR 0002 as the upgrade path, not built.
 - (b) A structured data request (table, filters, projection), safe to send from a browser. The SQL compiler splits into a request builder and a SQL emitter: a large change to every pushdown.
 
-**Answer:** _(open)_
+**Answer:** ask at phase R1
 
 <a id="d29"></a>
 ### D29 — When the schema is loaded
@@ -626,7 +626,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **Up front, cached by version. Recommended.** The host gives the whole schema before `prepare`, with a `version` string (Shamsine: a hash of the datasets' fields). Checking stays synchronous and fast (an editor checks on every key press). The runtime caches language services per schema version.
 - (b) Load names on demand (async per name): makes checking async and slow.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d30"></a>
 ### D30 — Where programs run
@@ -638,7 +638,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (b) Always on the server (simpler, but every key press in a form becomes a network call).
 - (c) Always in the browser (needs option (b) of D28).
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d31"></a>
 ### D31 — Packaging
@@ -649,7 +649,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **One package with entry points (subpaths) and optional peer dependencies. Recommended.** `@shamsine/minab` (the runtime, no environment), `/node`, `/nestjs`, `/browser`, `/browser/worker`, `/browser/pglite`, `/monaco`, `/lsp`, `/host`. `pg`, NestJS, PGlite and Monaco are optional peers: you install only what you use. The CLI stays the package's `bin`.
 - (b) Several packages (`@shamsine/minab-nestjs`, …); needs npm workspaces, which this repo has avoided.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d32"></a>
 ### D32 — ES modules and CommonJS
@@ -662,7 +662,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **Ship both: ES modules (main) plus a CommonJS bundle for `.`, `/node` and `/nestjs`, with Langium bundled in (esbuild). Recommended.** Proven in a fresh `nest new` project with a Jest test (H1).
 - (b) ES modules only; document `await import()` and Jest's ESM mode.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d33"></a>
 ### D33 — One event stream for trace, logs and timing
@@ -673,7 +673,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **One stream of typed events. Recommended.** `{ kind: 'statement' | 'log' | 'timing', … }` with a source range. One adapter per host: stderr (CLI), the playground's tabs, Nest's `Logger`, the wire format.
 - (b) Separate `trace` and `log` ports.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d34"></a>
 ### D34 — Stored programs and run by id
@@ -687,7 +687,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
   - The server caches prepared programs by id and version.
 - (b) The endpoint accepts source text (simpler; the server then runs anything it is sent).
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d35"></a>
 ### D35 — Error messages in other languages
@@ -698,7 +698,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **English messages plus stable codes and parameters. Recommended.** Every diagnostic and run error has a code (`type.implicitCoercion`) and its parameters (`{ expected: "INTEGER", actual: "TEXT" }`). Hosts translate by code (Shamsine: fa, ar, tr in its own translation file). Minab ships no translations. Codes never change once released (D38).
 - (b) Minab ships translations for fa, ar and tr.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d36"></a>
 ### D36 — Default limits
@@ -722,7 +722,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **These defaults. Recommended.**
 - (b) Other values (say which).
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d37"></a>
 ### D37 — Logs in production
@@ -733,7 +733,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **Logs are for debugging. Recommended.** On a server they are **off by default in production** (on in development). When on: capped (D36), every value printed on one line (newlines escaped, so a value cannot fake a log line), tagged with the program id and request id. The docs warn that logged values may contain personal data.
 - (b) Logs are also an audit trail in production (then they need levels, structure and retention; much more work).
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d38"></a>
 ### D38 — Compatibility policy
@@ -748,7 +748,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
   - Every program a host stores carries a `languageVersion`. A golden corpus of programs from every release must keep giving the same results.
 - (b) A lighter policy (say which part).
 
-**Answer:** _(open)_
+**Answer:** "The entire language is in development, so feel free to break anything" (differs from the recommendation **before 1.0**): until 1.0, any phase may break the language, the runtime API, the wire format or the diagnostic codes without asking and without a migration; it only marks the change (`breaking: true` in its fragment). Q5 still builds `languageVersion` and the golden corpus; before 1.0 a phase updates the corpus on purpose. From 1.0 (V5) the policy of option (a) applies: no breaking change within 1.x, deprecations warn first, stored programs keep working — 2026-10-02
 
 <a id="d39"></a>
 ### D39 — SQL dialects
@@ -759,7 +759,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **Postgres only for 1.0. Recommended.** Write it into ADR 0001's consequences and the README. A second dialect (SQLite is the natural one) goes to the post-1.0 list.
 - (b) A dialect seam and a tested second target before 1.0.
 
-**Answer:** _(open)_
+**Answer:** (a) Postgres only for now; "note down to expand to others later" (a second dialect stays on the post-1.0 list) — 2026-10-02
 
 ---
 
@@ -779,7 +779,7 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 5. **Brand direction:** (A) "Instrument" — calm, editorial, paper and ink, **recommended in the brief**; (B) "Terminal Noir" — dark, IDE-like; (C) "Blueprint" — technical drawing, the execution map as hero.
 6. **Languages of the site:** English only, or English and Persian (with RTL)? **Recommended: English for 1.0, plus one Persian example program** (L3) to show Unicode names. A full Persian site goes to the post-1.0 list.
 
-**Answer:** _(open)_
+**Answer:** 1. The name's story: ask at phase W1. 2. Domain: **`minab-lang.org`**. 3–4. Portfolio URL and social handles: ask at phase W1. 5. Brand direction: **(B) "Terminal Noir"** — dark, IDE-like (differs from the brief's recommendation A). 6. Languages: English for 1.0 plus one Persian example program (L3); a full Persian site post-1.0 — 2026-10-02
 
 <a id="d41"></a>
 ### D41 — Where the website is hosted
@@ -793,7 +793,7 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 - (d) GitHub Pages (no custom headers; works but caches the WebAssembly files less well).
 - (e) A path on your portfolio site.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d42"></a>
 ### D42 — Does the playground have its own version?
@@ -804,7 +804,7 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 - (a) **No. Recommended.** It stays `private` and is deployed from `main`. Its changes appear in each release's CHANGELOG under a "Playground" heading (fragments with `scope: playground`). The footer shows the Minab version it runs.
 - (b) Its own version and CHANGELOG.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d43"></a>
 ### D43 — Security contact
@@ -813,7 +813,7 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 
 **Question.** Which address receives security reports (for `SECURITY.md`)? Or should reports go through GitHub's private vulnerability reporting (needs a public repository, D04)? **Recommended: GitHub private vulnerability reporting, plus one email address as a fallback.**
 
-**Answer:** _(open)_
+**Answer:** Email **security@minab-lang.org** (differs from the recommendation: the repository stays private (D04), so GitHub private vulnerability reporting is not available). If the repository becomes public, add GitHub private reporting next to the email — 2026-10-02
 
 <a id="d44"></a>
 ### D44 — What the TV demo shows
@@ -825,7 +825,7 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 - (b) Only a recorded video.
 - (c) A live demo in Shamsine only.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
 
 <a id="d45"></a>
 ### D45 — How a failed rule explains itself to an end user
@@ -838,4 +838,4 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 - (a) **The host's job. Recommended.** The host stores a translated message next to each rule (Shamsine already stores rules with fields). Minab gives codes and source ranges for errors. An "explain" mode (which sub-condition was false, with values) goes to the post-1.0 list.
 - (b) A language feature: a message attached to the rule in Minab source.
 
-**Answer:** _(open)_
+**Answer:** (a) — 2026-10-02
