@@ -1,6 +1,6 @@
 # ADR 0002: One runtime, its ports, and where programs run
 
-**Status:** Proposed. It waits for the owner's approval (phase R1). The owner moves it to Accepted.
+**Status:** Accepted (owner, 2026-10-02).
 
 **Date:** 2026-10-02
 
