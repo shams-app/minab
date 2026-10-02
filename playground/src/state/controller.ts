@@ -220,19 +220,26 @@ export function restartEngine(): void {
 }
 
 export function warmUpEngine(): void {
-    void engine().call('warmUp').catch(() => undefined);
+    void engine()
+        .call('warmUp')
+        .catch(() => undefined);
 }
 
 /** Sets the screen-reader announcement for a finished run (rendered into an aria-live region). */
 function announce(report: NonNullable<ReturnType<typeof getState>['report']>): void {
     const result = report.result;
-    const announcement =
-        report.error ? `Failed: ${report.error.message}`
-        : report.refusal ? `Checked. ${report.refusal.label} are not executed yet.`
-        : report.stage === 'check' || report.stage === 'parse' ? `${report.diagnostics.length} problem${report.diagnostics.length === 1 ? '' : 's'}`
-        : result?.kind === 'rows' ? `${result.rows.length} row${result.rows.length === 1 ? '' : 's'} in ${Math.round(report.totalMs)} milliseconds`
-        : result?.kind === 'verdict' ? `Rule ${result.value ? 'passes' : 'fails'}`
-        : result?.kind === 'value' ? `Value: ${JSON.stringify(result.value)}`
-        : 'Done';
+    const announcement = report.error
+        ? `Failed: ${report.error.message}`
+        : report.refusal
+          ? `Checked. ${report.refusal.label} are not executed yet.`
+          : report.stage === 'check' || report.stage === 'parse'
+            ? `${report.diagnostics.length} problem${report.diagnostics.length === 1 ? '' : 's'}`
+            : result?.kind === 'rows'
+              ? `${result.rows.length} row${result.rows.length === 1 ? '' : 's'} in ${Math.round(report.totalMs)} milliseconds`
+              : result?.kind === 'verdict'
+                ? `Rule ${result.value ? 'passes' : 'fails'}`
+                : result?.kind === 'value'
+                  ? `Value: ${JSON.stringify(result.value)}`
+                  : 'Done';
     setState({ announcement });
 }

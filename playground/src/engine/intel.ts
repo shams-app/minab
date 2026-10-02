@@ -66,9 +66,7 @@ function describeColumn(column: MinabColumnSchema): string {
 }
 
 function tableSummary(table: MinabTableSchema): string {
-    const lines = table.columns.map(c =>
-        `| ${code(c.name)}${table.primaryKey === c.name ? ' 🔑' : ''} | ${code(describeColumn(c))} |`
-    );
+    const lines = table.columns.map(c => `| ${code(c.name)}${table.primaryKey === c.name ? ' 🔑' : ''} | ${code(describeColumn(c))} |`);
     return `| column | type |\n|---|---|\n${lines.join('\n')}`;
 }
 
@@ -126,24 +124,19 @@ export class EditorIntel {
     }
 
     private async describeNode(node: AstNode, document: LangiumDocument<Model>): Promise<string | undefined> {
-        const typed = (label: string, what: string, type?: MinabType) =>
-            `${code(label)} — ${what}${type ? `\n\n**type** ${code(formatType(type))}` : ''}`;
+        const typed = (label: string, what: string, type?: MinabType) => `${code(label)} — ${what}${type ? `\n\n**type** ${code(formatType(type))}` : ''}`;
 
         if (isNamedScope(node)) {
             const type = this.typeOf(node);
             const table = this.tableOfType(type);
             const res = this.services.scopeResolver.resolveNamedScope(node);
             const fallback = res.found && res.scope.owner === node;
-            const what = fallback
-                ? `every row of table ${code(table?.name ?? node.name)} (spec §3.3)`
-                : `the row bound to alias ${code(node.name)}`;
+            const what = fallback ? `every row of table ${code(table?.name ?? node.name)} (spec §3.3)` : `the row bound to alias ${code(node.name)}`;
             return `${typed('#' + node.name, what, type)}${table ? `\n\n${tableSummary(table)}` : ''}`;
         }
         if (isTableRef(node)) {
             const table = this.table(node.name);
-            return table
-                ? `${code(node.name)} — table\n\n${tableSummary(table)}`
-                : `${code(node.name)} — not a table in this host's schema`;
+            return table ? `${code(node.name)} — table\n\n${tableSummary(table)}` : `${code(node.name)} — not a table in this host's schema`;
         }
         if (isCurrentRecord(node)) {
             if (!node.field) return typed('.', 'the current record — one row of the scope you are in (spec §2.2)', this.typeOf(node));
@@ -153,9 +146,8 @@ export class EditorIntel {
             const receiver = this.typeOf(node.receiver);
             const owner = this.tableOfType(receiver);
             const column = owner?.columns.find(c => c.name === node.member);
-            const what = column && owner
-                ? `column of ${code(owner.name)}${column.type.kind !== 'scalar' ? ` (${describeColumn(column)})` : ''}`
-                : 'member access';
+            const what =
+                column && owner ? `column of ${code(owner.name)}${column.type.kind !== 'scalar' ? ` (${describeColumn(column)})` : ''}` : 'member access';
             return typed(node.$cstNode?.text.trim() ?? node.member, what, this.typeOf(node));
         }
         if (isParentRecord(node)) {
@@ -220,23 +212,21 @@ export class EditorIntel {
         const withPlaceholder = prefix + PLACEHOLDER + source.slice(offset);
         const schema = this.language.schema;
 
-        const tables = (rank: number): CompletionEntry[] => schema.tables.map(t => ({
-            label: t.name,
-            kind: 'table',
-            detail: `table · ${t.columns.length} columns`,
-            documentation: tableSummary(t),
-            rank
-        }));
+        const tables = (rank: number): CompletionEntry[] =>
+            schema.tables.map(t => ({
+                label: t.name,
+                kind: 'table',
+                detail: `table · ${t.columns.length} columns`,
+                documentation: tableSummary(t),
+                rank
+            }));
 
         // `#Tab…` — a named scope, or a whole table (spec §3.3).
         if (prefix.endsWith('#')) {
             const aliases = [...before.matchAll(/\b(?:AS)\s+([A-Za-z_]\w*)/g)].map(m => m[1]);
             return {
                 replace,
-                entries: [
-                    ...tables(0),
-                    ...[...new Set(aliases)].map(a => ({ label: a, kind: 'variable' as const, detail: 'alias', rank: 1 }))
-                ]
+                entries: [...tables(0), ...[...new Set(aliases)].map(a => ({ label: a, kind: 'variable' as const, detail: 'alias', rank: 1 }))]
             };
         }
         // `&fn…` — user functions.
@@ -273,8 +263,7 @@ export class EditorIntel {
             if (isCurrentRecord(node) && node.field === PLACEHOLDER) {
                 const base = this.services.scopeResolver.resolveCurrentRecordBase(node);
                 if (base.found) {
-                    const name = base.scope.tableName
-                        ?? (base.scope.owner.$type === 'Model' ? this.language.ruleContext.recordTable : undefined);
+                    const name = base.scope.tableName ?? (base.scope.owner.$type === 'Model' ? this.language.ruleContext.recordTable : undefined);
                     table = name ? this.table(name) : undefined;
                 }
                 break;

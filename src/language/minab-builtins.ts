@@ -8,15 +8,10 @@
  * §5.3) — see `minab-validator.ts`'s `checkFunctionDeclNotReservedName`.
  */
 
-import {
-    formatType,
-    isNumeric,
-    isOrderable,
-    scalarType,
-    type MinabType
-} from './minab-types.js';
+import { formatType, isNumeric, isOrderable, scalarType, type MinabType } from './minab-types.js';
+import { coded, type CodedMessage } from './diagnostics/codes.js';
 
-export type BuiltinCheckResult = { ok: true; type: MinabType } | { ok: false; reason: string };
+export type BuiltinCheckResult = { ok: true; type: MinabType } | ({ ok: false } & CodedMessage);
 
 export interface BuiltinSignature {
     name: string;
@@ -41,7 +36,7 @@ const BUILTINS: BuiltinSignature[] = [
         name: 'COUNT',
         check: argType => {
             if (argType.kind !== 'collection' && !(argType.kind === 'scalar' && argType.array)) {
-                return { ok: false, reason: `COUNT expects a collection, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsCollection', { name: 'COUNT', actual: formatType(argType) }) };
             }
             return { ok: true, type: scalarType('INTEGER') };
         }
@@ -51,7 +46,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || !isNumeric(el)) {
-                return { ok: false, reason: `SUM expects a collection of INTEGER or DECIMAL, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsNumericCollection', { name: 'SUM', actual: formatType(argType) }) };
             }
             return { ok: true, type: el };
         }
@@ -61,7 +56,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || !isNumeric(el)) {
-                return { ok: false, reason: `AVG expects a collection of INTEGER or DECIMAL, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsNumericCollection', { name: 'AVG', actual: formatType(argType) }) };
             }
             return { ok: true, type: scalarType('DECIMAL') };
         }
@@ -71,7 +66,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || !isOrderable(el)) {
-                return { ok: false, reason: `MIN expects a collection of an orderable type, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsOrderableCollection', { name: 'MIN', actual: formatType(argType) }) };
             }
             return { ok: true, type: el };
         }
@@ -81,7 +76,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || !isOrderable(el)) {
-                return { ok: false, reason: `MAX expects a collection of an orderable type, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsOrderableCollection', { name: 'MAX', actual: formatType(argType) }) };
             }
             return { ok: true, type: el };
         }
@@ -90,7 +85,7 @@ const BUILTINS: BuiltinSignature[] = [
         name: 'EXISTS',
         check: argType => {
             if (argType.kind !== 'collection' && !(argType.kind === 'scalar' && argType.array)) {
-                return { ok: false, reason: `EXISTS expects a collection, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsCollection', { name: 'EXISTS', actual: formatType(argType) }) };
             }
             return { ok: true, type: scalarType('BOOLEAN') };
         }
@@ -100,7 +95,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || el.kind !== 'scalar' || el.base !== 'BOOLEAN') {
-                return { ok: false, reason: `ALL expects a collection of BOOLEAN, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsBooleanCollection', { name: 'ALL', actual: formatType(argType) }) };
             }
             return { ok: true, type: scalarType('BOOLEAN') };
         }
@@ -110,7 +105,7 @@ const BUILTINS: BuiltinSignature[] = [
         check: argType => {
             const el = elementType(argType);
             if (!el || el.kind !== 'scalar' || el.base !== 'BOOLEAN') {
-                return { ok: false, reason: `ANY expects a collection of BOOLEAN, got ${formatType(argType)}` };
+                return { ok: false, ...coded('call.builtinNeedsBooleanCollection', { name: 'ANY', actual: formatType(argType) }) };
             }
             return { ok: true, type: scalarType('BOOLEAN') };
         }

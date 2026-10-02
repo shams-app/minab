@@ -20,22 +20,30 @@ function Node({ node, depth, onHighlight, onReveal }: { node: AstNodeView; depth
     const attributes = Object.entries(node.attributes);
     return (
         <li className="mb-ast-node" role="treeitem" aria-expanded={node.children.length ? open : undefined}>
-            <div
-                className="mb-ast-row"
-                onMouseEnter={() => node.range && onHighlight(node.range)}
-                onMouseLeave={() => onHighlight(undefined)}
-            >
-                {node.children.length > 0
-                    ? <button type="button" className="mb-ast-toggle" aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setOpen(!open)}><Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} /></button>
-                    : <span className="mb-ast-toggle" />}
+            <div className="mb-ast-row" onMouseEnter={() => node.range && onHighlight(node.range)} onMouseLeave={() => onHighlight(undefined)}>
+                {node.children.length > 0 ? (
+                    <button type="button" className="mb-ast-toggle" aria-label={open ? 'Collapse' : 'Expand'} onClick={() => setOpen(!open)}>
+                        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+                    </button>
+                ) : (
+                    <span className="mb-ast-toggle" />
+                )}
                 {node.feature && <span className="mb-ast-feature">{node.feature}:</span>}
-                <button type="button" className="mb-ast-type" onClick={() => node.range && onReveal(node.range)}>{node.type}</button>
-                {attributes.map(([k, v]) => <span key={k} className="mb-ast-attr">{k}=<code>{JSON.stringify(v)}</code></span>)}
+                <button type="button" className="mb-ast-type" onClick={() => node.range && onReveal(node.range)}>
+                    {node.type}
+                </button>
+                {attributes.map(([k, v]) => (
+                    <span key={k} className="mb-ast-attr">
+                        {k}=<code>{JSON.stringify(v)}</code>
+                    </span>
+                ))}
                 {node.inferredType && <Badge tone="accent">{node.inferredType}</Badge>}
             </div>
             {open && node.children.length > 0 && (
                 <ul role="group">
-                    {node.children.map((child, i) => <Node key={i} node={child} depth={depth + 1} onHighlight={onHighlight} onReveal={onReveal} />)}
+                    {node.children.map((child, i) => (
+                        <Node key={i} node={child} depth={depth + 1} onHighlight={onHighlight} onReveal={onReveal} />
+                    ))}
                 </ul>
             )}
         </li>

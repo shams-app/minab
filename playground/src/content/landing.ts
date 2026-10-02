@@ -27,7 +27,11 @@ export const landing = {
         title: 'Two layers, one expression language',
         body: 'The same `.`-for-the-current-row expressions work in a `FROM … WHERE … SELECT` pipeline and in a bare validation rule. Learn it once.',
         query: { title: 'Query', exampleId: 'first-query', body: 'Pipelines read top to bottom and compile to one parameterized SQL statement.' },
-        rule: { title: 'Validate', exampleId: 'booking-overlap', body: 'A condition over `.` guards a record; `$` guards a single field. The host decides which.' }
+        rule: {
+            title: 'Validate',
+            exampleId: 'booking-overlap',
+            body: 'A condition over `.` guards a record; `$` guards a single field. The host decides which.'
+        }
     },
 
     sigils: {
@@ -60,11 +64,27 @@ export const landing = {
     },
 
     features: [
-        { icon: 'lock', title: 'No implicit coercion', body: 'TEXT never quietly becomes a number. A CAST says what you mean, and the checker points at the exact span when you don’t.' },
-        { icon: 'layers', title: 'Relations without joins', body: 'The schema knows how tables link, so `.customer.country` just works — and still compiles to an indexed lookup.' },
-        { icon: 'bolt', title: 'Rules run next to the record', body: 'A rule answers what it can from the record in memory and asks the database only what it must.' },
+        {
+            icon: 'lock',
+            title: 'No implicit coercion',
+            body: 'TEXT never quietly becomes a number. A CAST says what you mean, and the checker points at the exact span when you don’t.'
+        },
+        {
+            icon: 'layers',
+            title: 'Relations without joins',
+            body: 'The schema knows how tables link, so `.customer.country` just works — and still compiles to an indexed lookup.'
+        },
+        {
+            icon: 'bolt',
+            title: 'Rules run next to the record',
+            body: 'A rule answers what it can from the record in memory and asks the database only what it must.'
+        },
         { icon: 'code', title: 'Real tooling', body: 'A language server with diagnostics, hovers and go-to-definition, a VS Code extension, and a CLI.' },
-        { icon: 'check', title: 'Checked before it runs', body: 'Parse, scope, types — then execution. Loops and writes already type-check, ahead of running.' },
+        {
+            icon: 'check',
+            title: 'Checked before it runs',
+            body: 'Parse, scope, types — then execution. Loops and writes already type-check, ahead of running.'
+        },
         { icon: 'database', title: 'Runs right here', body: 'This site executes every example against PostgreSQL compiled to WebAssembly, in your tab.' }
     ],
 

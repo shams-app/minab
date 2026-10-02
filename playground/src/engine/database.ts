@@ -53,10 +53,7 @@ export class Database {
         if (!this.booting) {
             this.setState('booting');
             this.booting = (async () => {
-                const [{ PGlite, types }, { citext }] = await Promise.all([
-                    import('@electric-sql/pglite'),
-                    import('@electric-sql/pglite/contrib/citext')
-                ]);
+                const [{ PGlite, types }, { citext }] = await Promise.all([import('@electric-sql/pglite'), import('@electric-sql/pglite/contrib/citext')]);
                 const asNumber = (value: string) => Number(value);
                 const asText = (value: string) => value;
                 const db = await PGlite.create({

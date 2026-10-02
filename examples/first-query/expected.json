@@ -1,0 +1,17 @@
+{
+  "mode": "run",
+  "json": [
+    {
+      "id": "o-104",
+      "total": 980,
+      "customer_name": "Ada Lovelace"
+    },
+    {
+      "id": "o-87",
+      "total": 412.5,
+      "customer_name": "Grace Hopper"
+    }
+  ],
+  "statements": 1,
+  "compiles": true
+}

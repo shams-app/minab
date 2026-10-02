@@ -28,10 +28,6 @@ const connection = createConnection(ProposedFeatures.all);
 const configPath = discoverConfig(process.cwd());
 const config = configPath ? loadConfigFile(configPath) : emptyConfig();
 
-const { shared } = createMinabServices(
-    { connection, ...NodeFileSystem },
-    config.schema,
-    config.ruleContext
-);
+const { shared } = createMinabServices({ connection, ...NodeFileSystem }, config.schema, config.ruleContext);
 
 startLanguageServer(shared);

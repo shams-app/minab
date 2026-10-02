@@ -47,6 +47,7 @@ import {
     type TableRef,
     type VariableDecl
 } from './generated/ast.js';
+import { coded, type CodedMessage } from './diagnostics/codes.js';
 import type { SchemaProvider } from './schema.js';
 
 export interface ResolvedScope {
@@ -56,9 +57,7 @@ export interface ResolvedScope {
     tableName?: string;
 }
 
-export type ScopeResolution =
-    | { found: true; scope: ResolvedScope }
-    | { found: false; reason: string };
+export type ScopeResolution = { found: true; scope: ResolvedScope } | ({ found: false } & CodedMessage);
 
 interface AliasEntry {
     node: AstNode;
@@ -89,7 +88,7 @@ export class MinabScopeResolver {
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
         const stack = this.stackAt(node);
         if (stack.length === 0) {
-            return { found: false, reason: 'no active scope for "."' };
+            return { found: false, ...coded('scope.noActiveScope') };
         }
         const level = stack[0];
         if (!node.field) {
@@ -110,7 +109,7 @@ export class MinabScopeResolver {
     resolveCurrentRecordBase(node: AstNode): ScopeResolution {
         const stack = this.stackAt(node);
         if (stack.length === 0) {
-            return { found: false, reason: 'no active scope for "."' };
+            return { found: false, ...coded('scope.noActiveScope') };
         }
         const level = stack[0];
         return { found: true, scope: { owner: level.owner, tableName: level.tableName } };
@@ -119,7 +118,7 @@ export class MinabScopeResolver {
     resolveParentRecord(node: ParentRecord): ScopeResolution {
         const stack = this.stackAt(node);
         if (stack.length < 2) {
-            return { found: false, reason: '"^" has no enclosing parent scope here' };
+            return { found: false, ...coded('scope.noParentScope') };
         }
         const level = stack[1];
         return { found: true, scope: { owner: level.owner, tableName: level.tableName } };
@@ -137,7 +136,7 @@ export class MinabScopeResolver {
         if (table) {
             return { found: true, scope: { owner: node, tableName: table.name } };
         }
-        return { found: false, reason: `unknown table or scope "#${node.name}"` };
+        return { found: false, ...coded('scope.unknownAlias', { name: node.name }) };
     }
 
     resolveGroupKeyRef(node: GroupKeyRef): ScopeResolution {
@@ -146,22 +145,19 @@ export class MinabScopeResolver {
         while (current) {
             if (isQuery(current)) {
                 if (!current.groupByClause) {
-                    return { found: false, reason: 'KEY is only valid after a GROUPBY clause' };
+                    return { found: false, ...coded('scope.keyWithoutGroupBy') };
                 }
                 const validField =
-                    current.havingClause === child ||
-                    current.selectClause === child ||
-                    current.orderByClause === child ||
-                    current.limitClause === child;
+                    current.havingClause === child || current.selectClause === child || current.orderByClause === child || current.limitClause === child;
                 if (!validField) {
-                    return { found: false, reason: 'KEY is only valid in HAVING, SELECT, ORDERBY, or LIMIT, after GROUPBY' };
+                    return { found: false, ...coded('scope.keyInWrongClause') };
                 }
                 return { found: true, scope: { owner: current.groupByClause } };
             }
             child = current;
             current = current.$container;
         }
-        return { found: false, reason: 'KEY used outside any query' };
+        return { found: false, ...coded('scope.keyOutsideQuery') };
     }
 
     resolveNameRef(node: NameRef): ScopeResolution {
@@ -176,7 +172,7 @@ export class MinabScopeResolver {
         if (decl) {
             return { found: true, scope: { owner: decl } };
         }
-        return { found: false, reason: `unknown name "${node.name}"` };
+        return { found: false, ...coded('scope.unknownName', { name: node.name }) };
     }
 
     resolveMemberAccess(node: MemberAccess): ScopeResolution {
@@ -190,7 +186,7 @@ export class MinabScopeResolver {
     resolveTableRef(node: TableRef): ScopeResolution {
         const table = this.schema.getTable(node.name);
         if (!table) {
-            return { found: false, reason: `unknown table "${node.name}"` };
+            return { found: false, ...coded('scope.unknownTable', { name: node.name }) };
         }
         return { found: true, scope: { owner: node, tableName: table.name } };
     }
@@ -201,15 +197,15 @@ export class MinabScopeResolver {
         if (isNamedScope(expr)) return this.resolveNamedScope(expr);
         if (isNameRef(expr)) return this.resolveNameRef(expr);
         if (isMemberAccess(expr)) return this.resolveMemberAccess(expr);
-        return { found: false, reason: 'member access on a computed receiver requires the Phase 4 type system' };
+        return { found: false, ...coded('scope.computedReceiver') };
     }
 
     private resolveColumn(tableName: string | undefined, field: string, node: AstNode): ScopeResolution {
         if (!tableName) {
-            return { found: false, reason: `column "${field}" needs a statically known table (requires the Phase 4 type system)` };
+            return { found: false, ...coded('scope.columnNeedsTable', { column: field }) };
         }
         if (!this.schema.getColumn(tableName, field)) {
-            return { found: false, reason: `unknown column "${field}" on table "${tableName}"` };
+            return { found: false, ...coded('scope.unknownColumn', { column: field, table: tableName }) };
         }
         return { found: true, scope: { owner: node, tableName: undefined } };
     }
@@ -371,12 +367,12 @@ export class MinabScopeResolver {
             const owningArray = isBlock(current)
                 ? current.statements
                 : isFunctionDecl(current)
-                ? current.body
-                : isLoopStatement(current)
-                ? current.statements
-                : isModel(current)
-                ? current.declarations
-                : undefined;
+                  ? current.body
+                  : isLoopStatement(current)
+                    ? current.statements
+                    : isModel(current)
+                      ? current.declarations
+                      : undefined;
             if (owningArray) {
                 const decl = owningArray.find((s): s is VariableDecl => isVariableDecl(s) && s.name === name);
                 if (decl) return decl;

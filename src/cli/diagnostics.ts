@@ -64,12 +64,7 @@ export function formatDiagnostic(diagnostic: Diagnostic, source: string, fileLab
     // source line and mirror them in the indent so the two still line up.
     const indent = [...lineText.slice(0, start.character)].map(c => (c === '\t' ? '\t' : ' ')).join('');
 
-    return [
-        head,
-        `${gutter} | ${lineText}`,
-        `${pad} | ${indent}${'^'.repeat(width)}`,
-        ...restLines.map(line => `${pad} | ${line}`)
-    ].join('\n');
+    return [head, `${gutter} | ${lineText}`, `${pad} | ${indent}${'^'.repeat(width)}`, ...restLines.map(line => `${pad} | ${line}`)].join('\n');
 }
 
 /** "2 errors, 1 warning" — plural-correct, and silent when there's nothing to count. */

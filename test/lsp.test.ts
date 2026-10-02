@@ -23,9 +23,7 @@ const fixtureSchema: MinabSchema = {
     tables: [
         {
             name: 'Customer',
-            columns: [
-                { name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } }
-            ]
+            columns: [{ name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } }]
         }
     ],
     functions: []
@@ -97,5 +95,21 @@ describe('go-to-definition on `#alias` (spec §2.2)', () => {
         });
 
         expect(links).toBeUndefined();
+    });
+});
+
+describe('diagnostics sent by the language server (D35)', () => {
+    // The language server publishes `document.diagnostics` as they are, so the
+    // code and the parameters reach the editor with each one.
+    test('a checker diagnostic carries its stable code and parameters', async () => {
+        const document = await parse(`EXISTS(#Nope[.id == 1])`, { validation: true });
+        const diagnostic = document.diagnostics?.find(d => d.code === 'scope.unknownAlias');
+        expect(diagnostic).toBeDefined();
+        expect((diagnostic!.data as { params: unknown }).params).toEqual({ name: 'Nope' });
+    });
+
+    test('a parser error carries the code syntax.parser', async () => {
+        const document = await parse(`FROM`, { validation: true });
+        expect(document.diagnostics?.some(d => d.code === 'syntax.parser')).toBe(true);
     });
 });

@@ -31,8 +31,9 @@ describe('parseConfig without a file system', () => {
     });
 
     test('names the JSON path of a bad column type', () => {
-        expect(() => parseConfig({ schema: { tables: [{ name: 'T', columns: { x: 'NUMBER' } }] } }))
-            .toThrow('schema.tables[0].columns.x: unknown type "NUMBER"');
+        expect(() => parseConfig({ schema: { tables: [{ name: 'T', columns: { x: 'NUMBER' } }] } })).toThrow(
+            'schema.tables[0].columns.x: unknown type "NUMBER"'
+        );
     });
 
     test('parseJsonObject reports where invalid JSON came from', () => {

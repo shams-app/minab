@@ -37,7 +37,11 @@ export function HostPanel({ tab, onTabChange, ruleKind, error, onCollapse, child
                 />
                 {onCollapse && <IconButton icon="chevron-down" label="Hide host panel" size="sm" onClick={onCollapse} />}
             </header>
-            {error && <Callout tone="danger" icon="alert" title="Host config error">{error}</Callout>}
+            {error && (
+                <Callout tone="danger" icon="alert" title="Host config error">
+                    {error}
+                </Callout>
+            )}
             <div className="mb-panel-body" id="host-panel" role="tabpanel" aria-labelledby={`host-tab-${tab}`}>
                 {children}
             </div>

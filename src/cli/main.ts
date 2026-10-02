@@ -31,15 +31,7 @@ import type { Diagnostic } from 'vscode-languageserver-types';
 import { isQuery, type Model } from '../language/generated/ast.js';
 import { createMinabServices } from '../language/minab-module.js';
 import type { MinabServices } from '../language/minab-module.js';
-import {
-    DEFAULT_CONFIG_NAME,
-    ConfigError,
-    discoverConfig,
-    emptyConfig,
-    loadConfigFile,
-    loadRecordFile,
-    type LoadedConfig
-} from './config.js';
+import { DEFAULT_CONFIG_NAME, ConfigError, discoverConfig, emptyConfig, loadConfigFile, loadRecordFile, type LoadedConfig } from './config.js';
 import { formatDiagnostic, isError, summarize } from './diagnostics.js';
 import { DataSourceError, FixtureExecutor, PostgresExecutor, traced } from './executors.js';
 import { formatSql, formatValue } from '../host/format.js';
@@ -146,14 +138,19 @@ function parseArgs(argv: string[]): Options | { help: true } | { version: true }
 }
 
 const ALIASES: Record<string, string | undefined> = {
-    '-c': 'config', '--config': 'config',
-    '-d': 'database', '--database': 'database',
-    '-r': 'record', '--record': 'record',
+    '-c': 'config',
+    '--config': 'config',
+    '-d': 'database',
+    '--database': 'database',
+    '-r': 'record',
+    '--record': 'record',
     '--field': 'field',
     '--json': 'json',
     '--trace': 'trace',
-    '-h': 'help', '--help': 'help',
-    '-v': 'version', '--version': 'version'
+    '-h': 'help',
+    '--help': 'help',
+    '-v': 'version',
+    '--version': 'version'
 };
 
 const VALUED = new Set(['config', 'database', 'record', 'field']);
@@ -216,6 +213,10 @@ async function execute(options: Options, io: CliIo): Promise<number> {
     }
     if (diagnostics.some(isError)) {
         io.err(`minab: ${summarize(diagnostics)} — ${STOPPED[options.command]}`);
+        if (options.command === 'check' && options.json) {
+            // Tools read this: each diagnostic carries its stable `code` and `data.params`.
+            io.out(JSON.stringify({ ok: false, diagnostics }, null, 2));
+        }
         return EXIT_PROGRAM_ERROR;
     }
 
@@ -250,28 +251,22 @@ function compile(model: Model, services: MinabServices, options: Options, io: Cl
         io.err('minab: nothing to compile — the program has no query or expression');
         return EXIT_PROGRAM_ERROR;
     }
-    const compiled = isQuery(model.tail)
-        ? services.sqlCompiler.compileQuery(model.tail)
-        : services.sqlCompiler.compileValue(model.tail);
+    const compiled = isQuery(model.tail) ? services.sqlCompiler.compileQuery(model.tail) : services.sqlCompiler.compileValue(model.tail);
     if (!compiled.ok) {
         // Refusing to compile is how the compiler tells the interpreter to
         // take a node itself (ADR 0001), so this is a legitimate answer to
         // `compile` — not a crash, and `run` may well still work.
-        io.err(`minab: this program does not compile to SQL on its own: ${compiled.reason}\n` +
-               `Use "minab run" to evaluate it — the interpreter handles what SQL can't, and pushes the rest down.`);
+        io.err(
+            `minab: this program does not compile to SQL on its own: ${compiled.reason}\n` +
+                `Use "minab run" to evaluate it — the interpreter handles what SQL can't, and pushes the rest down.`
+        );
         return EXIT_PROGRAM_ERROR;
     }
     io.out(options.json ? JSON.stringify(compiled.query, null, 2) : formatSql(compiled.query));
     return EXIT_OK;
 }
 
-async function run(
-    model: Model,
-    services: MinabServices,
-    config: LoadedConfig,
-    options: Options,
-    io: CliIo
-): Promise<number> {
+async function run(model: Model, services: MinabServices, config: LoadedConfig, options: Options, io: CliIo): Promise<number> {
     const databaseUrl = options.database ?? process.env.MINAB_DATABASE_URL ?? config.database;
     const postgres = databaseUrl ? await PostgresExecutor.connect(databaseUrl) : undefined;
     const base = postgres ?? new FixtureExecutor(config.responses);

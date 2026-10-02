@@ -211,9 +211,7 @@ export class MinabSqlCompiler {
         const select = this.selectClause(query, ctx, scopes);
         const from = this.fromClause(query, scope, ctx, scopes);
         const where = query.whereClause ? ` WHERE ${this.expression(query.whereClause.condition, ctx, scopes)}` : '';
-        const groupBy = query.groupByClause
-            ? ` GROUP BY ${query.groupByClause.keys.map(k => this.expression(k, ctx, scopes)).join(', ')}`
-            : '';
+        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.expression(k, ctx, scopes)).join(', ')}` : '';
         const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
             ? ` ORDER BY ${query.orderByClause.items
@@ -239,9 +237,7 @@ export class MinabSqlCompiler {
         if (query.groupByClause) {
             scope.groupKeys = query.groupByClause.keys;
         }
-        scope.selectAliases = new Set(
-            (query.selectClause?.items ?? []).flatMap(i => (i.alias ? [i.alias] : []))
-        );
+        scope.selectAliases = new Set((query.selectClause?.items ?? []).flatMap(i => (i.alias ? [i.alias] : [])));
         return scope;
     }
 
@@ -258,9 +254,7 @@ export class MinabSqlCompiler {
     }
 
     private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
-        const source = scope.alias === scope.table
-            ? ` FROM ${quoteIdent(scope.table)}`
-            : ` FROM ${quoteIdent(scope.table)} AS ${quoteIdent(scope.alias)}`;
+        const source = scope.alias === scope.table ? ` FROM ${quoteIdent(scope.table)}` : ` FROM ${quoteIdent(scope.table)} AS ${quoteIdent(scope.alias)}`;
         const joins = query.joins.map(join => {
             const keyword = join.cross ? 'CROSS JOIN' : join.left ? 'LEFT JOIN' : 'JOIN';
             const target = `${quoteIdent(this.table(join.source).name)} AS ${quoteIdent(join.alias)}`;
@@ -340,8 +334,7 @@ export class MinabSqlCompiler {
             // A scalar field of a record the *caller* holds (`^.room_id`)
             // is already in memory — bind it rather than emitting a
             // subquery to fetch back something we were handed.
-            const inMemory = receiver?.kind === 'outer'
-                && this.columnSchema(this.tableOf(receiver), expr.member).type.kind === 'scalar';
+            const inMemory = receiver?.kind === 'outer' && this.columnSchema(this.tableOf(receiver), expr.member).type.kind === 'scalar';
             if (!receiver || inMemory) {
                 ctx.reset(mark);
                 return this.outerScalar(expr, ctx, scopes.length);
@@ -359,9 +352,7 @@ export class MinabSqlCompiler {
      */
     private rowRef(expr: Expression, ctx: Ctx, scopes: SqlScope[]): RowRef | undefined {
         if (isCurrentRecord(expr)) {
-            const base: RowRef = scopes.length === 0
-                ? this.outerRow(0, ctx)
-                : { kind: 'scope', alias: scopes[0].alias, table: scopes[0].table };
+            const base: RowRef = scopes.length === 0 ? this.outerRow(0, ctx) : { kind: 'scope', alias: scopes[0].alias, table: scopes[0].table };
             return expr.field ? this.follow(base, expr.field, ctx) : base;
         }
         if (isParentRecord(expr)) {
@@ -528,7 +519,7 @@ export class MinabSqlCompiler {
 
         const source = this.tryCollectionSource(arg, ctx, scopes);
         if (source) {
-            return this.aggregateOverSource(name, source, undefined, ctx);
+            return this.aggregateOverSource(name, source, undefined);
         }
         // A broadcast traversal — `SUM(.orders.total)`: the collection is
         // the receiver, the aggregated value a column on its element.
@@ -537,7 +528,7 @@ export class MinabSqlCompiler {
             if (receiverSource) {
                 const inner = { alias: receiverSource.alias, table: receiverSource.table };
                 const column = this.column({ kind: 'scope', ...inner }, arg.member, ctx);
-                return this.aggregateOverSource(name, receiverSource, column, ctx);
+                return this.aggregateOverSource(name, receiverSource, column);
             }
         }
         if (name === 'EXISTS' || name === 'ALL' || name === 'ANY') {
@@ -548,7 +539,7 @@ export class MinabSqlCompiler {
         return `${name}(${inner})`;
     }
 
-    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined, ctx: Ctx): string {
+    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined): string {
         const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
         const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
         if (name === 'EXISTS') {
@@ -649,16 +640,18 @@ export class MinabSqlCompiler {
         const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
         if (!field) fail('not a relation field');
         const owner = isCurrentRecord(expr)
-            ? (scopes.length > 0
+            ? scopes.length > 0
                 ? ({ kind: 'scope', alias: scopes[0].alias, table: scopes[0].table } as RowRef)
-                : this.outerRow(0, ctx))
+                : this.outerRow(0, ctx)
             : this.rowRef((expr as { receiver: Expression }).receiver, ctx, scopes);
         if (!owner) fail(`"${field}" has no owning row here`);
         const column = this.columnSchema(this.tableOf(owner), field);
         if (column.type.kind !== 'collection') fail(`"${field}" is not a to-many relation`);
         const foreignKey = column.type.foreignKey;
         if (!foreignKey) {
-            fail(`the schema does not say which column on "${column.type.table}" links back to "${this.tableOf(owner)}" (set foreignKey on the "${field}" column)`);
+            fail(
+                `the schema does not say which column on "${column.type.table}" links back to "${this.tableOf(owner)}" (set foreignKey on the "${field}" column)`
+            );
         }
         const alias = ctx.freshAlias();
         const ownerKey = this.identity(owner);

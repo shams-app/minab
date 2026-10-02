@@ -22,10 +22,11 @@ export function useGallery(): GalleryView {
 
     const results = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return examples.filter(e =>
-            (active.length === 0 || active.every(tag => e.tags.includes(tag)))
-            && (level === 'all' || e.level === level)
-            && (!q || `${e.title} ${e.summary} ${e.source} ${e.tags.join(' ')}`.toLowerCase().includes(q))
+        return examples.filter(
+            e =>
+                (active.length === 0 || active.every(tag => e.tags.includes(tag))) &&
+                (level === 'all' || e.level === level) &&
+                (!q || `${e.title} ${e.summary} ${e.source} ${e.tags.join(' ')}`.toLowerCase().includes(q))
         );
     }, [query, active, level]);
 

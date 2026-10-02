@@ -14,11 +14,15 @@ export function EmbedFrame({ title, editor, output, runButton, openHref }: Embed
     return (
         <div className="mb-embed">
             <header className="mb-embed-head">
-                <a href={openHref} target="_blank" rel="noreferrer" className="mb-embed-brand"><Wordmark /></a>
+                <a href={openHref} target="_blank" rel="noreferrer" className="mb-embed-brand">
+                    <Wordmark />
+                </a>
                 {title && <span className="mb-embed-title">{title}</span>}
                 <div className="mb-row">
                     {runButton}
-                    <a className="mb-button" data-variant="ghost" data-size="sm" href={openHref} target="_blank" rel="noreferrer">Open in playground ↗</a>
+                    <a className="mb-button" data-variant="ghost" data-size="sm" href={openHref} target="_blank" rel="noreferrer">
+                        Open in playground ↗
+                    </a>
                 </div>
             </header>
             <div className="mb-embed-body">

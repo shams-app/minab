@@ -57,9 +57,7 @@ function tableViews(schema: { tables: unknown[] }, seed: Record<string, Row[]>):
     return (schema.tables as Array<{ name: string; primaryKey?: string; columns?: Record<string, unknown> | Array<{ name: string; type: unknown }> }>)
         .filter(t => t && typeof t.name === 'string')
         .map(t => {
-            const entries: Array<[string, unknown]> = Array.isArray(t.columns)
-                ? t.columns.map(c => [c.name, c.type])
-                : Object.entries(t.columns ?? {});
+            const entries: Array<[string, unknown]> = Array.isArray(t.columns) ? t.columns.map(c => [c.name, c.type]) : Object.entries(t.columns ?? {});
             return {
                 name: t.name,
                 primaryKey: t.primaryKey,
@@ -68,7 +66,8 @@ function tableViews(schema: { tables: unknown[] }, seed: Record<string, Row[]>):
                     if (typeof type === 'string') return { name, type, kind: 'scalar' as const };
                     const spec = (type ?? {}) as { ref?: string; collection?: string; foreignKey?: string; type?: string };
                     if (spec.ref) return { name, type: `→ ${spec.ref}`, kind: 'ref' as const, target: spec.ref, via: spec.foreignKey };
-                    if (spec.collection) return { name, type: `⇉ ${spec.collection}[]`, kind: 'collection' as const, target: spec.collection, via: spec.foreignKey };
+                    if (spec.collection)
+                        return { name, type: `⇉ ${spec.collection}[]`, kind: 'collection' as const, target: spec.collection, via: spec.foreignKey };
                     return { name, type: spec.type ?? '?', kind: 'scalar' as const };
                 })
             };
@@ -92,31 +91,34 @@ export function useHost(): HostView {
 
     const presets = useMemo(() => {
         if (scope.startsWith('lesson:')) return lessonById(scope.slice(7))?.presets ?? [];
-        return workspace.exampleId ? exampleById(workspace.exampleId)?.presets ?? [] : [];
+        return workspace.exampleId ? (exampleById(workspace.exampleId)?.presets ?? []) : [];
     }, [scope, workspace.exampleId]);
 
     const { schema, seed } = useMemo(() => hostContents(host), [host]);
     const tables = useMemo(() => tableViews(schema, seed), [schema, seed]);
 
-    const setSchemaJson = useCallback((text: string): string | undefined => {
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(text);
-        } catch (e) {
-            return `Invalid JSON — ${(e as Error).message}`;
-        }
-        if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { tables?: unknown }).tables)) {
-            return 'Expected an object with a "tables" array.';
-        }
-        const dataset = host.dataset ? datasetById(host.dataset) : undefined;
-        // Keep the dataset's rows for tables that still exist, so editing a column doesn't empty the database.
-        const nextSeed: Record<string, Row[]> = {};
-        for (const table of (parsed as { tables: Array<{ name?: string }> }).tables) {
-            if (table?.name && (host.seed ?? dataset?.seed)?.[table.name]) nextSeed[table.name] = (host.seed ?? dataset!.seed)[table.name];
-        }
-        updateHost({ schema: parsed as WorkspaceHost['schema'], seed: nextSeed });
-        return undefined;
-    }, [host]);
+    const setSchemaJson = useCallback(
+        (text: string): string | undefined => {
+            let parsed: unknown;
+            try {
+                parsed = JSON.parse(text);
+            } catch (e) {
+                return `Invalid JSON — ${(e as Error).message}`;
+            }
+            if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { tables?: unknown }).tables)) {
+                return 'Expected an object with a "tables" array.';
+            }
+            const dataset = host.dataset ? datasetById(host.dataset) : undefined;
+            // Keep the dataset's rows for tables that still exist, so editing a column doesn't empty the database.
+            const nextSeed: Record<string, Row[]> = {};
+            for (const table of (parsed as { tables: Array<{ name?: string }> }).tables) {
+                if (table?.name && (host.seed ?? dataset?.seed)?.[table.name]) nextSeed[table.name] = (host.seed ?? dataset!.seed)[table.name];
+            }
+            updateHost({ schema: parsed as WorkspaceHost['schema'], seed: nextSeed });
+            return undefined;
+        },
+        [host]
+    );
 
     return {
         host,
@@ -152,14 +154,17 @@ export function useHost(): HostView {
 /** Local UI state for a table browser: which table, its rows, loading. */
 export function useTablePreview(preview: HostView['preview']) {
     const [state, setState] = useState<{ table?: string; data?: TablePreview; loading: boolean; error?: string }>({ loading: false });
-    const load = useCallback(async (table: string) => {
-        setState(s => ({ ...s, table, loading: true, error: undefined }));
-        try {
-            const data = await preview(table);
-            setState({ table, data, loading: false });
-        } catch (e) {
-            setState({ table, loading: false, error: (e as Error).message });
-        }
-    }, [preview]);
+    const load = useCallback(
+        async (table: string) => {
+            setState(s => ({ ...s, table, loading: true, error: undefined }));
+            try {
+                const data = await preview(table);
+                setState({ table, data, loading: false });
+            } catch (e) {
+                setState({ table, loading: false, error: (e as Error).message });
+            }
+        },
+        [preview]
+    );
     return { ...state, load };
 }

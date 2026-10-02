@@ -12,7 +12,13 @@ const CodeEditor = lazy(() => import('./CodeEditor.js'));
 
 export function LazyCodeEditor(props: CodeEditorProps) {
     return (
-        <Suspense fallback={<div className="mb-editor-fallback" aria-busy="true"><CodeBlock code={props.value} language={props.language === 'json' ? 'plain' : 'minab'} /></div>}>
+        <Suspense
+            fallback={
+                <div className="mb-editor-fallback" aria-busy="true">
+                    <CodeBlock code={props.value} language={props.language === 'json' ? 'plain' : 'minab'} />
+                </div>
+            }
+        >
             <CodeEditor {...props} />
         </Suspense>
     );

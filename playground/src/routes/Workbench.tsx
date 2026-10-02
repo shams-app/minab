@@ -41,7 +41,15 @@ function useAst(source: string, active: boolean) {
         if (!active) return;
         setLoading(true);
         const timer = setTimeout(() => {
-            engineClient().call('ast', source).then(t => { setTree(t); setLoading(false); }, () => setLoading(false));
+            engineClient()
+                .call('ast', source)
+                .then(
+                    t => {
+                        setTree(t);
+                        setLoading(false);
+                    },
+                    () => setLoading(false)
+                );
         }, 250);
         return () => clearTimeout(timer);
     }, [source, active]);
@@ -73,8 +81,8 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
     const rows = report?.result?.kind === 'rows' ? report.result.rows.length : undefined;
     const onSelectTable = useCallback((t: string) => void tables.load(t), [tables.load]);
 
-    const toolbar = variant === 'play'
-        ? (
+    const toolbar =
+        variant === 'play' ? (
             <Toolbar
                 example={wb.example}
                 examples={examples}
@@ -90,11 +98,14 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
                 onExport={() => void share.exportBundle().catch(e => toast(`Export failed: ${(e as Error).message}`, 'error'))}
                 onOpenReference={() => setReferenceOpen(true)}
             />
-        )
-        : (
+        ) : (
             <div className="mb-toolbar mb-toolbar-compact" role="toolbar" aria-label="Program">
-                <div className="mb-toolbar-start"><span className="mb-muted">Your program</span></div>
-                <div className="mb-toolbar-end"><RunButton onRun={wb.run} running={wb.running} /></div>
+                <div className="mb-toolbar-start">
+                    <span className="mb-muted">Your program</span>
+                </div>
+                <div className="mb-toolbar-end">
+                    <RunButton onRun={wb.run} running={wb.running} />
+                </div>
             </div>
         );
 
@@ -172,13 +183,27 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
                         jsonEditor={
                             <div className="mb-json-editor">
                                 <div className="mb-json-editor-slot">
-                                    <LazyCodeEditor path={`${editorPath}.schema.json`} language="json" value={schemaText} onChange={setSchemaText} ariaLabel="Schema JSON" jsonSchema={SCHEMA_EDITOR_SCHEMA} compact />
+                                    <LazyCodeEditor
+                                        path={`${editorPath}.schema.json`}
+                                        language="json"
+                                        value={schemaText}
+                                        onChange={setSchemaText}
+                                        ariaLabel="Schema JSON"
+                                        jsonSchema={SCHEMA_EDITOR_SCHEMA}
+                                        compact
+                                    />
                                 </div>
                                 <div className="mb-row">
-                                    <Button size="sm" variant="primary" onClick={() => {
-                                        const error = host.setSchemaJson(schemaText);
-                                        toast(error ?? 'Schema applied — the program is re-checked against it.', error ? 'error' : 'success');
-                                    }}>Apply schema</Button>
+                                    <Button
+                                        size="sm"
+                                        variant="primary"
+                                        onClick={() => {
+                                            const error = host.setSchemaJson(schemaText);
+                                            toast(error ?? 'Schema applied — the program is re-checked against it.', error ? 'error' : 'success');
+                                        }}
+                                    >
+                                        Apply schema
+                                    </Button>
                                     <span className="mb-muted">Rows are kept for tables that still exist.</span>
                                 </div>
                             </div>
@@ -240,17 +265,28 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
                 editor={editor}
                 statusBar={statusBar}
                 output={output}
-                host={<HostPanel tab={host.tab} onTabChange={host.setTab} ruleKind={host.ruleKind} error={host.error} onCollapse={() => setHostOpen(false)}>{hostBody}</HostPanel>}
+                host={
+                    <HostPanel tab={host.tab} onTabChange={host.setTab} ruleKind={host.ruleKind} error={host.error} onCollapse={() => setHostOpen(false)}>
+                        {hostBody}
+                    </HostPanel>
+                }
                 hostOpen={hostOpen}
                 hostCollapsedBar={
                     <button type="button" className="mb-host-reopen" onClick={() => setHostOpen(true)}>
-                        <Icon name="database" size={14} /> Host — schema, data{host.ruleKind !== 'none' ? ', record' : ''} <Icon name="chevron-right" size={12} />
+                        <Icon name="database" size={14} /> Host — schema, data{host.ruleKind !== 'none' ? ', record' : ''}{' '}
+                        <Icon name="chevron-right" size={12} />
                     </button>
                 }
-                runFab={<div className="mb-run-fab"><RunButton onRun={wb.run} running={wb.running} /></div>}
+                runFab={
+                    <div className="mb-run-fab">
+                        <RunButton onRun={wb.run} running={wb.running} />
+                    </div>
+                }
                 mobileBadges={{ result: rows }}
             />
-            <div className="mb-visually-hidden" aria-live="polite">{wb.announcement}</div>
+            <div className="mb-visually-hidden" aria-live="polite">
+                {wb.announcement}
+            </div>
         </>
     );
 }

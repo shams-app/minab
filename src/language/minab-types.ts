@@ -11,14 +11,10 @@
  * from spec §3) and `null`/`error` (bookkeeping — see below).
  */
 
-export type LogicalTypeBase =
-    | 'TEXT' | 'CITEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN'
-    | 'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON';
+export type LogicalTypeBase = 'TEXT' | 'CITEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' | 'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON';
 
 /** Types orderable with `<`/`<=`/`>`/`>=` (spec §7.2 — UUID has no ordering). */
-export const ORDERABLE_BASES: ReadonlySet<LogicalTypeBase> = new Set([
-    'TEXT', 'CITEXT', 'INTEGER', 'DECIMAL', 'DATE', 'TIME', 'DATETIME'
-]);
+export const ORDERABLE_BASES: ReadonlySet<LogicalTypeBase> = new Set(['TEXT', 'CITEXT', 'INTEGER', 'DECIMAL', 'DATE', 'TIME', 'DATETIME']);
 
 export const NUMERIC_BASES: ReadonlySet<LogicalTypeBase> = new Set(['INTEGER', 'DECIMAL']);
 export const TEXT_BASES: ReadonlySet<LogicalTypeBase> = new Set(['TEXT', 'CITEXT']);
@@ -56,10 +52,7 @@ export interface NullType {
 
 export type MinabType = ScalarType | TupleType | RecordType | CollectionType | NullType;
 
-export function scalarType(
-    base: LogicalTypeBase,
-    options: { nullable?: boolean; array?: boolean; arrayNullable?: boolean } = {}
-): ScalarType {
+export function scalarType(base: LogicalTypeBase, options: { nullable?: boolean; array?: boolean; arrayNullable?: boolean } = {}): ScalarType {
     return {
         kind: 'scalar',
         base,
@@ -125,8 +118,7 @@ export function baseTypesEqual(a: MinabType, b: MinabType): boolean {
             if (b.kind !== 'scalar' || a.array !== b.array) return false;
             return a.base === b.base || (NUMERIC_BASES.has(a.base) && NUMERIC_BASES.has(b.base));
         case 'tuple':
-            return b.kind === 'tuple' && a.elements.length === b.elements.length
-                && a.elements.every((e, i) => baseTypesEqual(e, b.elements[i]));
+            return b.kind === 'tuple' && a.elements.length === b.elements.length && a.elements.every((e, i) => baseTypesEqual(e, b.elements[i]));
         case 'record':
             return b.kind === 'record' && a.table === b.table;
         case 'collection':
@@ -165,8 +157,11 @@ export function isAssignableTo(value: MinabType, target: MinabType): boolean {
             return value.array ? !(value.arrayNullable && !target.arrayNullable) : !(value.nullable && !target.nullable);
         }
         case 'tuple':
-            return target.kind === 'tuple' && value.elements.length === target.elements.length
-                && value.elements.every((e, i) => isAssignableTo(e, target.elements[i]));
+            return (
+                target.kind === 'tuple' &&
+                value.elements.length === target.elements.length &&
+                value.elements.every((e, i) => isAssignableTo(e, target.elements[i]))
+            );
         case 'record':
             return target.kind === 'record' && value.table === target.table;
         case 'collection':

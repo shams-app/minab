@@ -5,12 +5,7 @@
  */
 
 import { AstUtils, type AstNode, type LangiumDocument } from 'langium';
-import {
-    isFunctionDecl,
-    isQuery,
-    isVariableDecl,
-    type Model
-} from '../../../src/language/generated/ast.js';
+import { isFunctionDecl, isQuery, isVariableDecl, type Model } from '../../../src/language/generated/ast.js';
 import { formatType } from '../../../src/language/minab-types.js';
 import type { MinabServices } from '../../../src/language/minab-module.js';
 import type { CheckOnlyConstruct, ProgramInfo, ProgramKind, Range } from './protocol.js';

@@ -1,0 +1,17 @@
+{
+  "mode": "run",
+  "json": [
+    {
+      "customer_name": "Ada Lovelace",
+      "total_spent": 4820.5,
+      "order_count": 12
+    },
+    {
+      "customer_name": "Grace Hopper",
+      "total_spent": 3180,
+      "order_count": 9
+    }
+  ],
+  "statements": 1,
+  "compiles": true
+}

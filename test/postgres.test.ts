@@ -88,10 +88,18 @@ class Capture implements CliIo {
     readonly stdout: string[] = [];
     readonly stderr: string[] = [];
     constructor(readonly cwd: string) {}
-    out(text: string): void { this.stdout.push(text); }
-    err(text: string): void { this.stderr.push(text); }
-    get output(): string { return this.stdout.join('\n'); }
-    get errors(): string { return this.stderr.join('\n'); }
+    out(text: string): void {
+        this.stdout.push(text);
+    }
+    err(text: string): void {
+        this.stderr.push(text);
+    }
+    get output(): string {
+        return this.stdout.join('\n');
+    }
+    get errors(): string {
+        return this.stderr.join('\n');
+    }
 }
 
 /** The CLI's table output, as cells — so an assertion says what the rows are, not how wide a column happened to be. */
@@ -106,10 +114,7 @@ async function run(program: string, configOverrides: Record<string, unknown> = {
     writeFileSync(join(dir, `${name}.minab`), program);
     writeFileSync(join(dir, `${name}.json`), JSON.stringify({ schema: SCHEMA, ...configOverrides }));
     const capture = new Capture(dir);
-    const code = await runCli(
-        ['run', `${name}.minab`, '--config', `${name}.json`, '--database', connectionString!],
-        capture
-    );
+    const code = await runCli(['run', `${name}.minab`, '--config', `${name}.json`, '--database', connectionString!], capture);
     expect(capture.errors).toBe('');
     expect(code).toBe(EXIT_OK);
     return capture;

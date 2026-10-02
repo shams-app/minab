@@ -20,14 +20,7 @@
  */
 
 import type { Row, SqlQuery } from '../language/minab-executor.js';
-import {
-    scalarType,
-    type ColumnType,
-    type MinabColumnSchema,
-    type MinabRuleContext,
-    type MinabSchema,
-    type MinabTableSchema
-} from '../language/schema.js';
+import { scalarType, type ColumnType, type MinabColumnSchema, type MinabRuleContext, type MinabSchema, type MinabTableSchema } from '../language/schema.js';
 import type { LogicalTypeBase, MinabType, ScalarType } from '../language/minab-types.js';
 
 /** A config that can't be used — always reported as a plain message, never a stack trace. */
@@ -60,8 +53,16 @@ export interface ParseConfigOptions {
 }
 
 const LOGICAL_BASES: ReadonlySet<string> = new Set<LogicalTypeBase>([
-    'TEXT', 'CITEXT', 'INTEGER', 'DECIMAL', 'BOOLEAN',
-    'DATE', 'TIME', 'DATETIME', 'UUID', 'JSON'
+    'TEXT',
+    'CITEXT',
+    'INTEGER',
+    'DECIMAL',
+    'BOOLEAN',
+    'DATE',
+    'TIME',
+    'DATETIME',
+    'UUID',
+    'JSON'
 ]);
 
 /**
@@ -198,9 +199,7 @@ export function parseRuleContext(spec: unknown, at: string): MinabRuleContext {
     if (spec.isFieldRule !== undefined && typeof spec.isFieldRule !== 'boolean') {
         throw new ConfigError(`${at}.isFieldRule: expected true or false, got ${describe(spec.isFieldRule)}`);
     }
-    const fieldType = spec.fieldType === undefined
-        ? undefined
-        : parseScalar(requireString(spec.fieldType, `${at}.fieldType`), `${at}.fieldType`);
+    const fieldType = spec.fieldType === undefined ? undefined : parseScalar(requireString(spec.fieldType, `${at}.fieldType`), `${at}.fieldType`);
     return {
         // `$` being legal at all is host-supplied (spec §6.2) — declaring a
         // field type is enough to mean it, so a config that names one
@@ -267,10 +266,7 @@ export function parseConfig(raw: Record<string, unknown>, options: ParseConfigOp
         ruleContext: parseRuleContext(raw.rule, 'rule'),
         record: parseInlineOrFile(raw.record, options, 'record') as Row | undefined,
         fieldValue: raw.fieldValue,
-        responses: parseResponses(
-            typeof raw.data === 'string' ? readReferenced(raw.data, options, 'data').responses : raw.data,
-            'data'
-        ),
+        responses: parseResponses(typeof raw.data === 'string' ? readReferenced(raw.data, options, 'data').responses : raw.data, 'data'),
         database: raw.database === undefined ? undefined : requireString(raw.database, 'database')
     };
 }

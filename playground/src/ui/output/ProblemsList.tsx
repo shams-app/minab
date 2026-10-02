@@ -12,13 +12,20 @@ const LABELS = { 1: 'error', 2: 'warning', 3: 'info', 4: 'hint' } as const;
 
 export function ProblemsList({ diagnostics, configError, onSelect }: ProblemsListProps) {
     if (diagnostics.length === 0 && !configError) {
-        return <EmptyState icon="check" title="No problems">The program parses, resolves and type-checks against this host’s schema.</EmptyState>;
+        return (
+            <EmptyState icon="check" title="No problems">
+                The program parses, resolves and type-checks against this host’s schema.
+            </EmptyState>
+        );
     }
     return (
         <ul className="mb-problems">
             {configError && (
                 <li className="mb-problem" data-severity="error">
-                    <Icon name="alert" /> <span><strong>Host config:</strong> {configError}</span>
+                    <Icon name="alert" />{' '}
+                    <span>
+                        <strong>Host config:</strong> {configError}
+                    </span>
                 </li>
             )}
             {diagnostics.map((d, i) => (
@@ -26,7 +33,9 @@ export function ProblemsList({ diagnostics, configError, onSelect }: ProblemsLis
                     <button type="button" className="mb-problem" data-severity={LABELS[d.severity]} onClick={() => onSelect(d.range)}>
                         <Icon name={d.severity === 1 ? 'alert' : 'info'} />
                         <span className="mb-problem-message">{d.message}</span>
-                        <span className="mb-problem-where">{d.source === 'syntax' ? 'syntax' : 'minab'} · {d.range.start.line + 1}:{d.range.start.character + 1}</span>
+                        <span className="mb-problem-where">
+                            {d.source === 'syntax' ? 'syntax' : 'minab'} · {d.range.start.line + 1}:{d.range.start.character + 1}
+                        </span>
                     </button>
                 </li>
             ))}

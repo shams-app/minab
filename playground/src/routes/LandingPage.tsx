@@ -13,7 +13,12 @@ import { EmptyState, Spinner } from '../ui/primitives/primitives.js';
 import type { RunReport } from '../engine/protocol.js';
 
 function DemoOutput({ report, loading }: { report?: RunReport; loading: boolean }) {
-    if (loading || !report) return <EmptyState icon="database" title="Starting PostgreSQL in your browser…"><Spinner /></EmptyState>;
+    if (loading || !report)
+        return (
+            <EmptyState icon="database" title="Starting PostgreSQL in your browser…">
+                <Spinner />
+            </EmptyState>
+        );
     if (report.stage === 'check') return <ProblemsList diagnostics={report.diagnostics} onSelect={() => undefined} />;
     if (report.result?.kind === 'rows') {
         return (
@@ -26,7 +31,13 @@ function DemoOutput({ report, loading }: { report?: RunReport; loading: boolean 
     if (report.result?.kind === 'verdict') {
         return (
             <>
-                <VerdictCard value={report.result.value} kind={report.program.kind} subject={{ recordTable: 'Booking' }} statements={report.trace.length} onShowExecution={() => undefined} />
+                <VerdictCard
+                    value={report.result.value}
+                    kind={report.program.kind}
+                    subject={{ recordTable: 'Booking' }}
+                    statements={report.trace.length}
+                    onShowExecution={() => undefined}
+                />
                 {report.trace[0] && <CodeBlock code={prettySql(report.trace[0].text)} language="sql" caption="The one statement that reached Postgres" wrap />}
             </>
         );

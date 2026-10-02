@@ -43,7 +43,10 @@ function parseLine(line) {
     }
     const code = parts[0].charAt(0);
     if (code === 'R' && parts.length >= 3) {
-        return [{ status: 'deleted', path: parts[1] }, { status: 'added', path: parts[2] }];
+        return [
+            { status: 'deleted', path: parts[1] },
+            { status: 'added', path: parts[2] }
+        ];
     }
     if (code === 'C' && parts.length >= 3) {
         return [{ status: 'added', path: parts[2] }];
@@ -58,8 +61,7 @@ function parseLine(line) {
  * @param {Change} change
  */
 function problemWith(phase, { status, path }) {
-    const only = (allowed, what) =>
-        allowed.includes(phase) ? null : `${what} may be changed only by ${allowed.map(id => `[${id}]`).join(', ')}`;
+    const only = (allowed, what) => (allowed.includes(phase) ? null : `${what} may be changed only by ${allowed.map(id => `[${id}]`).join(', ')}`);
 
     if (path === 'CHANGELOG.md' || path === 'vscode-extension/CHANGELOG.md') {
         return only(RELEASE_CHANGELOG, 'a CHANGELOG (write changes/<ID>.md instead)');

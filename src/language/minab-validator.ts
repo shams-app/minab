@@ -28,7 +28,7 @@
  * mistake, one diagnostic.
  */
 
-import type { ValidationAcceptor, ValidationChecks } from 'langium';
+import type { AstNode, DiagnosticInfo, ValidationAcceptor, ValidationChecks } from 'langium';
 import {
     isQuery,
     isTypeRef,
@@ -54,10 +54,20 @@ import {
     type VariableDecl,
     type WhereClause
 } from './generated/ast.js';
+import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
 import { isBuiltinName } from './minab-builtins.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
+
+/**
+ * Reports a coded diagnostic: the English message is the text, the code goes
+ * to the LSP `code` field, and the parameters go to `data.params`, so a host
+ * can translate the message by its code (decision D35).
+ */
+function report<N extends AstNode>(accept: ValidationAcceptor, diagnostic: CodedMessage, info: DiagnosticInfo<N>): void {
+    accept(DIAGNOSTICS[diagnostic.code].severity, diagnostic.reason, { ...info, code: diagnostic.code, data: { params: diagnostic.params } });
+}
 
 export function registerValidationChecks(services: MinabServices): void {
     const registry = services.validation.ValidationRegistry;
@@ -92,21 +102,21 @@ export class MinabValidator {
 
     checkFieldValueInFieldRule(node: FieldValue, accept: ValidationAcceptor): void {
         if (!this.services.ruleContext.isFieldRule) {
-            accept('error', "'$' is only valid in a field-level rule; this program isn't being validated as one", { node });
+            report(accept, coded('rule.fieldValueOutsideFieldRule'), { node });
         }
     }
 
     checkGroupKeyRefScope(node: GroupKeyRef, accept: ValidationAcceptor): void {
         const result = this.services.scopeResolver.resolveGroupKeyRef(node);
         if (!result.found) {
-            accept('error', result.reason, { node });
+            report(accept, result, { node });
         }
     }
 
     checkNamedScopeResolves(node: NamedScope, accept: ValidationAcceptor): void {
         const result = this.services.scopeResolver.resolveNamedScope(node);
         if (!result.found) {
-            accept('error', result.reason, { node });
+            report(accept, result, { node });
         }
     }
 
@@ -121,13 +131,23 @@ export class MinabValidator {
      * stays quiet, so one mistake produces exactly one diagnostic.
      */
     checkExpressionTypeChecks(
-        node: BinaryExpression | UnaryExpression | MemberAccess | TupleAccess | FilterAccess
-            | CallExpression | FunctionCall | ListLiteral | IfExpr | SwitchExpr | CurrentRecord,
+        node:
+            | BinaryExpression
+            | UnaryExpression
+            | MemberAccess
+            | TupleAccess
+            | FilterAccess
+            | CallExpression
+            | FunctionCall
+            | ListLiteral
+            | IfExpr
+            | SwitchExpr
+            | CurrentRecord,
         accept: ValidationAcceptor
     ): void {
         const result = this.services.typeChecker.inferType(node);
         if (!result.ok && result.origin === node) {
-            accept('error', result.reason, { node });
+            report(accept, result, { node });
         }
     }
 
@@ -139,7 +159,7 @@ export class MinabValidator {
             return;
         }
         if (result.type.kind !== 'scalar' || result.type.base !== 'BOOLEAN' || result.type.array) {
-            accept('error', `expected a BOOLEAN condition, got ${formatType(result.type)}`, { node, property: 'condition' });
+            report(accept, coded('type.conditionNotBoolean', { actual: formatType(result.type) }), { node, property: 'condition' });
         }
     }
 
@@ -147,7 +167,7 @@ export class MinabValidator {
         node.keys.forEach((key, index) => {
             const result = this.services.typeChecker.inferType(key);
             if (result.ok && result.type.kind === 'collection') {
-                accept('error', `a to-many collection can't be used as a GROUPBY key (spec §3.4)`, { node, property: 'keys', index });
+                report(accept, coded('type.collectionAsGroupKey'), { node, property: 'keys', index });
             }
         });
     }
@@ -164,33 +184,36 @@ export class MinabValidator {
         switch (node.operator) {
             case '?=':
                 if (!isNullable(target)) {
-                    accept('error', '"?=" requires a nullable target', { node, property: 'operator' });
+                    report(accept, coded('null.optionalAssignNeedsNullable'), { node, property: 'operator' });
                 }
                 return;
             case '-=':
             case '*=':
             case '/=':
                 if (!isNumericTarget) {
-                    accept('error', `"${node.operator}" requires a numeric target, got ${formatType(target)}`, { node, property: 'operator' });
+                    report(accept, coded('type.assignNeedsNumericTarget', { operator: node.operator, actual: formatType(target) }), {
+                        node,
+                        property: 'operator'
+                    });
                     return;
                 }
                 break;
             case '+=':
                 if (!isNumericTarget && !isTextTarget) {
-                    accept('error', `"+=" requires a numeric or text target, got ${formatType(target)}`, { node, property: 'operator' });
+                    report(accept, coded('type.plusAssignTarget', { actual: formatType(target) }), { node, property: 'operator' });
                     return;
                 }
                 break;
             case '|=':
                 if (!(target.kind === 'record' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
-                    accept('error', `"|=" requires a ref- or JSON-typed target, got ${formatType(target)}`, { node, property: 'operator' });
+                    report(accept, coded('type.mergeAssignTarget', { actual: formatType(target) }), { node, property: 'operator' });
                 }
                 return;
             default:
                 break; // '='
         }
         if (!isAssignableTo(value, target)) {
-            accept('error', `can't assign ${formatType(value)} to a target of type ${formatType(target)} (no implicit coercion)`, { node, property: 'value' });
+            report(accept, coded('type.assignMismatch', { actual: formatType(value), expected: formatType(target) }), { node, property: 'value' });
         }
     }
 
@@ -200,13 +223,16 @@ export class MinabValidator {
         if (!valueResult.ok) return;
         const target = astTypeToMinabType(node.type);
         if (!isAssignableTo(valueResult.type, target)) {
-            accept('error', `can't initialize "${node.name}" (${formatType(target)}) with ${formatType(valueResult.type)} (no implicit coercion)`, { node, property: 'value' });
+            report(accept, coded('type.initializerMismatch', { name: node.name, expected: formatType(target), actual: formatType(valueResult.type) }), {
+                node,
+                property: 'value'
+            });
         }
     }
 
     checkFunctionDeclNotReservedName(node: FunctionDecl, accept: ValidationAcceptor): void {
         if (isBuiltinName(node.name)) {
-            accept('error', `"${node.name}" is a reserved built-in function name and can't be used for a user-defined function`, { node, property: 'name' });
+            report(accept, coded('call.reservedName', { name: node.name }), { node, property: 'name' });
         }
     }
 
@@ -222,7 +248,7 @@ export class MinabValidator {
         if (isQuery(node.tail)) {
             const isJson = isTypeRef(node.returnType) && node.returnType.base === 'JSON';
             if (!isJson) {
-                accept('error', 'a function whose body ends in a query must declare its return type as JSON (spec §8.6)', { node, property: 'returnType' });
+                report(accept, coded('query.functionReturnNotJson'), { node, property: 'returnType' });
             }
             return;
         }
@@ -230,11 +256,10 @@ export class MinabValidator {
         if (!tailResult.ok) return;
         const declared = astTypeToMinabType(node.returnType);
         if (!isAssignableTo(tailResult.type, declared)) {
-            accept(
-                'error',
-                `function body's result (${formatType(tailResult.type)}) doesn't match its declared return type ${formatType(declared)} (no implicit coercion)`,
-                { node, property: 'returnType' }
-            );
+            report(accept, coded('type.functionReturnMismatch', { actual: formatType(tailResult.type), expected: formatType(declared) }), {
+                node,
+                property: 'returnType'
+            });
         }
     }
 }

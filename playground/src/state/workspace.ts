@@ -58,7 +58,7 @@ export function hostContents(host: WorkspaceHost): { schema: { tables: unknown[]
     const dataset = host.dataset ? datasetById(host.dataset) : undefined;
     return {
         schema: host.schema ?? dataset?.schema ?? { tables: [] },
-        seed: host.seed ?? (host.schema ? {} : dataset?.seed ?? {})
+        seed: host.seed ?? (host.schema ? {} : (dataset?.seed ?? {}))
     };
 }
 

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
@@ -24,11 +24,19 @@ class Capture implements CliIo {
 
     constructor(readonly cwd: string) {}
 
-    out(text: string): void { this.stdout.push(text); }
-    err(text: string): void { this.stderr.push(text); }
+    out(text: string): void {
+        this.stdout.push(text);
+    }
+    err(text: string): void {
+        this.stderr.push(text);
+    }
 
-    get output(): string { return this.stdout.join('\n'); }
-    get errors(): string { return this.stderr.join('\n'); }
+    get output(): string {
+        return this.stdout.join('\n');
+    }
+    get errors(): string {
+        return this.stderr.join('\n');
+    }
 }
 
 async function cli(name: string, command: 'check' | 'run' | 'compile', ...flags: string[]) {
@@ -55,74 +63,55 @@ interface CheckOnlyExample {
     refusal: RegExp;
 }
 
-const MANIFEST: (RunExample | CheckOnlyExample)[] = [
-    {
-        name: 'first-query',
-        mode: 'run',
-        json: [
-            { id: 'o-104', total: 980, customer_name: 'Ada Lovelace' },
-            { id: 'o-87', total: 412.5, customer_name: 'Grace Hopper' }
-        ],
-        statements: 1,
-        compiles: true
-    },
-    {
-        name: 'top-customers',
-        mode: 'run',
-        json: [
-            { customer_name: 'Ada Lovelace', total_spent: 4820.5, order_count: 12 },
-            { customer_name: 'Grace Hopper', total_spent: 3180, order_count: 9 }
-        ],
-        statements: 1,
-        compiles: true
-    },
-    {
-        name: 'shipping-report',
-        mode: 'run',
-        json: [
-            { id: 'o-104', total: 980, shipped_at: '2026-09-02T10:14:00Z' },
-            { id: 'o-87', total: 412.5, shipped_at: '2026-09-05T16:40:00Z' }
-        ],
-        statements: 1,
-        compiles: true
-    },
-    {
-        name: 'cancelled-orders-limit',
-        mode: 'run',
-        json: [
-            { id: 'c-1', name: 'Ada Lovelace' },
-            { id: 'c-2', name: 'Grace Hopper' }
-        ],
-        statements: 1,
-        compiles: true
-    },
-    // The rule's local half (`.end_date > .start_date`) is settled from the
-    // record in hand; only the correlated half reaches the database.
-    { name: 'booking-overlap', mode: 'run', json: true, statements: 1, compiles: false },
-    { name: 'customer-exists', mode: 'run', json: true, statements: 1, compiles: false },
-    // Pure interpreter work: no table is touched, so nothing reaches the data source.
-    { name: 'discounted-total', mode: 'run', json: 170, statements: 0, compiles: false },
-    { name: 'order-status-switch', mode: 'run', json: true, statements: 0, compiles: false },
-    { name: 'overdue-loop', mode: 'check-only', refusal: /"LoopStatement" is not executed yet/ },
-    { name: 'order-dml', mode: 'check-only', refusal: /"UpdateStatement" is not executed yet/ },
-    { name: 'reconcile-overdue-accounts', mode: 'check-only', refusal: /"LoopStatement" inside a function body is not executed yet/ }
-];
+/**
+ * Each example keeps its own expected result in `examples/<name>/expected.json`
+ * (see `examples/README.md`), so two phases that change different examples
+ * never edit the same file. A folder that holds `<name>.minab` is an example
+ * and must have the file. A folder without such a program is not an example
+ * (later: `examples/nestjs`, `examples/browser`) and is ignored.
+ */
+const exampleDirectories = readdirSync(EXAMPLES_DIR, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name)
+    .sort()
+    .filter(name => existsSync(join(EXAMPLES_DIR, name, `${name}.minab`)));
 
-describe('examples/ stays in step with this manifest', () => {
-    const onDisk = readdirSync(EXAMPLES_DIR, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name)
-        .sort();
+function loadExample(name: string): RunExample | CheckOnlyExample {
+    const raw = JSON.parse(readFileSync(join(EXAMPLES_DIR, name, 'expected.json'), 'utf8')) as Record<string, unknown>;
+    if (raw.mode === 'run') {
+        return { name, mode: 'run', json: raw.json, statements: raw.statements as number, compiles: raw.compiles as boolean };
+    }
+    return { name, mode: 'check-only', refusal: new RegExp(raw.refusal as string) };
+}
 
-    test('every example directory is listed, and every listed example exists', () => {
-        expect(MANIFEST.map(example => example.name).sort()).toEqual(onDisk);
+describe('examples/ keeps one expected.json per example', () => {
+    test('there are examples to test', () => {
+        expect(exampleDirectories.length).toBeGreaterThan(0);
     });
 
-    test.each(onDisk)('%s holds its program and its config, and nothing else runnable', name => {
+    test.each(exampleDirectories)('%s has an expected.json that says how it is checked', name => {
+        const file = join(EXAMPLES_DIR, name, 'expected.json');
+        expect(existsSync(file), `examples/${name}/expected.json is missing`).toBe(true);
+        const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+        if (raw.mode === 'run') {
+            expect(Object.keys(raw).sort()).toEqual(['compiles', 'json', 'mode', 'statements']);
+            expect(typeof raw.statements).toBe('number');
+            expect(typeof raw.compiles).toBe('boolean');
+        } else {
+            expect(raw.mode).toBe('check-only');
+            expect(Object.keys(raw).sort()).toEqual(['mode', 'refusal']);
+            expect(typeof raw.refusal).toBe('string');
+        }
+    });
+
+    test.each(exampleDirectories)('%s holds its program, its config and its expected result, and nothing else runnable', name => {
         const files = readdirSync(join(EXAMPLES_DIR, name)).sort();
-        expect(files).toEqual([`${name}.minab`, 'minab.config.json'].sort());
+        expect(files).toEqual([`${name}.minab`, 'expected.json', 'minab.config.json'].sort());
     });
 });
+
+// An example without `expected.json` fails the guard above; the others still run.
+const MANIFEST: (RunExample | CheckOnlyExample)[] = exampleDirectories.filter(name => existsSync(join(EXAMPLES_DIR, name, 'expected.json'))).map(loadExample);
 
 describe.each(MANIFEST)('example: $name ($mode)', example => {
     test('check is clean', async () => {

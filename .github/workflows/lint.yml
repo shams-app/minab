@@ -1,0 +1,29 @@
+# Lint and format check (B1). One job per file: see docs/production/README.md.
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            playground/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: playground
+      # `npm run lint` generates the parser first (the "prelint" script), because
+      # the type-aware rules need the generated types.
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run format:check
+        working-directory: playground

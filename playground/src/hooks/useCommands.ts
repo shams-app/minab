@@ -36,7 +36,17 @@ export function useCommands(): Command[] {
             { id: 'execution', title: 'Show execution map', group: 'Actions', keywords: 'trace pushdown', run: close(() => setOutputTab('execution')) },
             { id: 'ast', title: 'Show syntax tree', group: 'Actions', keywords: 'ast parse', run: close(() => setOutputTab('ast')) },
             { id: 'reference', title: 'Open the cheat sheet', group: 'Actions', keywords: 'reference docs help', run: close(() => setReferenceOpen(true)) },
-            { id: 'reset-db', title: 'Reset the demo database', group: 'Actions', run: close(() => void engineClient().call('resetDatabase').then(() => toast('Demo data restored.', 'success'))) },
+            {
+                id: 'reset-db',
+                title: 'Reset the demo database',
+                group: 'Actions',
+                run: close(
+                    () =>
+                        void engineClient()
+                            .call('resetDatabase')
+                            .then(() => toast('Demo data restored.', 'success'))
+                )
+            },
             { id: 'theme-light', title: 'Theme: light', group: 'Actions', run: close(() => setTheme('light')) },
             { id: 'theme-dark', title: 'Theme: dark', group: 'Actions', run: close(() => setTheme('dark')) },
             { id: 'theme-system', title: 'Theme: match system', group: 'Actions', run: close(() => setTheme('system')) }

@@ -16,10 +16,12 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
 
     const results = useMemo(() => {
         const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-        return commands.filter(c => {
-            const haystack = `${c.title} ${c.group} ${c.keywords ?? ''}`.toLowerCase();
-            return words.every(w => haystack.includes(w));
-        }).slice(0, 40);
+        return commands
+            .filter(c => {
+                const haystack = `${c.title} ${c.group} ${c.keywords ?? ''}`.toLowerCase();
+                return words.every(w => haystack.includes(w));
+            })
+            .slice(0, 40);
     }, [commands, query]);
 
     useEffect(() => {
@@ -50,9 +52,16 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={e => {
                             if (e.key === 'Escape') onClose();
-                            else if (e.key === 'ArrowDown') { e.preventDefault(); setIndex(i => Math.min(i + 1, results.length - 1)); }
-                            else if (e.key === 'ArrowUp') { e.preventDefault(); setIndex(i => Math.max(i - 1, 0)); }
-                            else if (e.key === 'Enter') { e.preventDefault(); results[index]?.run(); }
+                            else if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setIndex(i => Math.min(i + 1, results.length - 1));
+                            } else if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setIndex(i => Math.max(i - 1, 0));
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                results[index]?.run();
+                            }
                         }}
                     />
                     <Kbd keys={['esc']} />

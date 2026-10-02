@@ -8,7 +8,11 @@ export function EngineStatusPill({ engine }: { engine: EngineView }) {
         <span className="mb-status-pill" data-state={engine.indicator} title={engine.detail} role="status">
             <span className="mb-status-dot" aria-hidden="true" />
             {engine.label}
-            {engine.indicator === 'failed' && <button type="button" className="mb-link-button" onClick={engine.restart}>Restart</button>}
+            {engine.indicator === 'failed' && (
+                <button type="button" className="mb-link-button" onClick={engine.restart}>
+                    Restart
+                </button>
+            )}
         </span>
     );
 }
@@ -33,7 +37,11 @@ export function ExamplePicker({ examples, currentId, onPick }: ExamplePickerProp
             <span className="mb-visually-hidden">Example</span>
             <select className="mb-select" value={currentId ?? ''} onChange={e => e.target.value && onPick(e.target.value)}>
                 <option value="">{currentId ? 'Examples…' : 'Scratch — pick an example…'}</option>
-                {examples.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+                {examples.map(e => (
+                    <option key={e.id} value={e.id}>
+                        {e.title}
+                    </option>
+                ))}
             </select>
         </label>
     );
@@ -63,7 +71,9 @@ export function Toolbar(props: ToolbarProps) {
                 <ExamplePicker examples={props.examples} currentId={props.example?.id} onPick={props.onPickExample} />
                 {props.example && (
                     <>
-                        <Badge tone="neutral" title="Spec section">{props.example.specRef}</Badge>
+                        <Badge tone="neutral" title="Spec section">
+                            {props.example.specRef}
+                        </Badge>
                         {props.onResetExample && <IconButton icon="reset" size="sm" label="Reset to the original example" onClick={props.onResetExample} />}
                     </>
                 )}
@@ -74,7 +84,9 @@ export function Toolbar(props: ToolbarProps) {
                 <IconButton icon="book" label="Cheat sheet" onClick={props.onOpenReference} />
                 <IconButton icon="download" label="Download for the CLI (.zip)" onClick={props.onExport} />
                 <IconButton icon="code" label="Copy embed code" onClick={props.onEmbed} />
-                <Button icon="share" onClick={props.onShare}>Share</Button>
+                <Button icon="share" onClick={props.onShare}>
+                    Share
+                </Button>
                 <RunButton onRun={props.onRun} running={props.running} />
             </div>
         </div>
@@ -101,8 +113,20 @@ const KIND_LABELS: Record<string, string> = {
 export function EditorStatusBar({ kind, resultType, errors, warnings, checkOnly, onShowProblems }: EditorStatusBarProps) {
     return (
         <div className="mb-statusbar">
-            <span className="mb-statusbar-kind">{kind ? KIND_LABELS[kind] ?? kind : '…'}{resultType && <> → <code>{resultType}</code></>}</span>
-            {checkOnly && <Badge tone="check-only" title="Uses constructs that type-check but don’t execute yet">check-only</Badge>}
+            <span className="mb-statusbar-kind">
+                {kind ? (KIND_LABELS[kind] ?? kind) : '…'}
+                {resultType && (
+                    <>
+                        {' '}
+                        → <code>{resultType}</code>
+                    </>
+                )}
+            </span>
+            {checkOnly && (
+                <Badge tone="check-only" title="Uses constructs that type-check but don’t execute yet">
+                    check-only
+                </Badge>
+            )}
             <button type="button" className="mb-statusbar-problems" onClick={onShowProblems} data-state={errors ? 'error' : warnings ? 'warning' : 'ok'}>
                 <Icon name={errors ? 'alert' : 'check'} size={12} />
                 {errors ? `${errors} error${errors === 1 ? '' : 's'}` : warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : 'No problems'}

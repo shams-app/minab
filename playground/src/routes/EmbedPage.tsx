@@ -87,12 +87,31 @@ export function EmbedPage() {
                     />
                 }
                 output={
-                    <OutputPanel tab={tab} onTabChange={wb.setOutputTab} tabs={tabs} counts={{ problems: wb.problems.errors, statements: wb.report?.trace.length }}>
-                        {tab === 'result' ? <ResultView report={wb.report} running={wb.running} stale={wb.stale} subject={{ recordTable: host.recordTable, fieldValue: host.fieldValue }} onRun={wb.run} onShowProblems={() => wb.setOutputTab('problems')} onShowExecution={() => wb.setOutputTab('execution')} />
-                            : tab === 'sql' ? <SqlView analysis={wb.analysis} trace={wb.report?.trace ?? []} onShowExecution={() => wb.setOutputTab('execution')} />
-                            : tab === 'execution' ? <ExecutionView report={wb.report} onHighlight={r => wb.setHighlight(r)} onReveal={wb.revealInEditor} />
-                            : tab === 'problems' ? <ProblemsList diagnostics={wb.diagnostics} onSelect={wb.revealInEditor} />
-                            : <EmptyState title="Not available in embeds" />}
+                    <OutputPanel
+                        tab={tab}
+                        onTabChange={wb.setOutputTab}
+                        tabs={tabs}
+                        counts={{ problems: wb.problems.errors, statements: wb.report?.trace.length }}
+                    >
+                        {tab === 'result' ? (
+                            <ResultView
+                                report={wb.report}
+                                running={wb.running}
+                                stale={wb.stale}
+                                subject={{ recordTable: host.recordTable, fieldValue: host.fieldValue }}
+                                onRun={wb.run}
+                                onShowProblems={() => wb.setOutputTab('problems')}
+                                onShowExecution={() => wb.setOutputTab('execution')}
+                            />
+                        ) : tab === 'sql' ? (
+                            <SqlView analysis={wb.analysis} trace={wb.report?.trace ?? []} onShowExecution={() => wb.setOutputTab('execution')} />
+                        ) : tab === 'execution' ? (
+                            <ExecutionView report={wb.report} onHighlight={r => wb.setHighlight(r)} onReveal={wb.revealInEditor} />
+                        ) : tab === 'problems' ? (
+                            <ProblemsList diagnostics={wb.diagnostics} onSelect={wb.revealInEditor} />
+                        ) : (
+                            <EmptyState title="Not available in embeds" />
+                        )}
                     </OutputPanel>
                 }
             />

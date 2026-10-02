@@ -2,14 +2,7 @@ import { useMemo } from 'react';
 import { exampleById } from '../content/examples/index.js';
 import type { Example } from '../content/types.js';
 import type { AnalyzeReport, EngineDiagnostic, ProgramInfo, RunReport } from '../engine/protocol.js';
-import {
-    revealInEditor,
-    run,
-    setAutoRun,
-    setHighlight,
-    setOutputTab,
-    setSource
-} from '../state/controller.js';
+import { revealInEditor, run, setAutoRun, setHighlight, setOutputTab, setSource } from '../state/controller.js';
 import { usePlayground, type Highlight, type OutputTab } from '../state/store.js';
 
 export interface ProblemCounts {
@@ -51,29 +44,44 @@ export function useWorkbench(): WorkbenchView {
     const state = usePlayground();
     const { workspace, analysis, report, reportSource } = state;
     const diagnostics = analysis?.diagnostics ?? NO_DIAGNOSTICS;
-    return useMemo(() => ({
-        source: workspace.source,
-        setSource,
-        run: () => void run(),
-        running: state.running,
-        autoRun: state.autoRun,
-        setAutoRun,
-        analysis,
-        report,
-        stale: report !== undefined && reportSource !== workspace.source,
-        program: analysis?.program,
-        diagnostics,
-        problems: {
-            errors: diagnostics.filter(d => d.severity === 1).length,
-            warnings: diagnostics.filter(d => d.severity === 2).length
-        },
-        outputTab: state.outputTab,
-        setOutputTab,
-        highlight: state.highlight,
-        setHighlight,
-        reveal: state.reveal,
-        revealInEditor,
-        example: workspace.exampleId ? exampleById(workspace.exampleId) : undefined,
-        announcement: state.announcement
-    }), [workspace, analysis, report, reportSource, diagnostics, state.running, state.autoRun, state.outputTab, state.highlight, state.reveal, state.announcement]);
+    return useMemo(
+        () => ({
+            source: workspace.source,
+            setSource,
+            run: () => void run(),
+            running: state.running,
+            autoRun: state.autoRun,
+            setAutoRun,
+            analysis,
+            report,
+            stale: report !== undefined && reportSource !== workspace.source,
+            program: analysis?.program,
+            diagnostics,
+            problems: {
+                errors: diagnostics.filter(d => d.severity === 1).length,
+                warnings: diagnostics.filter(d => d.severity === 2).length
+            },
+            outputTab: state.outputTab,
+            setOutputTab,
+            highlight: state.highlight,
+            setHighlight,
+            reveal: state.reveal,
+            revealInEditor,
+            example: workspace.exampleId ? exampleById(workspace.exampleId) : undefined,
+            announcement: state.announcement
+        }),
+        [
+            workspace,
+            analysis,
+            report,
+            reportSource,
+            diagnostics,
+            state.running,
+            state.autoRun,
+            state.outputTab,
+            state.highlight,
+            state.reveal,
+            state.announcement
+        ]
+    );
 }

@@ -46,10 +46,7 @@ export class PostgresExecutor implements QueryExecutor {
         try {
             pg = await import(driver);
         } catch {
-            throw new DataSourceError(
-                `--database needs the "pg" package, which isn't installed.\n` +
-                `Install it alongside Minab:  npm install pg`
-            );
+            throw new DataSourceError(`--database needs the "pg" package, which isn't installed.\n` + `Install it alongside Minab:  npm install pg`);
         }
         const client = new pg.Client({ connectionString });
         try {
@@ -69,9 +66,7 @@ export class PostgresExecutor implements QueryExecutor {
             // The database rejecting generated SQL is a compiler bug, not a
             // user typo, so the statement itself is part of the report.
             throw new DataSourceError(
-                `the database rejected this statement:\n  ${query.text}\n` +
-                `  parameters: ${JSON.stringify(query.params)}\n` +
-                `${(e as Error).message}`
+                `the database rejected this statement:\n  ${query.text}\n` + `  parameters: ${JSON.stringify(query.params)}\n` + `${(e as Error).message}`
             );
         }
     }

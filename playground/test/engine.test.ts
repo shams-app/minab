@@ -35,13 +35,14 @@ describe('analysis', () => {
     test('a type error is a diagnostic with a range, and there is no SQL', async () => {
         const report = await engine.analyze('FROM Order\nWHERE .status == 5\nSELECT .id');
         expect(report.diagnostics).toHaveLength(1);
-        expect(report.diagnostics[0]).toMatchObject({ severity: 1, source: 'minab', range: { start: { line: 1 } } });
+        expect(report.diagnostics[0]).toMatchObject({ severity: 1, source: 'minab', code: 'type.implicitCoercion', range: { start: { line: 1 } } });
         expect(report.compiled.ok).toBe(false);
     });
 
     test('a syntax error is tagged as such', async () => {
         const report = await engine.analyze('FROM Order WHERE');
         expect(report.diagnostics[0]?.source).toBe('syntax');
+        expect(report.diagnostics[0]?.code).toBe('syntax.parser');
     });
 
     test('a rule explains why it has no single statement', async () => {

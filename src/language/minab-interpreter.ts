@@ -116,9 +116,7 @@ export class MinabInterpreter {
     ) {}
 
     async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
-        const frames: Frame[] = [
-            { record: context.record, table: context.recordTable, variables: new Map() }
-        ];
+        const frames: Frame[] = [{ record: context.record, table: context.recordTable, variables: new Map() }];
         const state = new State(context, frames, this.collectFunctions(model));
         try {
             for (const declaration of model.declarations) {
@@ -264,9 +262,7 @@ export class MinabInterpreter {
         if (isJsonObjectLiteral(expr)) {
             const object: Record<string, MinabValue> = {};
             for (const property of expr.properties) {
-                object[property.key] = property.value
-                    ? await this.expression(property.value, state)
-                    : state.lookup(property.key);
+                object[property.key] = property.value ? await this.expression(property.value, state) : state.lookup(property.key);
             }
             return object;
         }
@@ -385,14 +381,10 @@ export class MinabInterpreter {
     private async binary(expr: BinaryExpression, state: State): Promise<MinabValue> {
         const operator = expr.operator;
         if (operator === 'AND') {
-            return this.truthy(await this.expression(expr.left, state))
-                ? this.truthy(await this.expression(expr.right, state))
-                : false;
+            return this.truthy(await this.expression(expr.left, state)) ? this.truthy(await this.expression(expr.right, state)) : false;
         }
         if (operator === 'OR') {
-            return this.truthy(await this.expression(expr.left, state))
-                ? true
-                : this.truthy(await this.expression(expr.right, state));
+            return this.truthy(await this.expression(expr.left, state)) ? true : this.truthy(await this.expression(expr.right, state));
         }
 
         const left = await this.expression(expr.left, state);
@@ -418,21 +410,31 @@ export class MinabInterpreter {
             const a = left as number;
             const b = right as number;
             switch (operator) {
-                case '<': return a < b;
-                case '<=': return a <= b;
-                case '>': return a > b;
-                default: return a >= b;
+                case '<':
+                    return a < b;
+                case '<=':
+                    return a <= b;
+                case '>':
+                    return a > b;
+                default:
+                    return a >= b;
             }
         }
         const a = this.number(left);
         const b = this.number(right);
         switch (operator) {
-            case '+': return typeof left === 'string' ? String(left) + String(right) : a + b;
-            case '-': return a - b;
-            case '*': return a * b;
-            case '/': return a / b;
-            case '%': return a % b;
-            default: fail(`operator "${operator}" is not evaluated yet`);
+            case '+':
+                return typeof left === 'string' ? String(left) + String(right) : a + b;
+            case '-':
+                return a - b;
+            case '*':
+                return a * b;
+            case '/':
+                return a / b;
+            case '%':
+                return a % b;
+            default:
+                fail(`operator "${operator}" is not evaluated yet`);
         }
     }
 
@@ -458,11 +460,7 @@ export class MinabInterpreter {
     }
 
     private isCitext(expr: Expression, state: State): boolean {
-        const table = isCurrentRecord(expr)
-            ? state.currentTable()
-            : isMemberAccess(expr)
-            ? this.staticTable(expr.receiver, state)
-            : undefined;
+        const table = isCurrentRecord(expr) ? state.currentTable() : isMemberAccess(expr) ? this.staticTable(expr.receiver, state) : undefined;
         const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
         if (!table || !field) return false;
         const column = this.schema.getColumn(table, field);
@@ -485,12 +483,18 @@ export class MinabInterpreter {
     private jsonKindMatches(value: MinabValue, test: Expression): boolean {
         if (isNullLiteral(test)) return value === null;
         switch (test.$type) {
-            case 'ArrayKind': return Array.isArray(value);
-            case 'ObjectKind': return typeof value === 'object' && value !== null && !Array.isArray(value);
-            case 'StringKind': return typeof value === 'string';
-            case 'NumberKind': return typeof value === 'number';
-            case 'BooleanKind': return typeof value === 'boolean';
-            default: return false;
+            case 'ArrayKind':
+                return Array.isArray(value);
+            case 'ObjectKind':
+                return typeof value === 'object' && value !== null && !Array.isArray(value);
+            case 'StringKind':
+                return typeof value === 'string';
+            case 'NumberKind':
+                return typeof value === 'number';
+            case 'BooleanKind':
+                return typeof value === 'boolean';
+            default:
+                return false;
         }
     }
 
@@ -565,10 +569,10 @@ export class MinabInterpreter {
             // `^.room_id` — the field belongs to the escaping record itself,
             // so read it straight off that frame.
             const base = isParentRecord(receiver)
-                ? state.frame(1 - depth)?.record ?? null
+                ? (state.frame(1 - depth)?.record ?? null)
                 : isCurrentRecord(receiver) && !receiver.field
-                ? state.frame(-depth)?.record ?? null
-                : this.outerValue(receiver, state, depth);
+                  ? (state.frame(-depth)?.record ?? null)
+                  : this.outerValue(receiver, state, depth);
             return this.readField(base, expr.member);
         }
         if (isFieldValue(expr)) {

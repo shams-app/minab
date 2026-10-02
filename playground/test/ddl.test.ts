@@ -5,8 +5,16 @@ import { createTableSql, databaseScript, physicalTables, sqlLiteral } from '../s
 const schema = parseConfig({
     schema: {
         tables: [
-            { name: 'Customer', primaryKey: 'id', columns: { id: 'UUID', email: 'CITEXT', tags: 'TEXT[]?', orders: { collection: 'Order', foreignKey: 'customer_id' } } },
-            { name: 'Order', primaryKey: 'id', columns: { id: 'UUID', customer: { ref: 'Customer', foreignKey: 'customer_id' }, total: 'DECIMAL', meta: 'JSON?' } },
+            {
+                name: 'Customer',
+                primaryKey: 'id',
+                columns: { id: 'UUID', email: 'CITEXT', tags: 'TEXT[]?', orders: { collection: 'Order', foreignKey: 'customer_id' } }
+            },
+            {
+                name: 'Order',
+                primaryKey: 'id',
+                columns: { id: 'UUID', customer: { ref: 'Customer', foreignKey: 'customer_id' }, total: 'DECIMAL', meta: 'JSON?' }
+            },
             { name: 'Line', columns: { order_id: 'UUID', qty: 'INTEGER' } }
         ]
     }
@@ -16,7 +24,10 @@ describe('physical tables', () => {
     test('a ref becomes its foreign key, typed like the target’s primary key', () => {
         const order = physicalTables(schema).find(t => t.name === 'Order')!;
         expect(order.columns.map(c => `${c.name}:${c.sqlType}:${c.nullable}`)).toEqual([
-            'id:text:false', 'total:numeric:false', 'meta:jsonb:true', 'customer_id:text:true'
+            'id:text:false',
+            'total:numeric:false',
+            'meta:jsonb:true',
+            'customer_id:text:true'
         ]);
     });
 
