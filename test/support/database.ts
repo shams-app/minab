@@ -88,7 +88,7 @@ async function openPglite(): Promise<TestDatabase> {
 }
 
 async function openPostgres(url: string): Promise<TestDatabase> {
-    const { Client } = await import('pg');
+    const { Client, types } = await import('pg');
     const parsers: Record<number, (value: string) => unknown> = {
         [OID.INT8]: asNumber,
         [OID.INT2]: asNumber,
@@ -101,7 +101,7 @@ async function openPostgres(url: string): Promise<TestDatabase> {
     };
     const client = new Client({
         connectionString: url,
-        types: { getTypeParser: ((oid: number, format?: string) => parsers[oid] ?? (format === 'binary' ? (v: unknown) => v : (v: string) => v)) as never }
+        types: { getTypeParser: ((oid: number, format?: 'text' | 'binary') => parsers[oid] ?? types.getTypeParser(oid, format)) as never }
     });
     await client.connect();
     await client.query(`SET TIME ZONE 'UTC'`);
