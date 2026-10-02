@@ -1,0 +1,141 @@
+# Publishes a release when a `v*` tag is pushed (see docs/releasing.md):
+#   npm package, VS Code extension (Marketplace and Open VSX), GitHub release.
+# Run it by hand with `dry-run` (the default) to test everything except the
+# publishing steps.
+#
+# Secrets (each one is optional; a missing one is skipped with a message):
+#   - npm: trusted publishing for this repository on npmjs.com (no token);
+#   - VSCE_PAT: VS Code Marketplace token for the publisher `shamsine`;
+#   - OVSX_PAT: Open VSX token for the namespace `shamsine`.
+# D04: the repository is private, so npm provenance is off. The workflow turns
+# it on by itself if the repository becomes public.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run: build and test, but publish nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # the GitHub release
+  id-token: write # npm trusted publishing
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # A tag push is never a dry run. A manual run is one unless it says "false".
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'true' || 'false' }}
+      REPO_PRIVATE: ${{ github.event.repository.private }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: minab
+          POSTGRES_PASSWORD: minab
+          POSTGRES_DB: minab_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U minab -d minab_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vscode-extension/package-lock.json
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+
+      - name: Read the version and check the tag
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::The tag $GITHUB_REF_NAME does not match package.json version $version (expected v$version)."
+              exit 1
+            fi
+          else
+            echo "Not a tag run ($GITHUB_REF): the tag check is skipped."
+          fi
+          echo "dry run: $DRY_RUN"
+
+      - run: npm ci
+      - run: npm run build
+      - name: Test (with Postgres)
+        run: npm test
+        env:
+          MINAB_TEST_DATABASE_URL: postgresql://minab:minab@localhost:5432/minab_test
+          MINAB_REQUIRE_DATABASE: '1'
+
+      # Build the extension before anything is published: if it fails, nothing went out.
+      - run: npm ci
+        working-directory: vscode-extension
+      - run: npm run package
+        working-directory: vscode-extension
+      - run: npm run check:vsix
+        working-directory: vscode-extension
+
+      - name: Publish to npm
+        run: |
+          args="--access public"
+          # npm needs a tag other than `latest` for a prerelease version.
+          case "$VERSION" in *-*) args="$args --tag next" ;; esac
+          if [ "$REPO_PRIVATE" = "false" ]; then
+            args="$args --provenance"
+          else
+            echo "The repository is private: publishing without provenance (D04)."
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            args="$args --dry-run"
+          fi
+          npm publish $args
+
+      - name: Create the GitHub release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/changelog.mjs --notes "$VERSION" > release-notes.md
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" vscode-extension/*.vsix --title "$GITHUB_REF_NAME" --notes-file release-notes.md $prerelease
+      - name: Show the release notes (dry run)
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "Dry run: the GitHub release is not created. Its notes would be:"
+          node scripts/changelog.mjs --notes "$VERSION"
+
+      - name: Publish the extension to the VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        working-directory: vscode-extension
+        run: |
+          if [ -z "$VSCE_PAT" ]; then echo "skipped: secret VSCE_PAT not set"; exit 0; fi
+          if [ "$DRY_RUN" = "true" ]; then echo "dry run: would publish the extension to the Marketplace"; exit 0; fi
+          npx vsce publish --packagePath ./*.vsix
+      - name: Publish the extension to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        working-directory: vscode-extension
+        run: |
+          if [ -z "$OVSX_PAT" ]; then echo "skipped: secret OVSX_PAT not set"; exit 0; fi
+          if [ "$DRY_RUN" = "true" ]; then echo "dry run: would publish the extension to Open VSX"; exit 0; fi
+          npx ovsx publish ./*.vsix --pat "$OVSX_PAT"

@@ -1,0 +1,55 @@
+# Publishes a `next` prerelease to npm after a merge to main (D05).
+# The version is `X.Y.Z-next.N` (scripts/next-version.mjs). It is set in this
+# CI workspace only and never committed. `npm install @shamsine/minab` still
+# gets only real releases; use `@shamsine/minab@next` for these builds.
+#
+# Needs npm trusted publishing for this repository and this workflow file
+# (`next.yml`) on npmjs.com. Without it, the publish step fails with an npm
+# authentication error. D04: the repository is private, so no provenance; the
+# workflow turns it on by itself if the repository becomes public.
+name: Next
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'playground/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing
+
+concurrency:
+  group: next
+  cancel-in-progress: false
+
+jobs:
+  next:
+    runs-on: ubuntu-latest
+    env:
+      REPO_PRIVATE: ${{ github.event.repository.private }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # After the tests: the release metadata test needs the real version.
+      - name: Set the prerelease version
+        run: |
+          version=$(node scripts/next-version.mjs --run "$GITHUB_RUN_NUMBER")
+          echo "Publishing $version"
+          npm version "$version" --no-git-tag-version
+      - name: Publish with the tag next
+        run: |
+          args="--tag next --access public"
+          if [ "$REPO_PRIVATE" = "false" ]; then args="$args --provenance"; fi
+          npm publish $args
