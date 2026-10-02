@@ -166,7 +166,7 @@ FROM <source> [AS alias]
 
 Semantics per clause, in evaluation order:
 
-1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
+1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`), optionally narrowed by an inline filter (`FROM .orders[.status == "paid"]`, same meaning as §3.2) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
 2. **JOIN** — adds another scope. `ON` is an ordinary boolean expression comparing fields from any active scope. `LEFTJOIN` preserves unmatched left-side rows with nulls on the right; `CROSSJOIN` takes no `ON` and produces the full cross-product.
 3. **WHERE** — filters the joined row stream.
 4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key.
@@ -1154,8 +1154,8 @@ Query:
     (orderByClause=OrderByClause)?
     (limitClause=LimitClause)?;
 
-FromSource:
-    TableRef | NamedScope | CurrentRecord;
+FromSource infers Expression:
+    TableRef | NamedScope | CurrentRecord ({infer FilterAccess.receiver=current} '[' filter=Expression ']')?;
 
 TableRef infers Expression:
     {infer TableRef} name=QualifiedName;

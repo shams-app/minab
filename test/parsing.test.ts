@@ -79,6 +79,12 @@ describe('§3 a first query', () => {
     });
 });
 
+describe('§3.2 FROM a filtered related collection', () => {
+    test('FROM .orders[filter] with an alias', async () => {
+        await expectNoErrors(`FROM .orders[.status == "paid"] AS o WHERE o.total > 5 SELECT o.id`);
+    });
+});
+
 describe('§4 joins', () => {
     test('JOIN ... ON', async () => {
         await expectNoErrors(`

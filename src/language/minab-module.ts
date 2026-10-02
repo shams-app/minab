@@ -105,7 +105,7 @@ function createMinabModule(
     return {
         ...(options.mode === 'production' ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) } : {}),
         schema: () => new SchemaProvider(schema),
-        scopeResolver: services => new MinabScopeResolver(services.schema),
+        scopeResolver: services => new MinabScopeResolver(services.schema, services.ruleContext.recordTable),
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),

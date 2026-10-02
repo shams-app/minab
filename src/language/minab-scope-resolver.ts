@@ -83,7 +83,14 @@ interface RawLevel {
 }
 
 export class MinabScopeResolver {
-    constructor(private readonly schema: SchemaProvider) {}
+    /**
+     * `rootTable` is the host's `ruleContext.recordTable`. It is used in one place only:
+     * `FROM .orders` at the top of a rule needs the rule's record to find the table of `.orders`.
+     */
+    constructor(
+        private readonly schema: SchemaProvider,
+        private readonly rootTable?: string
+    ) {}
 
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
         const stack = this.stackAt(node);
@@ -317,8 +324,10 @@ export class MinabScopeResolver {
     private tableOfExpression(expr: Expression): string | undefined {
         if (isCurrentRecord(expr)) {
             const base = this.resolveCurrentRecordBase(expr);
-            if (!base.found || !base.scope.tableName) return undefined;
-            return expr.field ? this.followRelationColumn(base.scope.tableName, expr.field) : base.scope.tableName;
+            if (!base.found) return undefined;
+            const baseTable = base.scope.tableName ?? (isModel(base.scope.owner) ? this.rootTable : undefined);
+            if (!baseTable) return undefined;
+            return expr.field ? this.followRelationColumn(baseTable, expr.field) : baseTable;
         }
         if (isParentRecord(expr)) {
             const res = this.resolveParentRecord(expr);
@@ -332,6 +341,8 @@ export class MinabScopeResolver {
             const res = this.resolveNameRef(expr);
             return res.found ? res.scope.tableName : undefined;
         }
+        // `FROM .orders[...]`: the filter narrows rows, the table stays the receiver's.
+        if (isFilterAccess(expr)) return this.tableOfExpression(expr.receiver);
         if (isMemberAccess(expr)) {
             const receiverTable = this.tableOfExpression(expr.receiver);
             return receiverTable ? this.followRelationColumn(receiverTable, expr.member) : undefined;

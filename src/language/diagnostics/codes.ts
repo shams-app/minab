@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, query, rule.
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
  *  - After you change an entry, run `npm run docs:diagnostics`.
@@ -87,6 +87,11 @@ export const DIAGNOSTICS = {
         doc: 'A user function needs one argument for each declared parameter. Add or remove arguments.'
     }),
 
+    'compile.blockInQuery': entry({
+        severity: error,
+        message: () => 'a block with statements cannot run inside a query (a statement cannot become SQL)',
+        doc: 'A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query.'
+    }),
     'null.likeWithNull': entry({
         severity: error,
         message: () => `"LIKE" doesn't accept null as an operand`,

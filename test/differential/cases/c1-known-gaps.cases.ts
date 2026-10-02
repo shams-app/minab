@@ -71,13 +71,6 @@ export const cases: DifferentialCase[] = [
         knownGap: { card: 'C5', note: 'IN on CITEXT' }
     },
     {
-        name: 'is null has no SQL form',
-        schema,
-        record: { id: 1, n: null, a: 4 },
-        expr: '.n is null',
-        knownGap: { card: 'X1', note: 'the compiler refuses TypeTestExpression' }
-    },
-    {
         name: 'IN a list without null, on a null value',
         schema,
         record: { id: 1, n: null, a: 4 },
