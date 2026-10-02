@@ -22,5 +22,8 @@
         }
       }
     ]
+  },
+  "rule": {
+    "recordTable": "Customer"
   }
 }

@@ -48,7 +48,7 @@ import {
     type VariableDecl
 } from './generated/ast.js';
 import { coded, type CodedMessage } from './diagnostics/codes.js';
-import type { SchemaProvider } from './schema.js';
+import { DEFAULT_RULE_CONTEXT, type MinabRuleContext, type SchemaProvider } from './schema.js';
 
 export interface ResolvedScope {
     /** The AST node that establishes this scope/declaration (a Query, JoinClause, FilterAccess, LoopStatement, VariableDecl, Param, or — for a schema-external table — the referencing node itself). */
@@ -83,7 +83,10 @@ interface RawLevel {
 }
 
 export class MinabScopeResolver {
-    constructor(private readonly schema: SchemaProvider) {}
+    constructor(
+        private readonly schema: SchemaProvider,
+        private readonly ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT
+    ) {}
 
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
         const stack = this.stackAt(node);
@@ -254,11 +257,11 @@ export class MinabScopeResolver {
         // evaluation time, not declared anywhere in-file. Register it as
         // an implicit outermost level so `^` inside e.g. the §6.1
         // `#Booking[... ^...]` pattern (no enclosing FROM at all) still
-        // reaches *something*, with an honestly-unknown table. This is
-        // deliberately permissive — whether `.`/`^` are legal in a given
+        // reaches *something*. Its table is the host's `recordTable`, or
+        // unknown when the host gave none. This is deliberately permissive — whether `.`/`^` are legal in a given
         // position at all is Phase 3's (the Validator's) job, not this
         // one's.
-        const root: ScopeLevel = { owner: child, tableName: undefined, aliases: new Map() };
+        const root: ScopeLevel = { owner: child, tableName: this.rootTable(), aliases: new Map() };
 
         // `raw` is innermost-first. A receiver can only refer to an outer
         // scope (e.g. `FROM .orders`, or a bare alias from further out), so
@@ -277,6 +280,12 @@ export class MinabScopeResolver {
             outerToInner.push({ owner: r.owner, tableName, aliases });
         }
         return outerToInner.reverse();
+    }
+
+    /** The table of the record under validation (spec §6), when the host named one and the schema has it. */
+    private rootTable(): string | undefined {
+        const name = this.ruleContext.recordTable;
+        return name === undefined ? undefined : this.schema.getTable(name)?.name;
     }
 
     private receiverTableName(receiver: Expression | undefined, outerLevels: ScopeLevel[]): string | undefined {

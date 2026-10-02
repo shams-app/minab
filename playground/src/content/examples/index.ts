@@ -75,16 +75,26 @@ export const examples: Example[] = [
     {
         id: 'cancelled-orders-limit',
         title: 'Fewer than five cancellations',
-        summary: 'Filter a collection inline, then reduce it with `COUNT`.',
-        notes: '`.orders[.status == "cancelled"]` narrows each customer’s orders; `COUNT` turns the collection into a number you can compare. Donald Knuth has five cancelled orders, so he is the one customer left out.',
+        summary: 'Filter a relation inline, then reduce it with `COUNT`.',
+        notes: '`.orders[.status == "cancelled"]` narrows the orders of the customer being validated; `COUNT` turns the collection into a number you can compare. The whole count is one statement. Donald Knuth has five cancelled orders, so he fails.',
         source: cancelledOrdersLimit,
-        tags: ['query', 'aggregates'],
+        tags: ['record-rule', 'aggregates'],
         level: 'beginner',
         specRef: '§3.4',
         repoPath: repo('cancelled-orders-limit'),
-        host: { dataset: 'demo' },
-        focus: 'result',
-        expect: { kind: 'rows', count: 9 }
+        host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
+        presets: [
+            {
+                id: 'donald',
+                label: 'Donald',
+                expect: false,
+                note: 'Five cancelled orders.',
+                record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' }
+            },
+            { id: 'ada', label: 'Ada', expect: true, note: 'One cancellation.', record: { id: 'cus-ada', name: 'Ada Lovelace', tier: 'gold' } }
+        ],
+        focus: 'execution',
+        expect: { kind: 'verdict', value: false, statements: 1 }
     },
     {
         id: 'booking-overlap',
@@ -236,14 +246,14 @@ export const examples: Example[] = [
     {
         id: 'overdue-loop',
         title: 'Loops',
-        summary: 'A `for-in` loop over a table, with a guard. Checks today; runs later.',
+        summary: 'A `for-in` loop over a customer’s orders, with a guard. Checks today; runs later.',
         notes: 'Loops parse, resolve and type-check — hover `order` to see its type — but the evaluator doesn’t execute them yet, and says so rather than guessing.',
         source: overdueLoop,
         tags: ['control-flow', 'check-only'],
         level: 'advanced',
         specRef: '§9.4',
         repoPath: repo('overdue-loop'),
-        host: { dataset: 'demo' },
+        host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
         focus: 'result',
         expect: { kind: 'check-only', construct: 'LoopStatement' }
     },
@@ -332,29 +342,6 @@ export const examples: Example[] = [
         ],
         focus: 'execution',
         expect: { kind: 'verdict', value: true, statements: 1 }
-    },
-    {
-        id: 'cancellation-limit',
-        title: 'Cancellation limit, as a rule',
-        summary: '`#Table` opens any table inside a rule; `^` reaches back to the record.',
-        notes: 'Inside `#Order[…]`, `.` is each order and `^` is the customer being validated. The whole count is one statement.',
-        source: '// A customer may have at most four cancelled orders.\nCOUNT(#Order[.customer == ^ AND .status == "cancelled"]) < 5\n',
-        tags: ['record-rule', 'aggregates'],
-        level: 'intermediate',
-        specRef: '§2.2, §3.3',
-        host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
-        presets: [
-            {
-                id: 'donald',
-                label: 'Donald',
-                expect: false,
-                note: 'Five cancelled orders.',
-                record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' }
-            },
-            { id: 'ada', label: 'Ada', expect: true, note: 'One cancellation.', record: { id: 'cus-ada', name: 'Ada Lovelace', tier: 'gold' } }
-        ],
-        focus: 'execution',
-        expect: { kind: 'verdict', value: false, statements: 1 }
     },
     {
         id: 'tiered-credit',

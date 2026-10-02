@@ -167,6 +167,45 @@ describe('minab run', () => {
     });
 });
 
+describe('a rule with a top-level collection filter (C6)', () => {
+    const FILTER_RULE = 'COUNT(.orders[.status == "cancelled"]) < 5';
+    const FILTER_CONFIG = {
+        schema: {
+            tables: [
+                {
+                    name: 'Customer',
+                    primaryKey: 'id',
+                    columns: { id: 'UUID', orders: { collection: 'Order', foreignKey: 'customer_id' } }
+                },
+                { name: 'Order', primaryKey: 'id', columns: { id: 'UUID', status: 'TEXT' } }
+            ]
+        },
+        rule: { recordTable: 'Customer' },
+        record: { id: 'c-1' },
+        data: { responses: [{ match: 'COUNT', value: 2 }] }
+    };
+
+    test('`check` reports no problems', async () => {
+        writeJson('filter.config.json', FILTER_CONFIG);
+        write('filter.minab', FILTER_RULE);
+        const result = await cli('check', 'filter.minab', '--config', 'filter.config.json');
+        expect(result.errors).toBe('');
+        expect(result.code).toBe(EXIT_OK);
+    });
+
+    test('`run` gives the documented answer', async () => {
+        const result = await cli('run', 'filter.minab', '--config', 'filter.config.json');
+        expect(result.errors).toBe('');
+        expect(result.output).toBe('true');
+    });
+
+    test('`check` without `rule.recordTable` still rejects it', async () => {
+        writeJson('filter-norecord.config.json', { ...FILTER_CONFIG, rule: {} });
+        const result = await cli('check', 'filter.minab', '--config', 'filter-norecord.config.json');
+        expect(result.code).not.toBe(EXIT_OK);
+    });
+});
+
 describe('minab compile', () => {
     test('prints the SQL and its parameters', async () => {
         const result = await cli('compile', 'query.minab');

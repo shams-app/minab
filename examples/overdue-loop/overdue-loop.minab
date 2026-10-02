@@ -1,6 +1,7 @@
-// Loops (spec §9.4, showcase §12): a `for-in` over a table, with a guard.
-// Entering the loop makes `.` the current order, and `order` is a named alias
-// for the same row.
+// Loops (spec §9.4, showcase §12): a `for-in` over a customer's orders, with a
+// guard. `.orders` is a relation of the record under validation
+// (`rule.recordTable` in the config). Entering the loop makes `.` the current
+// order, and `order` is a named alias for the same row.
 //
 // CHECK-ONLY: this parses, resolves, and type-checks, but the evaluator does
 // not execute loops yet — `minab run` says so rather than guessing.
@@ -9,7 +10,7 @@
 
 let shippedTotal: DECIMAL = 0;
 
-loop order in #Order where .status == "shipped" AND order.total > 0 {
+loop order in .orders where .status == "shipped" AND order.total > 0 {
     shippedTotal = shippedTotal + order.total;
 }
 

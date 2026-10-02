@@ -26,17 +26,16 @@
   "data": {
     "responses": [
       {
-        "rows": [
-          {
-            "id": "c-1",
-            "name": "Ada Lovelace"
-          },
-          {
-            "id": "c-2",
-            "name": "Grace Hopper"
-          }
-        ]
+        "match": "COUNT",
+        "value": 2
       }
     ]
+  },
+  "rule": {
+    "recordTable": "Customer"
+  },
+  "record": {
+    "id": "c-1",
+    "name": "Ada Lovelace"
   }
 }
