@@ -117,6 +117,10 @@ interface SqlScope {
     named: Map<string, NamedEntry>;
     /** Set once a `GROUPBY` is in effect, so `KEY` has something to resolve to. */
     groupKeys?: Expression[];
+    /** For each group key that walks a relation: the SQL of the joined column it groups by. */
+    groupKeySql?: Map<Expression, string>;
+    /** The `LEFT JOIN` clauses those keys need, in order. */
+    groupJoins?: string[];
     /** `SELECT ... AS n` names, which `ORDERBY` may reference by name. */
     selectAliases?: Set<string>;
 }
@@ -205,13 +209,14 @@ export class MinabSqlCompiler {
     private query(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
         const scope = this.scopeOf(query, ctx, outerScopes);
         const scopes = [scope, ...outerScopes];
+        this.joinGroupKeys(query, scope, ctx, scopes);
 
         // Compiled in SQL's own textual order so `$1`, `$2`, ... read left
         // to right in the emitted statement.
         const select = this.selectClause(query, ctx, scopes);
         const from = this.fromClause(query, scope, ctx, scopes);
         const where = query.whereClause ? ` WHERE ${this.expression(query.whereClause.condition, ctx, scopes)}` : '';
-        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.expression(k, ctx, scopes)).join(', ')}` : '';
+        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k, ctx, scopes)).join(', ')}` : '';
         const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
             ? ` ORDER BY ${query.orderByClause.items
@@ -262,7 +267,55 @@ export class MinabSqlCompiler {
             if (!join.condition) fail(`"${join.alias}" is joined without an ON condition`);
             return ` ${keyword} ${target} ON ${this.expression(join.condition, ctx, scopes)}`;
         });
-        return source + joins.join('');
+        return source + joins.join('') + (scope.groupJoins ?? []).join('');
+    }
+
+    /**
+     * A `GROUPBY` key such as `.customer.country` walks a relation. A
+     * subquery per use would not match the `GROUP BY` expression (Postgres
+     * rejects it as an ungrouped column), so each hop becomes one `LEFT JOIN`
+     * and the key is the joined column. `LEFT` keeps rows whose relation is
+     * null: they form one `null` group (spec §7.7 rule 1).
+     */
+    private joinGroupKeys(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): void {
+        for (const key of query.groupByClause?.keys ?? []) {
+            const path: string[] = [];
+            let base: Expression = key;
+            while (isMemberAccess(base)) {
+                path.unshift(base.member);
+                base = base.receiver;
+            }
+            let row: { alias: string; table: string } | undefined;
+            if (isCurrentRecord(base) && base.field && scopes.length > 0) {
+                path.unshift(base.field);
+                row = { alias: scope.alias, table: scope.table };
+            } else if (isNameRef(base) || isNamedScope(base)) {
+                row = this.lookupNamed(base.name, [scope]);
+            }
+            if (!row || path.length < 2) continue;
+            let current = row;
+            const joins: string[] = [];
+            for (const field of path.slice(0, -1)) {
+                const column = this.columnSchema(current.table, field);
+                if (column.type.kind !== 'ref') break;
+                const target = this.table(column.type.table).name;
+                const alias = ctx.freshGroupAlias();
+                joins.push(
+                    ` LEFT JOIN ${quoteIdent(target)} AS ${quoteIdent(alias)} ON ${quoteIdent(alias)}.${quoteIdent(this.primaryKey(target))} = ${quoteIdent(current.alias)}.${quoteIdent(this.refForeignKey(current.table, column))}`
+                );
+                current = { alias, table: target };
+            }
+            if (joins.length !== path.length - 1) continue;
+            const last = this.columnSchema(current.table, path[path.length - 1]);
+            if (last.type.kind !== 'scalar') continue;
+            (scope.groupJoins ??= []).push(...joins);
+            (scope.groupKeySql ??= new Map()).set(key, `${quoteIdent(current.alias)}.${quoteIdent(path[path.length - 1])}`);
+        }
+    }
+
+    /** A `GROUPBY` key as SQL: the joined column when `joinGroupKeys` made one, else the plain expression. */
+    private groupKey(key: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        return scopes[0]?.groupKeySql?.get(key) ?? this.expression(key, ctx, scopes);
     }
 
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
@@ -326,7 +379,7 @@ export class MinabSqlCompiler {
             const keys = scopes[0]?.groupKeys;
             if (!keys) fail('KEY is only valid after a GROUPBY clause');
             if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
-            return this.expression(keys[0], ctx, scopes);
+            return this.groupKey(keys[0], ctx, scopes);
         }
         if (isMemberAccess(expr)) {
             const mark = ctx.mark();
@@ -727,12 +780,17 @@ export class MinabSqlCompiler {
 class Ctx {
     readonly params: unknown[] = [];
     private aliasCount = 0;
+    private groupCount = 0;
 
     constructor(readonly outer: OuterResolver) {}
 
     bind(value: unknown): string {
         this.params.push(value);
         return `$${this.params.length}`;
+    }
+
+    freshGroupAlias(): string {
+        return `_g${this.groupCount++}`;
     }
 
     freshAlias(): string {

@@ -184,6 +184,20 @@ describe('an aggregate GROUPBY/HAVING query (spec §4.3)', () => {
         expect(params).toEqual([1000]);
     });
 
+    test('groups by a field behind a relation with one LEFT JOIN, so GROUP BY and SELECT agree', async () => {
+        const { text } = await compile(`
+            FROM Order
+            GROUPBY .customer.country
+            SELECT KEY AS country, SUM(.total) AS revenue
+        `);
+        expect(text).toBe(
+            'SELECT "_g0"."country" AS "country", SUM("Order"."total") AS "revenue"' +
+                ' FROM "Order"' +
+                ' LEFT JOIN "Customer" AS "_g0" ON "_g0"."id" = "Order"."customer_id"' +
+                ' GROUP BY "_g0"."country"'
+        );
+    });
+
     test('an aggregate over a related collection becomes a correlated subquery', async () => {
         const { text, params } = await compile(`
             FROM Customer
