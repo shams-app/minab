@@ -34,3 +34,5 @@ jobs:
         # --name-status (not --name-only): a release phase may delete fragments,
         # so the guard needs to know which files were deleted.
         run: git diff --name-status "origin/$BASE_REF...HEAD" | node scripts/plan-guard.mjs --title "$PR_TITLE"
+      - name: Check the changelog fragments
+        run: node scripts/changelog.mjs --check

@@ -15,6 +15,15 @@ Small Node scripts for the repository itself (not for users of Minab).
   `npm run docs:diagnostics`. `node scripts/diagnostics-doc.mjs --check` exits 1
   when the page is out of date. `diagnostics-doc.d.mts` types its exports for the
   tests. Tests: `test/diagnostic-codes.test.ts`.
+- `changelog.mjs` — turns the fragments in `changes/` into a CHANGELOG section
+  (`--version X.Y.Z`), checks them (`--check`) and prints one section as release
+  notes (`--notes X.Y.Z`). `changelog.d.mts` types it for the tests.
+- `bump-version.mjs` — sets the version of the root package and of the extension,
+  with their lockfiles. `bump-version.d.mts` types it for the tests.
+- `next-version.mjs` — prints the version of a `next` prerelease. `next-version.d.mts`
+  types it for the tests. The three release scripts are used by
+  `.github/workflows/release.yml` and `next.yml`. Steps for people:
+  [`docs/releasing.md`](../docs/releasing.md). Tests: `test/release-scripts.test.ts`.
 
 ## Rules
 
