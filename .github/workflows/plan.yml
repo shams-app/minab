@@ -1,0 +1,36 @@
+# Checks the production plan on every pull request (see docs/production/README.md):
+#   1. the plan files are consistent (docs/production/tools/progress.mjs --check);
+#   2. the plan guard (scripts/plan-guard.mjs): the phase in the PR title edits
+#      no protected file it may not edit, and no other phase's status file.
+# It never writes progress.md: .github/workflows/plan-progress.yml rebuilds it
+# after each merge to main.
+name: Plan
+
+on:
+  pull_request:
+    # `edited` too: the guard reads the phase from the title.
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The guard needs the base branch to list the changed files.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the plan files
+        run: node docs/production/tools/progress.mjs --check
+      - name: Plan guard
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        # --name-status (not --name-only): a release phase may delete fragments,
+        # so the guard needs to know which files were deleted.
+        run: git diff --name-status "origin/$BASE_REF...HEAD" | node scripts/plan-guard.mjs --title "$PR_TITLE"

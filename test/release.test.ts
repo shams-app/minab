@@ -67,4 +67,9 @@ describe.skipIf(!existsSync(resolve(root, 'out/src/cli/bin.js')))('npm tarball c
         const stray = files.filter(f => f.startsWith('out/test/') || f.endsWith('.map') || f.startsWith('vscode-extension/'));
         expect(stray).toEqual([]);
     });
+
+    test('leaves out the production plan', () => {
+        const plan = files.filter(f => f.startsWith('docs/production/') || f.startsWith('docs/release-future/'));
+        expect(plan).toEqual([]);
+    });
 });
