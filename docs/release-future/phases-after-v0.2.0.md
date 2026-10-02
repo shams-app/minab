@@ -1,5 +1,7 @@
 # Phases after v0.2.0 — the plan
 
+> **Superseded on 2026-10-02 by [`../production/`](../production/README.md).** That folder is the plan to follow now: 61 phase cards with ready prompts, all open decisions in one place, and rules that let phases run in parallel. This file is kept as history; its phases 10–27 are mapped to the new phases in [`../production/phases/README.md`](../production/phases/README.md#old-phases-1027--new-phases).
+
 The companion to [`remaining-after-v0.2.0.md`](remaining-after-v0.2.0.md), which is the *inventory* of what is left. This file is the *order*: eighteen phases, each one job with one output, sized to be picked up in a fresh session without needing prior conversation — the same contract [`../roadmap.md`](../roadmap.md) sets for Phases 0–9.
 
 Numbering continues from the old roadmap (which ends at Phase 9), so a phase number means the same thing in both documents.

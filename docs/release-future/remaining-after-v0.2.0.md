@@ -1,5 +1,7 @@
 # Remaining work after v0.2.0
 
+> **The plan for this inventory is now [`../production/`](../production/README.md)** (2026-10-02). Every item below is mapped to a phase there: see its [coverage map](../production/phases/README.md#coverage-map). This file stays as the inventory and is not updated further.
+
 > This file is the **inventory**. [`phases-after-v0.2.0.md`](phases-after-v0.2.0.md) is the **plan** — the same items as eighteen ordered phases, one job each, with the decisions that block them pulled to the front.
 
 A survey of everything still open once Minab **0.2.0** is out: what to finish, fix, decide, and build, in a suggested order. Written 2026-09-20 from a read of the spec, roadmap, status log, ADR, source, tests, CI and the playground, plus a set of probes run against the built CLI and a real PostgreSQL engine (PGlite). Anything marked **verified** was reproduced during this survey; the reproduction is in [Appendix A](#appendix-a--reproductions).
