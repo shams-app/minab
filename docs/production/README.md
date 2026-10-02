@@ -16,7 +16,7 @@ The plan is written for AI sessions (Claude Code). Every phase is a **card** wit
 | `phases/<ID>.md` | One card per phase | Owner only (A2 may adjust cards to match answers) |
 | [`phases/prompts.md`](phases/prompts.md) | Copy-and-paste prompt for every phase, plus helper prompts | Owner only |
 | `status/<ID>.md` | Written by the session that did phase `<ID>`, at its end. One file per phase ([format](#status-file-format)) | Only that phase's session (and the owner) |
-| [`progress.md`](progress.md) | The progress page: graph, ready list, waves, open questions, "later" items. **Generated** — never edit by hand | CI bot / owner, by running the tool |
+| [`progress.md`](progress.md) | The progress page: graph, ready list, waves, open questions, "later" items. **Generated** — never edit by hand | The `plan-progress.yml` workflow, after each merge to `main` |
 | [`tools/progress.mjs`](tools/progress.mjs) | Builds `progress.md` from the phase list and the status files | Owner only |
 
 ## What "production level" means
@@ -40,14 +40,14 @@ Minab 1.0 is production ready when all of these are true. Phase **V4** checks th
 2. **Start one Claude Code session per phase** with that phase's prompt. You can run many sessions at the same time.
 3. The session checks Depends and decisions, asks you the card's **Ask first** questions, does the work, runs every check, writes `status/<ID>.md` and a changelog fragment, then commits, pushes and opens a pull request titled `[<ID>] <phase title>`.
 4. **You review and merge.** Merge order between phases does not matter (see the next section).
-5. After the merge, CI regenerates [`progress.md`](progress.md) on `main`.
+5. After the merge, the `plan-progress.yml` workflow rebuilds [`progress.md`](progress.md) on `main` (a minute later).
 
 ## Why pull requests will not block each other
 
 The last plan (Shamsine forms) had two problems: many extra "b" and "c" cards, because cards were too big; and pull requests that had to be merged one by one, because every one of them edited the same `TODO.md` and the same progress graph in `README.md`. This plan avoids both:
 
 1. **No shared to-do file.** Each phase writes only its own `status/<ID>.md`. Things that can wait go into the **Later** section of that file. The progress tool collects every Later item into `progress.md`, so you still see one list.
-2. **The progress graph is generated, never edited by a phase.** `progress.md` is rebuilt by CI after each merge (or by you, any time). A phase branch never touches it.
+2. **The progress graph is generated, never edited by a phase.** The workflow `.github/workflows/plan-progress.yml` rebuilds `progress.md` after each merge to `main` and commits it (you can also start it by hand from the Actions tab). A phase branch never touches it.
 3. **Changelog fragments.** A phase never edits `CHANGELOG.md`. It writes `changes/<ID>.md`. Only release phases (V1, V2, V3, V5) turn fragments into a CHANGELOG section.
 4. **Places are prepared ahead.** Things many phases would add to are created once, early, by one phase: the package `exports` map with every entry point (R2), one CI workflow file per job (every new job is a new file), one expected-result file per example (B1), one case file per phase in the test harnesses (C1), one README per source folder (A1 rule).
 5. **Phases that must edit the same "hot" file are chained** with Depends (see [Hot files and lanes](#hot-files-and-lanes)). Phases in different lanes do not touch the same lines.
@@ -108,7 +108,7 @@ A phase may edit these only when the table says so. The guard workflow (from A1)
 | `docs/status.md`, `docs/roadmap.md` | A1 (closes them); V1 marks roadmap Phase 9 as published. Otherwise frozen history |
 | `docs/production/README.md`, `docs/production/phases/**` | Owner; A2 (to match answers) |
 | `docs/production/decisions.md` | A2; any phase only to record an answer under a decision it had to ask |
-| `docs/production/progress.md` | CI bot or the owner, by running the tool |
+| `docs/production/progress.md` | The `plan-progress.yml` workflow (or the owner, by running the tool) |
 | `docs/production/status/<other ID>.md` | Only the phase with that ID |
 | `.github/workflows/ci.yml` | Q1 only. Every new CI job is a **new workflow file** |
 | `package.json`: `exports`, `typesVersions`, `peerDependencies`, `engines` | R2 (creates the map), H1 (adds CommonJS `require` targets), Q1 (`engines`) |
