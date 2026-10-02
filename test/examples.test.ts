@@ -24,11 +24,19 @@ class Capture implements CliIo {
 
     constructor(readonly cwd: string) {}
 
-    out(text: string): void { this.stdout.push(text); }
-    err(text: string): void { this.stderr.push(text); }
+    out(text: string): void {
+        this.stdout.push(text);
+    }
+    err(text: string): void {
+        this.stderr.push(text);
+    }
 
-    get output(): string { return this.stdout.join('\n'); }
-    get errors(): string { return this.stderr.join('\n'); }
+    get output(): string {
+        return this.stdout.join('\n');
+    }
+    get errors(): string {
+        return this.stderr.join('\n');
+    }
 }
 
 async function cli(name: string, command: 'check' | 'run' | 'compile', ...flags: string[]) {

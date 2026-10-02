@@ -36,10 +36,10 @@ export class FixtureExecutor implements QueryExecutor {
             throw new DataSourceError(
                 this.responses.length === 0
                     ? `this program needs data, and no data source was configured.\n` +
-                      `Add a "data" section to the config, or pass --database <url>.\n` +
-                      `Unanswered statement:\n  ${query.text}`
+                          `Add a "data" section to the config, or pass --database <url>.\n` +
+                          `Unanswered statement:\n  ${query.text}`
                     : `no configured response matches this statement:\n  ${query.text}\n` +
-                      `Add a response with a "match" substring of it, or one with no "match" at all.`
+                          `Add a response with a "match" substring of it, or one with no "match" at all.`
             );
         }
         return response.rows;

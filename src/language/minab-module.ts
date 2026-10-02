@@ -102,9 +102,7 @@ function createMinabModule(
     options: MinabServiceOptions
 ): Module<MinabServices, PartialLangiumServices & MinabAddedServices> {
     return {
-        ...(options.mode === 'production'
-            ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) }
-            : {}),
+        ...(options.mode === 'production' ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) } : {}),
         schema: () => new SchemaProvider(schema),
         scopeResolver: services => new MinabScopeResolver(services.schema),
         ruleContext: () => ruleContext,
@@ -147,15 +145,8 @@ export function createMinabServices(
     shared: LangiumSharedServices;
     Minab: MinabServices;
 } {
-    const shared = inject(
-        createDefaultSharedModule(context),
-        MinabGeneratedSharedModule
-    );
-    const Minab = inject(
-        createDefaultModule({ shared }),
-        MinabGeneratedModule,
-        createMinabModule(schema, ruleContext, options)
-    );
+    const shared = inject(createDefaultSharedModule(context), MinabGeneratedSharedModule);
+    const Minab = inject(createDefaultModule({ shared }), MinabGeneratedModule, createMinabModule(schema, ruleContext, options));
     shared.ServiceRegistry.register(Minab);
     registerValidationChecks(Minab);
     return { shared, Minab };

@@ -88,14 +88,14 @@ export interface ProgramSymbol {
 export type CompiledSql =
     | { ok: true; text: string; params: unknown[]; formatted: string }
     | {
-        ok: false;
-        /** Why there is no single statement, in plain words. */
-        reason: string;
-        /** The compiler's own message, when `reason` rephrases it. */
-        detail?: string;
-        /** Whether running the program still sends statements to the database (its relational parts are pushed down). */
-        pushesDown: boolean;
-    };
+          ok: false;
+          /** Why there is no single statement, in plain words. */
+          reason: string;
+          /** The compiler's own message, when `reason` rephrases it. */
+          detail?: string;
+          /** Whether running the program still sends statements to the database (its relational parts are pushed down). */
+          pushesDown: boolean;
+      };
 
 export interface AnalyzeReport {
     diagnostics: EngineDiagnostic[];
@@ -237,9 +237,7 @@ export interface EngineRequest<M extends EngineMethod = EngineMethod> {
     args: Parameters<EngineApi[M]>;
 }
 
-export type EngineResponse =
-    | { id: number; ok: true; value: unknown }
-    | { id: number; ok: false; error: string };
+export type EngineResponse = { id: number; ok: true; value: unknown } | { id: number; ok: false; error: string };
 
 export type EngineEvent = { event: 'status'; status: EngineStatus };
 

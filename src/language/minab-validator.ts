@@ -121,8 +121,18 @@ export class MinabValidator {
      * stays quiet, so one mistake produces exactly one diagnostic.
      */
     checkExpressionTypeChecks(
-        node: BinaryExpression | UnaryExpression | MemberAccess | TupleAccess | FilterAccess
-            | CallExpression | FunctionCall | ListLiteral | IfExpr | SwitchExpr | CurrentRecord,
+        node:
+            | BinaryExpression
+            | UnaryExpression
+            | MemberAccess
+            | TupleAccess
+            | FilterAccess
+            | CallExpression
+            | FunctionCall
+            | ListLiteral
+            | IfExpr
+            | SwitchExpr
+            | CurrentRecord,
         accept: ValidationAcceptor
     ): void {
         const result = this.services.typeChecker.inferType(node);
@@ -200,7 +210,10 @@ export class MinabValidator {
         if (!valueResult.ok) return;
         const target = astTypeToMinabType(node.type);
         if (!isAssignableTo(valueResult.type, target)) {
-            accept('error', `can't initialize "${node.name}" (${formatType(target)}) with ${formatType(valueResult.type)} (no implicit coercion)`, { node, property: 'value' });
+            accept('error', `can't initialize "${node.name}" (${formatType(target)}) with ${formatType(valueResult.type)} (no implicit coercion)`, {
+                node,
+                property: 'value'
+            });
         }
     }
 

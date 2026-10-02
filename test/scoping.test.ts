@@ -3,15 +3,7 @@ import { parseHelper } from 'langium/test';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createMinabServices, type MinabServices } from '../src/language/minab-module.js';
 import { scalarType, type MinabSchema } from '../src/language/schema.js';
-import {
-    isCurrentRecord,
-    isGroupKeyRef,
-    isMemberAccess,
-    isNamedScope,
-    isNameRef,
-    isParentRecord,
-    type Model
-} from '../src/language/generated/ast.js';
+import { isCurrentRecord, isGroupKeyRef, isMemberAccess, isNamedScope, isNameRef, isParentRecord, type Model } from '../src/language/generated/ast.js';
 
 // Fixture schema standing in for the host application's real table/column
 // contract (see src/language/schema.ts) — Minab itself never declares
@@ -142,9 +134,7 @@ describe('the §6.1 correlated pattern — `#Booking[. != ^ ...]`', () => {
         // `^.room_id` therefore can't resolve a column yet either — not
         // because "no ^" but because the outer table isn't known without
         // the Phase 4 type system.
-        const caretRoomId = AstUtils.streamAst(model).find(
-            n => isMemberAccess(n) && n.member === 'room_id' && isParentRecord(n.receiver)
-        )!;
+        const caretRoomId = AstUtils.streamAst(model).find(n => isMemberAccess(n) && n.member === 'room_id' && isParentRecord(n.receiver))!;
         const caretResult = services.scopeResolver.resolveMemberAccess(caretRoomId as never);
         expect(caretResult.found).toBe(false);
         if (!caretResult.found) {

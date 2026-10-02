@@ -55,7 +55,11 @@ const COMPLETION_KINDS: Record<CompletionKind, monaco.languages.CompletionItemKi
 
 const SNIPPETS: Array<{ label: string; detail: string; body: string }> = [
     { label: 'FROM … SELECT', detail: 'pipeline query', body: 'FROM ${1:Order}\nWHERE ${2:.status == "shipped"}\nSELECT ${3:.id}' },
-    { label: 'GROUPBY … SELECT KEY', detail: 'grouped query', body: 'FROM ${1:Order}\nGROUPBY ${2:.customer}\nSELECT KEY.${3:name} AS ${4:group}, COUNT(.) AS ${5:count}' },
+    {
+        label: 'GROUPBY … SELECT KEY',
+        detail: 'grouped query',
+        body: 'FROM ${1:Order}\nGROUPBY ${2:.customer}\nSELECT KEY.${3:name} AS ${4:group}, COUNT(.) AS ${5:count}'
+    },
     { label: 'fn', detail: 'function declaration', body: 'fn ${1:name}(${2:value}: ${3:DECIMAL}): ${4:DECIMAL} {\n    ${5:value}\n}' },
     { label: 'let', detail: 'variable', body: 'let ${1:name}: ${2:DECIMAL} = ${3:0};' },
     { label: 'if … else', detail: 'if expression', body: 'if ${1:condition} {\n    ${2}\n} else {\n    ${3}\n}' },

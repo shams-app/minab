@@ -8,13 +8,7 @@
  * §5.3) — see `minab-validator.ts`'s `checkFunctionDeclNotReservedName`.
  */
 
-import {
-    formatType,
-    isNumeric,
-    isOrderable,
-    scalarType,
-    type MinabType
-} from './minab-types.js';
+import { formatType, isNumeric, isOrderable, scalarType, type MinabType } from './minab-types.js';
 
 export type BuiltinCheckResult = { ok: true; type: MinabType } | { ok: false; reason: string };
 

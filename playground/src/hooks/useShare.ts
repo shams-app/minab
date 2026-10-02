@@ -33,10 +33,11 @@ export function useShare(): ShareView {
     return {
         linkFor,
         copyLink: () => copy(linkFor('/play'), 'Link copied — it opens this program exactly as it is now.'),
-        copyEmbed: () => copy(
-            `<iframe src="${linkFor('/embed')}" title="Minab example" style="width:100%;height:420px;border:0;border-radius:12px" loading="lazy"></iframe>`,
-            'Embed code copied.'
-        ),
+        copyEmbed: () =>
+            copy(
+                `<iframe src="${linkFor('/embed')}" title="Minab example" style="width:100%;height:420px;border:0;border-radius:12px" loading="lazy"></iframe>`,
+                'Embed code copied.'
+            ),
         exportBundle: async () => {
             const { workspace } = getState();
             const name = workspace.exampleId ?? 'program';

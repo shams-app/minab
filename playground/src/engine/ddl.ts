@@ -168,9 +168,7 @@ export function sqlLiteral(value: unknown, sqlType: string): string {
 }
 
 export function createTableSql(table: PhysicalTable): string {
-    const lines = table.columns.map(c =>
-        `  ${quoteIdent(c.name)} ${c.sqlType}${c.primaryKey ? ' PRIMARY KEY' : c.nullable ? '' : ' NOT NULL'}`
-    );
+    const lines = table.columns.map(c => `  ${quoteIdent(c.name)} ${c.sqlType}${c.primaryKey ? ' PRIMARY KEY' : c.nullable ? '' : ' NOT NULL'}`);
     return `CREATE TABLE ${quoteIdent(table.name)} (\n${lines.join(',\n')}\n);`;
 }
 
@@ -178,11 +176,14 @@ export function insertSql(table: PhysicalTable, rows: Row[]): string | undefined
     if (rows.length === 0) return undefined;
     const columns = table.columns;
     const unknown = new Set<string>();
-    for (const row of rows) for (const key of Object.keys(row)) {
-        if (!columns.some(c => c.name === key)) unknown.add(key);
-    }
+    for (const row of rows)
+        for (const key of Object.keys(row)) {
+            if (!columns.some(c => c.name === key)) unknown.add(key);
+        }
     if (unknown.size > 0) {
-        throw new Error(`seed.${table.name}: ${[...unknown].map(k => `"${k}"`).join(', ')} ${unknown.size === 1 ? 'is not a column' : 'are not columns'} of ${table.name}`);
+        throw new Error(
+            `seed.${table.name}: ${[...unknown].map(k => `"${k}"`).join(', ')} ${unknown.size === 1 ? 'is not a column' : 'are not columns'} of ${table.name}`
+        );
     }
     const values = rows.map((row, index) => {
         try {

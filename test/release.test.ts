@@ -39,9 +39,9 @@ describe('release metadata', () => {
 // `--ignore-scripts` keeps `prepack` from rebuilding (and wiping) `out/`
 // while the rest of the suite runs; the tarball is checked as built.
 describe.skipIf(!existsSync(resolve(root, 'out/src/cli/bin.js')))('npm tarball contents', () => {
-    const packed = JSON.parse(
-        execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' })
-    ) as Array<{ files: Array<{ path: string }> }>;
+    const packed = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root, encoding: 'utf8' })) as Array<{
+        files: Array<{ path: string }>;
+    }>;
     const files = packed[0].files.map(f => f.path);
 
     test('includes the CLI, the language server, and the docs users read', () => {

@@ -145,7 +145,7 @@ export class MinabTypeChecker {
      */
     inferType(node: Expression): TypeResult {
         const result = this.inferTypeDispatch(node);
-        return (!result.ok && result.origin === undefined) ? { ...result, origin: node } : result;
+        return !result.ok && result.origin === undefined ? { ...result, origin: node } : result;
     }
 
     private inferTypeDispatch(node: Expression): TypeResult {
@@ -361,7 +361,7 @@ export class MinabTypeChecker {
             return ok(scalarType(t.base, { nullable: t.nullable }));
         }
         if (t.kind === 'collection') {
-            return err('a positional index isn\'t valid on a relational collection — its row order isn\'t guaranteed without ORDERBY (spec §3.5)');
+            return err("a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5)");
         }
         return err(`[${node.index}] used on a non-tuple, non-array value (${formatType(t)})`);
     }
@@ -391,7 +391,7 @@ export class MinabTypeChecker {
         }
         if (filter.type.kind === 'scalar' && filter.type.base === 'INTEGER' && !filter.type.array) {
             if (receiver.type.kind === 'collection') {
-                return err('a positional index isn\'t valid on a relational collection — its row order isn\'t guaranteed without ORDERBY (spec §3.5)');
+                return err("a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5)");
             }
             if (receiver.type.kind === 'scalar' && receiver.type.array) {
                 return ok(scalarType(receiver.type.base, { nullable: receiver.type.nullable }));
@@ -626,7 +626,9 @@ export class MinabTypeChecker {
             const itemType = this.inferType(q.selectClause.items[0].expression);
             if (!itemType.ok) return itemType;
             if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !baseTypesEqual(left.type, itemType.type)) {
-                return err(`"IN" between ${formatType(left.type)} and a subquery of ${formatType(itemType.type)} requires matching types (no implicit coercion)`);
+                return err(
+                    `"IN" between ${formatType(left.type)} and a subquery of ${formatType(itemType.type)} requires matching types (no implicit coercion)`
+                );
             }
             return ok(scalarType('BOOLEAN'));
         }

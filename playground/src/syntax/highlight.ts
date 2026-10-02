@@ -18,10 +18,53 @@ export function highlightMinab(source: string): Span[][] {
 }
 
 const SQL_KEYWORDS = new Set([
-    'SELECT', 'FROM', 'WHERE', 'AS', 'AND', 'OR', 'NOT', 'EXISTS', 'GROUP', 'BY', 'ORDER', 'HAVING', 'LIMIT',
-    'OFFSET', 'IS', 'DISTINCT', 'JOIN', 'LEFT', 'CROSS', 'INNER', 'ON', 'IN', 'LIKE', 'ASC', 'DESC', 'CASE',
-    'WHEN', 'THEN', 'ELSE', 'END', 'CAST', 'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', 'CREATE',
-    'TABLE', 'PRIMARY', 'KEY', 'EXTENSION', 'IF', 'ARRAY', 'WITH', 'UNION', 'ALL'
+    'SELECT',
+    'FROM',
+    'WHERE',
+    'AS',
+    'AND',
+    'OR',
+    'NOT',
+    'EXISTS',
+    'GROUP',
+    'BY',
+    'ORDER',
+    'HAVING',
+    'LIMIT',
+    'OFFSET',
+    'IS',
+    'DISTINCT',
+    'JOIN',
+    'LEFT',
+    'CROSS',
+    'INNER',
+    'ON',
+    'IN',
+    'LIKE',
+    'ASC',
+    'DESC',
+    'CASE',
+    'WHEN',
+    'THEN',
+    'ELSE',
+    'END',
+    'CAST',
+    'INSERT',
+    'INTO',
+    'VALUES',
+    'UPDATE',
+    'SET',
+    'DELETE',
+    'CREATE',
+    'TABLE',
+    'PRIMARY',
+    'KEY',
+    'EXTENSION',
+    'IF',
+    'ARRAY',
+    'WITH',
+    'UNION',
+    'ALL'
 ]);
 const SQL_CONSTANTS = new Set(['NULL', 'TRUE', 'FALSE']);
 const SQL_FUNCTIONS = new Set(['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COALESCE', 'BOOL_AND', 'BOOL_OR', 'LOWER', 'UPPER']);
@@ -45,7 +88,10 @@ export function highlightSql(source: string): Span[][] {
             else if ((m = /^\d+(\.\d+)?/.exec(rest))) push('number', i + m[0].length);
             else if ((m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(rest))) {
                 const word = m[0].toUpperCase();
-                push(SQL_CONSTANTS.has(word) ? 'constant' : SQL_FUNCTIONS.has(word) ? 'builtin' : SQL_KEYWORDS.has(word) ? 'keyword.pipeline' : 'identifier', i + m[0].length);
+                push(
+                    SQL_CONSTANTS.has(word) ? 'constant' : SQL_FUNCTIONS.has(word) ? 'builtin' : SQL_KEYWORDS.has(word) ? 'keyword.pipeline' : 'identifier',
+                    i + m[0].length
+                );
             } else if ((m = /^(<>|!=|<=|>=|::|[=<>+\-*/%])/.exec(rest))) push('operator', i + m[0].length);
             else push('delimiter', i + 1);
         }

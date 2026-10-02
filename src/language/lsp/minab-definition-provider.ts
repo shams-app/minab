@@ -36,11 +36,13 @@ export class MinabDefinitionProvider implements DefinitionProvider {
         // there's no declared alias to point at (a bare table reference).
         const targetCst = GrammarUtils.findNodeForProperty(ownerCst, 'alias') ?? ownerCst;
 
-        return [{
-            targetUri: document.uri.toString(),
-            targetRange: targetCst.range,
-            targetSelectionRange: targetCst.range,
-            originSelectionRange: leaf.range
-        }];
+        return [
+            {
+                targetUri: document.uri.toString(),
+                targetRange: targetCst.range,
+                targetSelectionRange: targetCst.range,
+                originSelectionRange: leaf.range
+            }
+        ];
     }
 }

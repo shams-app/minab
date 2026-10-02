@@ -9,7 +9,15 @@ import { CodeBlock, Inline, Markdown } from '../primitives/Code.js';
 import { Icon, type IconName } from '../primitives/Icon.js';
 import { Tabs } from '../primitives/primitives.js';
 
-export function Hero({ eyebrow, headline, subhead, primary, secondary, note, demo }: {
+export function Hero({
+    eyebrow,
+    headline,
+    subhead,
+    primary,
+    secondary,
+    note,
+    demo
+}: {
     eyebrow: string;
     headline: string;
     subhead: string;
@@ -25,10 +33,16 @@ export function Hero({ eyebrow, headline, subhead, primary, secondary, note, dem
                 <h1 className="mb-hero-title">{headline}</h1>
                 <p className="mb-hero-subhead">{subhead}</p>
                 <div className="mb-row">
-                    <Link className="mb-button" data-variant="primary" data-size="lg" to={primary.to}><Icon name="play" /> {primary.label}</Link>
-                    <Link className="mb-button" data-variant="secondary" data-size="lg" to={secondary.to}>{secondary.label}</Link>
+                    <Link className="mb-button" data-variant="primary" data-size="lg" to={primary.to}>
+                        <Icon name="play" /> {primary.label}
+                    </Link>
+                    <Link className="mb-button" data-variant="secondary" data-size="lg" to={secondary.to}>
+                        {secondary.label}
+                    </Link>
                 </div>
-                <p className="mb-muted mb-hero-note"><Icon name="database" size={14} /> {note}</p>
+                <p className="mb-muted mb-hero-note">
+                    <Icon name="database" size={14} /> {note}
+                </p>
             </div>
             <div className="mb-hero-demo">{demo}</div>
         </section>
@@ -51,10 +65,20 @@ export function HeroDemo({ tabs, active, onSelect, caption, source, output, open
         <div className="mb-hero-card">
             <Tabs idPrefix="hero" ariaLabel="Demo" size="sm" tabs={tabs} active={active} onChange={onSelect} />
             <div className="mb-hero-card-body" id="hero-panel" role="tabpanel">
-                <p className="mb-muted"><Inline text={caption} /></p>
-                <CodeBlock code={source.split('\n').filter(l => !l.trimStart().startsWith('//')).join('\n').trim()} />
+                <p className="mb-muted">
+                    <Inline text={caption} />
+                </p>
+                <CodeBlock
+                    code={source
+                        .split('\n')
+                        .filter(l => !l.trimStart().startsWith('//'))
+                        .join('\n')
+                        .trim()}
+                />
                 <div className="mb-hero-output">{output}</div>
-                <Link className="mb-link-button" to={openHref}>Open in the playground →</Link>
+                <Link className="mb-link-button" to={openHref}>
+                    Open in the playground →
+                </Link>
             </div>
         </div>
     );
@@ -69,7 +93,15 @@ export function SectionHeader({ title, body }: { title: string; body?: string })
     );
 }
 
-export function LayerCards({ title, body, cards }: { title: string; body: string; cards: Array<{ title: string; body: string; source: string; href: string }> }) {
+export function LayerCards({
+    title,
+    body,
+    cards
+}: {
+    title: string;
+    body: string;
+    cards: Array<{ title: string; body: string; source: string; href: string }>;
+}) {
     return (
         <section className="mb-section">
             <SectionHeader title={title} body={body} />
@@ -78,8 +110,16 @@ export function LayerCards({ title, body, cards }: { title: string; body: string
                     <article className="mb-layer-card" key={card.title}>
                         <h3>{card.title}</h3>
                         <Markdown source={card.body} className="mb-muted" />
-                        <CodeBlock code={card.source.split('\n').filter(l => !l.trimStart().startsWith('//')).join('\n').trim()} />
-                        <Link className="mb-link-button" to={card.href}>Run it →</Link>
+                        <CodeBlock
+                            code={card.source
+                                .split('\n')
+                                .filter(l => !l.trimStart().startsWith('//'))
+                                .join('\n')
+                                .trim()}
+                        />
+                        <Link className="mb-link-button" to={card.href}>
+                            Run it →
+                        </Link>
                     </article>
                 ))}
             </div>
@@ -87,7 +127,15 @@ export function LayerCards({ title, body, cards }: { title: string; body: string
     );
 }
 
-export function SigilGrid({ title, body, items }: { title: string; body: string; items: ReadonlyArray<{ sigil: string; token: string; name: string; example: string }> }) {
+export function SigilGrid({
+    title,
+    body,
+    items
+}: {
+    title: string;
+    body: string;
+    items: ReadonlyArray<{ sigil: string; token: string; name: string; example: string }>;
+}) {
     return (
         <section className="mb-section">
             <SectionHeader title={title} body={body} />
@@ -126,11 +174,22 @@ export function Comparison({ title, body, minab, sql, href }: { title: string; b
         <section className="mb-section">
             <SectionHeader title={title} body={body} />
             <div className="mb-comparison">
-                <CodeBlock code={minab.split('\n').filter(l => !l.trimStart().startsWith('//')).join('\n').trim()} caption="Minab" />
-                <div className="mb-comparison-arrow" aria-hidden="true"><Icon name="chevron-right" size={20} /></div>
+                <CodeBlock
+                    code={minab
+                        .split('\n')
+                        .filter(l => !l.trimStart().startsWith('//'))
+                        .join('\n')
+                        .trim()}
+                    caption="Minab"
+                />
+                <div className="mb-comparison-arrow" aria-hidden="true">
+                    <Icon name="chevron-right" size={20} />
+                </div>
                 <CodeBlock code={sql ?? 'Compiling…'} language="sql" caption="PostgreSQL" wrap />
             </div>
-            <Link className="mb-link-button" to={href}>Open it and change something →</Link>
+            <Link className="mb-link-button" to={href}>
+                Open it and change something →
+            </Link>
         </section>
     );
 }
@@ -151,25 +210,63 @@ export function FeatureGrid({ features }: { features: ReadonlyArray<{ icon: stri
     );
 }
 
-export function CtaBand({ title, body, primary, secondary }: { title: string; body: string; primary: { label: string; to: string }; secondary: { label: string; to: string } }) {
+export function CtaBand({
+    title,
+    body,
+    primary,
+    secondary
+}: {
+    title: string;
+    body: string;
+    primary: { label: string; to: string };
+    secondary: { label: string; to: string };
+}) {
     return (
         <section className="mb-cta">
             <h2>{title}</h2>
             <p>{body}</p>
             <div className="mb-row">
-                <Link className="mb-button" data-variant="primary" data-size="lg" to={primary.to}>{primary.label}</Link>
-                <Link className="mb-button" data-variant="secondary" data-size="lg" to={secondary.to}>{secondary.label}</Link>
+                <Link className="mb-button" data-variant="primary" data-size="lg" to={primary.to}>
+                    {primary.label}
+                </Link>
+                <Link className="mb-button" data-variant="secondary" data-size="lg" to={secondary.to}>
+                    {secondary.label}
+                </Link>
             </div>
         </section>
     );
 }
 
-export function Footer({ author, authorUrl, links, note }: { author: string; authorUrl: string; links: ReadonlyArray<{ label: string; href: string }>; note: string }) {
+export function Footer({
+    author,
+    authorUrl,
+    links,
+    note
+}: {
+    author: string;
+    authorUrl: string;
+    links: ReadonlyArray<{ label: string; href: string }>;
+    note: string;
+}) {
     return (
         <footer className="mb-footer">
-            <p>Minab — designed and built by {authorUrl ? <a href={authorUrl} target="_blank" rel="noreferrer">{author}</a> : author}.</p>
+            <p>
+                Minab — designed and built by{' '}
+                {authorUrl ? (
+                    <a href={authorUrl} target="_blank" rel="noreferrer">
+                        {author}
+                    </a>
+                ) : (
+                    author
+                )}
+                .
+            </p>
             <nav aria-label="Project links">
-                {links.map(l => <a key={l.href} href={l.href} target="_blank" rel="noreferrer">{l.label} <Icon name="external" size={12} /></a>)}
+                {links.map(l => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noreferrer">
+                        {l.label} <Icon name="external" size={12} />
+                    </a>
+                ))}
             </nav>
             <p className="mb-muted">{note}</p>
         </footer>

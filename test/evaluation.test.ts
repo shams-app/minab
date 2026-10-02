@@ -164,9 +164,7 @@ describe('a field-level rule (spec §6.2)', () => {
             fieldValue: 'cust-3'
         });
         expect(result).toBe(true);
-        expect(executor.only.text).toBe(
-            'SELECT EXISTS (SELECT 1 FROM "Customer" AS "_r0" WHERE "_r0"."id" IS NOT DISTINCT FROM $1) AS "value"'
-        );
+        expect(executor.only.text).toBe('SELECT EXISTS (SELECT 1 FROM "Customer" AS "_r0" WHERE "_r0"."id" IS NOT DISTINCT FROM $1) AS "value"');
         expect(executor.only.params).toEqual(['cust-3']);
     });
 
@@ -193,8 +191,7 @@ describe('aggregates over a related collection (spec §6.1)', () => {
         });
         expect(result).toBe(true);
         expect(executor.only.text).toBe(
-            'SELECT (SELECT COUNT(*) FROM "Order" AS "_r0"' +
-                ' WHERE "_r0"."customer_id" = $1 AND "_r0"."status" IS NOT DISTINCT FROM $2) AS "value"'
+            'SELECT (SELECT COUNT(*) FROM "Order" AS "_r0"' + ' WHERE "_r0"."customer_id" = $1 AND "_r0"."status" IS NOT DISTINCT FROM $2) AS "value"'
         );
         expect(executor.only.params).toEqual(['cust-3', 'cancelled']);
     });
@@ -337,10 +334,11 @@ describe('the interpreted layer proper', () => {
 
     test('switch picks a branch by value', async () => {
         const executor = new RecordingExecutor();
-        const result = await value(
-            `switch .status { "shipped" => 1, "cancelled" => 2, _ => 0 } == 2`,
-            { executor, record: { id: 'o-1', status: 'cancelled' }, recordTable: 'Order' }
-        );
+        const result = await value(`switch .status { "shipped" => 1, "cancelled" => 2, _ => 0 } == 2`, {
+            executor,
+            record: { id: 'o-1', status: 'cancelled' },
+            recordTable: 'Order'
+        });
         expect(result).toBe(true);
     });
 

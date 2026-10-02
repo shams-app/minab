@@ -38,21 +38,46 @@ export type TokenType =
     | 'invalid';
 
 export const PIPELINE_KEYWORDS = [
-    'FROM', 'AS', 'JOIN', 'LEFTJOIN', 'CROSSJOIN', 'ON', 'WHERE', 'GROUPBY', 'HAVING',
-    'SELECT', 'DISTINCT', 'ORDERBY', 'ASC', 'DESC', 'LIMIT', 'OFFSET'
+    'FROM',
+    'AS',
+    'JOIN',
+    'LEFTJOIN',
+    'CROSSJOIN',
+    'ON',
+    'WHERE',
+    'GROUPBY',
+    'HAVING',
+    'SELECT',
+    'DISTINCT',
+    'ORDERBY',
+    'ASC',
+    'DESC',
+    'LIMIT',
+    'OFFSET'
 ] as const;
 
 export const DML_KEYWORDS = ['INSERT', 'VALUES', 'DELETE', 'UPDATE', 'SET'] as const;
 
 export const OPERATOR_KEYWORDS = ['AND', 'OR', 'NOT', 'IN', 'LIKE', 'CAST', 'is', 'isnot'] as const;
 
-export const CONTROL_KEYWORDS = [
-    'let', 'fn', 'if', 'if!', 'else', 'switch', 'loop', 'from', 'to', 'by', 'in', 'where', 'break', 'continue', '_'
-] as const;
+export const CONTROL_KEYWORDS = ['let', 'fn', 'if', 'if!', 'else', 'switch', 'loop', 'from', 'to', 'by', 'in', 'where', 'break', 'continue', '_'] as const;
 
 export const TYPE_KEYWORDS = [
-    'TEXT', 'CITEXT', 'INTEGER', 'DECIMAL', 'BOOLEAN', 'DATE', 'TIME', 'DATETIME', 'UUID', 'JSON',
-    'array', 'object', 'string', 'number', 'boolean'
+    'TEXT',
+    'CITEXT',
+    'INTEGER',
+    'DECIMAL',
+    'BOOLEAN',
+    'DATE',
+    'TIME',
+    'DATETIME',
+    'UUID',
+    'JSON',
+    'array',
+    'object',
+    'string',
+    'number',
+    'boolean'
 ] as const;
 
 export const CONSTANT_KEYWORDS = ['true', 'false', 'null', 'NULL'] as const;
@@ -72,8 +97,13 @@ WORD_TYPES.set('KEY', 'sigil.key');
 
 /** Every alphabetic keyword the tokenizer knows (for the drift test and completion fallbacks). */
 export const ALL_WORD_KEYWORDS: readonly string[] = [
-    ...PIPELINE_KEYWORDS, ...DML_KEYWORDS, ...OPERATOR_KEYWORDS, ...CONTROL_KEYWORDS,
-    ...TYPE_KEYWORDS, ...CONSTANT_KEYWORDS, 'KEY'
+    ...PIPELINE_KEYWORDS,
+    ...DML_KEYWORDS,
+    ...OPERATOR_KEYWORDS,
+    ...CONTROL_KEYWORDS,
+    ...TYPE_KEYWORDS,
+    ...CONSTANT_KEYWORDS,
+    'KEY'
 ];
 
 export interface Token {
@@ -91,8 +121,34 @@ export interface LineState {
 export const INITIAL_STATE: LineState = { inBlockComment: false };
 
 const OPERATORS = [
-    '==', '!=', '<=', '>=', '=>', '+:', '-:', '*:', '/:', ':|', '+=', '-=', '*=', '/=', '?=', '|=',
-    '<', '>', '=', '+', '-', '*', '/', '%', '!', '?', ':', '|'
+    '==',
+    '!=',
+    '<=',
+    '>=',
+    '=>',
+    '+:',
+    '-:',
+    '*:',
+    '/:',
+    ':|',
+    '+=',
+    '-=',
+    '*=',
+    '/=',
+    '?=',
+    '|=',
+    '<',
+    '>',
+    '=',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '!',
+    '?',
+    ':',
+    '|'
 ];
 
 const IDENT = /[A-Za-z_][A-Za-z0-9_]*/y;
@@ -101,10 +157,18 @@ const NUMBER = /[0-9]+(\.[0-9]+)?/y;
 /** Whether a `.` here starts a new current-record reference (`.status`) rather than continuing a member chain (`x.status`). */
 function dotStartsRecord(previous: Token | undefined): boolean {
     if (!previous) return true;
-    if (previous.type === 'identifier' || previous.type === 'member' || previous.type === 'sigil.key'
-        || previous.type === 'sigil.alias' || previous.type === 'sigil.parent' || previous.type === 'sigil.field'
-        || previous.type === 'sigil.record' || previous.type === 'string' || previous.type === 'number'
-        || previous.type === 'sigil.index') {
+    if (
+        previous.type === 'identifier' ||
+        previous.type === 'member' ||
+        previous.type === 'sigil.key' ||
+        previous.type === 'sigil.alias' ||
+        previous.type === 'sigil.parent' ||
+        previous.type === 'sigil.field' ||
+        previous.type === 'sigil.record' ||
+        previous.type === 'string' ||
+        previous.type === 'number' ||
+        previous.type === 'sigil.index'
+    ) {
         return false;
     }
     if (previous.type === 'delimiter' && (previous.text === ')' || previous.text === ']')) return false;

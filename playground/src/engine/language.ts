@@ -25,7 +25,10 @@ export class LanguageHost {
     readonly services: MinabServices;
     private readonly shared: ReturnType<typeof createMinabServices>['shared'];
 
-    constructor(readonly schema: MinabSchema, readonly ruleContext: MinabRuleContext) {
+    constructor(
+        readonly schema: MinabSchema,
+        readonly ruleContext: MinabRuleContext
+    ) {
         const created = createMinabServices(EmptyFileSystem, schema, ruleContext, { mode: 'production' });
         this.services = created.Minab;
         this.shared = created.shared;
@@ -63,10 +66,8 @@ export function diagnosticsOf(document: LangiumDocument): EngineDiagnostic[] {
         severity: (d.severity ?? 1) as Severity,
         message: typeof d.message === 'string' ? d.message : String(d.message),
         range: d.range,
-        source: d.data && typeof d.data === 'object' && 'code' in d.data &&
-            (d.data.code === 'lexing-error' || d.data.code === 'parsing-error')
-            ? 'syntax'
-            : 'minab'
+        source:
+            d.data && typeof d.data === 'object' && 'code' in d.data && (d.data.code === 'lexing-error' || d.data.code === 'parsing-error') ? 'syntax' : 'minab'
     }));
 }
 

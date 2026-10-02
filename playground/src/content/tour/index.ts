@@ -73,10 +73,7 @@ export const lessons: Lesson[] = [
             const r = rows(report);
             return !!r && r.length === 6 && r.every(row => !('status' in row) || row.status === 'shipped');
         },
-        hints: [
-            'Filtering goes between FROM and SELECT: `WHERE <condition>`.',
-            'The condition is `.status == "shipped"`.'
-        ],
+        hints: ['Filtering goes between FROM and SELECT: `WHERE <condition>`.', 'The condition is `.status == "shipped"`.'],
         focus: 'result'
     },
     {
@@ -130,10 +127,7 @@ export const lessons: Lesson[] = [
             const r = rows(report);
             return !!r && r.length === 5 && r.every(row => typeof row.spent === 'number' && row.spent > 1000);
         },
-        hints: [
-            '`SUM(.total) AS spent` in the SELECT.',
-            'Filter groups with `HAVING SUM(.total) > 1000`, between GROUPBY and SELECT.'
-        ],
+        hints: ['`SUM(.total) AS spent` in the SELECT.', 'Filter groups with `HAVING SUM(.total) > 1000`, between GROUPBY and SELECT.'],
         focus: 'result'
     },
     {
@@ -171,15 +165,24 @@ export const lessons: Lesson[] = [
         },
         solutionHost: { record: { ...BOOKING_BASE, start_date: '2026-10-08', end_date: '2026-10-10' } },
         presets: [
-            { id: 'backwards', label: 'Backwards dates', expect: false, note: 'Ends two days before it starts.', record: { ...BOOKING_BASE, start_date: '2026-10-10', end_date: '2026-10-08' } },
-            { id: 'fixed', label: 'Fixed dates', expect: true, note: 'Oct 8 to Oct 10.', record: { ...BOOKING_BASE, start_date: '2026-10-08', end_date: '2026-10-10' } }
+            {
+                id: 'backwards',
+                label: 'Backwards dates',
+                expect: false,
+                note: 'Ends two days before it starts.',
+                record: { ...BOOKING_BASE, start_date: '2026-10-10', end_date: '2026-10-08' }
+            },
+            {
+                id: 'fixed',
+                label: 'Fixed dates',
+                expect: true,
+                note: 'Oct 8 to Oct 10.',
+                record: { ...BOOKING_BASE, start_date: '2026-10-08', end_date: '2026-10-10' }
+            }
         ],
         task: 'Make the rule pass by fixing the record — not the rule.',
         goal: ({ report, source }) => verdict(report) === true && /\.end_date\s*>\s*\.start_date/.test(source),
-        hints: [
-            'Open the **Record** tab under the editor.',
-            'Swap `start_date` and `end_date`, or click the *Fixed dates* preset.'
-        ],
+        hints: ['Open the **Record** tab under the editor.', 'Swap `start_date` and `end_date`, or click the *Fixed dates* preset.'],
         focus: 'result'
     },
     {
@@ -196,12 +199,23 @@ export const lessons: Lesson[] = [
             record: { ...BOOKING_BASE, start_date: '2026-10-01', end_date: '2026-10-05' }
         },
         presets: [
-            { id: 'free', label: 'Free slot', expect: true, note: 'Nothing else in room 7 from Oct 1 to 5.', record: { ...BOOKING_BASE, start_date: '2026-10-01', end_date: '2026-10-05' } },
-            { id: 'overlap', label: 'Overlaps bkg-12', expect: false, note: 'Oct 4–8 collides with Oct 6–9.', record: { ...BOOKING_BASE, start_date: '2026-10-04', end_date: '2026-10-08' } }
+            {
+                id: 'free',
+                label: 'Free slot',
+                expect: true,
+                note: 'Nothing else in room 7 from Oct 1 to 5.',
+                record: { ...BOOKING_BASE, start_date: '2026-10-01', end_date: '2026-10-05' }
+            },
+            {
+                id: 'overlap',
+                label: 'Overlaps bkg-12',
+                expect: false,
+                note: 'Oct 4–8 collides with Oct 6–9.',
+                record: { ...BOOKING_BASE, start_date: '2026-10-04', end_date: '2026-10-08' }
+            }
         ],
         task: 'Also fail when another booking of the same room overlaps this one.',
-        goal: ({ report, source }) =>
-            verdict(report) !== undefined && report.trace.length === 1 && source.includes('#Booking') && source.includes('^'),
+        goal: ({ report, source }) => verdict(report) !== undefined && report.trace.length === 1 && source.includes('#Booking') && source.includes('^'),
         hints: [
             '`NOT EXISTS(#Booking[ … ])` is true when no booking matches the filter.',
             'Inside the filter: `. != ^` (not itself), `.room_id == ^.room_id` (same room).',
@@ -262,10 +276,7 @@ export const lessons: Lesson[] = [
         task: 'Use a `rate` variable of 20 to discount a 1302.5 order.',
         goal: ({ report, source }) =>
             report.stage === 'done' && report.result?.kind === 'value' && report.result.value === 1042 && /\blet\s+rate\b/.test(source),
-        hints: [
-            'Declarations come before the final expression: `let rate: DECIMAL = 20;`.',
-            'Then call `&discounted(1302.5, rate)`.'
-        ],
+        hints: ['Declarations come before the final expression: `let rate: DECIMAL = 20;`.', 'Then call `&discounted(1302.5, rate)`.'],
         focus: 'result'
     },
     {
@@ -282,16 +293,25 @@ export const lessons: Lesson[] = [
             record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 }
         },
         presets: [
-            { id: 'high', label: 'high · 750', expect: true, note: 'Needs more than 500.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 } },
-            { id: 'normal', label: 'normal · 750', expect: false, note: 'Needs more than 5000.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'normal', total: 750 } }
+            {
+                id: 'high',
+                label: 'high · 750',
+                expect: true,
+                note: 'Needs more than 500.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 }
+            },
+            {
+                id: 'normal',
+                label: 'normal · 750',
+                expect: false,
+                note: 'Needs more than 5000.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'normal', total: 750 }
+            }
         ],
         task: 'Rewrite `minimum` as a `switch` over `.status`.',
         goal: ({ report, source }) =>
             verdict(report) !== undefined && /\bswitch\s+\.status\b/.test(source) && /"normal"\s*,\s*"low"|"low"\s*,\s*"normal"/.test(source),
-        hints: [
-            '`switch .status { "urgent" => 0, … , _ => 100000 }`',
-            'Arms are separated by commas; `_` must come last.'
-        ],
+        hints: ['`switch .status { "urgent" => 0, … , _ => 100000 }`', 'Arms are separated by commas; `_` must come last.'],
         focus: 'result'
     },
     {
@@ -313,4 +333,3 @@ export const lessons: Lesson[] = [
 export function lessonById(id: string): Lesson | undefined {
     return lessons.find(l => l.id === id);
 }
-

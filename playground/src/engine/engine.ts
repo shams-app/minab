@@ -106,9 +106,12 @@ const INTERPRETED_ONLY: Record<string, string> = {
  */
 function explainNoSql(reason: string, kind: ProgramKind): CompiledSql {
     if (reason.includes('reaches outside the query being compiled')) {
-        const what = kind === 'field-rule' ? '`$` and the record under validation'
-            : kind === 'record-rule' ? 'the record under validation'
-            : 'values that only exist at run time (a `let` variable, say)';
+        const what =
+            kind === 'field-rule'
+                ? '`$` and the record under validation'
+                : kind === 'record-rule'
+                  ? 'the record under validation'
+                  : 'values that only exist at run time (a `let` variable, say)';
         return {
             ok: false,
             reason: `It reads ${what}, so it has no single SQL form. Running it evaluates those parts in memory and pushes each table-touching part down as its own statement.`,
@@ -264,9 +267,7 @@ export class Engine implements EngineApi {
         } else if (!tail) {
             compiled = { ok: false, reason: 'The program has no final expression or query, so there is nothing to compile.', pushesDown: false };
         } else {
-            const result = isQuery(tail)
-                ? language.services.sqlCompiler.compileQuery(tail)
-                : language.services.sqlCompiler.compileValue(tail);
+            const result = isQuery(tail) ? language.services.sqlCompiler.compileQuery(tail) : language.services.sqlCompiler.compileValue(tail);
             compiled = result.ok
                 ? { ok: true, text: result.query.text, params: result.query.params, formatted: formatSql(result.query) }
                 : explainNoSql(result.reason, program.kind);
@@ -383,9 +384,7 @@ export class Engine implements EngineApi {
         const kind = analysis.program.kind;
         if (kind === 'query' && Array.isArray(value)) {
             const rows = value as Row[];
-            const columns = tracer.lastColumns.length > 0
-                ? tracer.lastColumns
-                : [...new Set(rows.flatMap(r => Object.keys(r)))];
+            const columns = tracer.lastColumns.length > 0 ? tracer.lastColumns : [...new Set(rows.flatMap(r => Object.keys(r)))];
             return { kind: 'rows', columns, rows };
         }
         if ((kind === 'record-rule' || kind === 'field-rule') && typeof value === 'boolean') {

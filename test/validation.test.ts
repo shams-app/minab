@@ -57,7 +57,7 @@ beforeAll(async () => {
 describe('`$` is only valid in a field-level rule', () => {
     test('rejected when the host has not marked this as a field rule', async () => {
         const result = await validateRecordRule(`.total > $`);
-        expect(result.diagnostics.some(d => messageText(d).includes("only valid in a field-level rule"))).toBe(true);
+        expect(result.diagnostics.some(d => messageText(d).includes('only valid in a field-level rule'))).toBe(true);
     });
 
     test('accepted at the top level when the host marks this as a field rule', async () => {

@@ -61,7 +61,12 @@ export function WorkbenchLayout({ toolbar, editor, statusBar, output, host, host
                     ]}
                 />
                 <div className="mb-workbench-mobile-body" id="workbench-panel" role="tabpanel">
-                    {mobileTab === 'code' && <div className="mb-editor-frame">{editor}{statusBar}</div>}
+                    {mobileTab === 'code' && (
+                        <div className="mb-editor-frame">
+                            {editor}
+                            {statusBar}
+                        </div>
+                    )}
                     {mobileTab === 'result' && output}
                     {mobileTab === 'host' && host}
                 </div>
@@ -87,13 +92,17 @@ export function WorkbenchLayout({ toolbar, editor, statusBar, output, host, host
                         {host && hostOpen && (
                             <>
                                 <Separator className="mb-resize-handle" data-orientation="horizontal" />
-                                <Panel defaultSize="38%" minSize="15%" id="host">{host}</Panel>
+                                <Panel defaultSize="38%" minSize="15%" id="host">
+                                    {host}
+                                </Panel>
                             </>
                         )}
                     </Group>
                 </Panel>
                 <Separator className="mb-resize-handle" data-orientation="vertical" />
-                <Panel defaultSize="45%" minSize="25%" id="output">{output}</Panel>
+                <Panel defaultSize="45%" minSize="25%" id="output">
+                    {output}
+                </Panel>
             </Group>
         </div>
     );

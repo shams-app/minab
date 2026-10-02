@@ -28,7 +28,8 @@ function summary(report: RunReport): string {
     const kind = report.program.kind;
     if (kind === 'query') return n === 1 ? 'The whole query ran as one statement in Postgres.' : `${n} statements reached Postgres.`;
     if (n === 0) return 'Nothing reached the database: every part of this program was answered in memory.';
-    const rest = kind === 'record-rule' || kind === 'field-rule' ? 'everything else was answered from the record in memory' : 'everything else was evaluated in memory';
+    const rest =
+        kind === 'record-rule' || kind === 'field-rule' ? 'everything else was answered from the record in memory' : 'everything else was evaluated in memory';
     return `${n} statement${n === 1 ? '' : 's'} reached Postgres; ${rest}.`;
 }
 
@@ -45,8 +46,12 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
             tabIndex={0}
         >
             <div className="mb-trace-head">
-                <Badge tone="pushdown"><Icon name="database" size={12} /> Statement {entry.index}</Badge>
-                <span className="mb-muted">{entry.rowCount} row{entry.rowCount === 1 ? '' : 's'} · {entry.durationMs.toFixed(1)} ms</span>
+                <Badge tone="pushdown">
+                    <Icon name="database" size={12} /> Statement {entry.index}
+                </Badge>
+                <span className="mb-muted">
+                    {entry.rowCount} row{entry.rowCount === 1 ? '' : 's'} · {entry.durationMs.toFixed(1)} ms
+                </span>
             </div>
             {origin && (
                 <button type="button" className="mb-trace-origin" onClick={() => onReveal(origin.range)} title="Select in the editor">
@@ -55,11 +60,13 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
             )}
             <CodeBlock code={prettySql(entry.text)} language="sql" copyable wrap />
             <ParamsTable params={entry.params} />
-            {entry.error
-                ? <p className="mb-trace-error">{entry.error}</p>
-                : entry.preview.length > 0 && entry.columns.length === 1 && entry.columns[0] === 'value'
-                    ? <p className="mb-muted">returned <code className="mb-inline-code">{formatCell(entry.preview[0].value)}</code></p>
-                    : null}
+            {entry.error ? (
+                <p className="mb-trace-error">{entry.error}</p>
+            ) : entry.preview.length > 0 && entry.columns.length === 1 && entry.columns[0] === 'value' ? (
+                <p className="mb-muted">
+                    returned <code className="mb-inline-code">{formatCell(entry.preview[0].value)}</code>
+                </p>
+            ) : null}
         </li>
     );
 }
@@ -67,21 +74,36 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
 export function ExecutionView({ report, onHighlight, onReveal }: ExecutionViewProps) {
     if (!report) return <EmptyState icon="layers" title="Run the program to see how it executes" />;
     if (report.stage === 'parse' || report.stage === 'check' || report.stage === 'config') {
-        return <EmptyState icon="alert" title="Nothing ran">Fix the problems first — nothing is executed until the program checks.</EmptyState>;
+        return (
+            <EmptyState icon="alert" title="Nothing ran">
+                Fix the problems first — nothing is executed until the program checks.
+            </EmptyState>
+        );
     }
     return (
         <div className="mb-execution">
             <div className="mb-execution-summary">
                 <p>{summary(report)}</p>
                 <dl className="mb-timings">
-                    <div><dt>parse</dt><dd>{report.timings.parseMs.toFixed(1)} ms</dd></div>
-                    <div><dt>check</dt><dd>{report.timings.checkMs.toFixed(1)} ms</dd></div>
-                    <div><dt>run</dt><dd>{report.runMs.toFixed(1)} ms</dd></div>
+                    <div>
+                        <dt>parse</dt>
+                        <dd>{report.timings.parseMs.toFixed(1)} ms</dd>
+                    </div>
+                    <div>
+                        <dt>check</dt>
+                        <dd>{report.timings.checkMs.toFixed(1)} ms</dd>
+                    </div>
+                    <div>
+                        <dt>run</dt>
+                        <dd>{report.runMs.toFixed(1)} ms</dd>
+                    </div>
                 </dl>
             </div>
             {report.trace.length > 0 ? (
                 <ol className="mb-trace">
-                    {report.trace.map(entry => <TraceItem key={entry.index} entry={entry} onHighlight={onHighlight} onReveal={onReveal} />)}
+                    {report.trace.map(entry => (
+                        <TraceItem key={entry.index} entry={entry} onHighlight={onHighlight} onReveal={onReveal} />
+                    ))}
                 </ol>
             ) : (
                 <EmptyState icon="bolt" title="0 statements">

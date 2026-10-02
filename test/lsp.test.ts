@@ -23,9 +23,7 @@ const fixtureSchema: MinabSchema = {
     tables: [
         {
             name: 'Customer',
-            columns: [
-                { name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } }
-            ]
+            columns: [{ name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } }]
         }
     ],
     functions: []

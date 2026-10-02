@@ -56,9 +56,7 @@ export interface ResolvedScope {
     tableName?: string;
 }
 
-export type ScopeResolution =
-    | { found: true; scope: ResolvedScope }
-    | { found: false; reason: string };
+export type ScopeResolution = { found: true; scope: ResolvedScope } | { found: false; reason: string };
 
 interface AliasEntry {
     node: AstNode;
@@ -149,10 +147,7 @@ export class MinabScopeResolver {
                     return { found: false, reason: 'KEY is only valid after a GROUPBY clause' };
                 }
                 const validField =
-                    current.havingClause === child ||
-                    current.selectClause === child ||
-                    current.orderByClause === child ||
-                    current.limitClause === child;
+                    current.havingClause === child || current.selectClause === child || current.orderByClause === child || current.limitClause === child;
                 if (!validField) {
                     return { found: false, reason: 'KEY is only valid in HAVING, SELECT, ORDERBY, or LIMIT, after GROUPBY' };
                 }
@@ -371,12 +366,12 @@ export class MinabScopeResolver {
             const owningArray = isBlock(current)
                 ? current.statements
                 : isFunctionDecl(current)
-                ? current.body
-                : isLoopStatement(current)
-                ? current.statements
-                : isModel(current)
-                ? current.declarations
-                : undefined;
+                  ? current.body
+                  : isLoopStatement(current)
+                    ? current.statements
+                    : isModel(current)
+                      ? current.declarations
+                      : undefined;
             if (owningArray) {
                 const decl = owningArray.find((s): s is VariableDecl => isVariableDecl(s) && s.name === name);
                 if (decl) return decl;

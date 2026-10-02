@@ -9,7 +9,10 @@ export function ExamplesPage() {
     const navigate = useNavigate();
     return (
         <div className="mb-page" onMouseEnter={preloadEditor}>
-            <SectionHeader title="Examples" body={`${gallery.total} programs, every one verified against the engine. The first eleven are the repository’s own \`examples/\`.`} />
+            <SectionHeader
+                title="Examples"
+                body={`${gallery.total} programs, every one verified against the engine. The first eleven are the repository’s own \`examples/\`.`}
+            />
             <GalleryFilters
                 query={gallery.query}
                 onQuery={gallery.setQuery}

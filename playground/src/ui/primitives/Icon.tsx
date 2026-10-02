@@ -4,10 +4,42 @@
  */
 
 export type IconName =
-    | 'play' | 'share' | 'copy' | 'check' | 'x' | 'alert' | 'info' | 'database' | 'book' | 'grid'
-    | 'sun' | 'moon' | 'monitor' | 'chevron-right' | 'chevron-left' | 'chevron-down' | 'external' | 'github'
-    | 'spark' | 'reset' | 'download' | 'search' | 'command' | 'bolt' | 'layers' | 'tree' | 'table'
-    | 'code' | 'lock' | 'eye' | 'menu' | 'panel' | 'flag' | 'lightbulb' | 'circle' | 'dot';
+    | 'play'
+    | 'share'
+    | 'copy'
+    | 'check'
+    | 'x'
+    | 'alert'
+    | 'info'
+    | 'database'
+    | 'book'
+    | 'grid'
+    | 'sun'
+    | 'moon'
+    | 'monitor'
+    | 'chevron-right'
+    | 'chevron-left'
+    | 'chevron-down'
+    | 'external'
+    | 'github'
+    | 'spark'
+    | 'reset'
+    | 'download'
+    | 'search'
+    | 'command'
+    | 'bolt'
+    | 'layers'
+    | 'tree'
+    | 'table'
+    | 'code'
+    | 'lock'
+    | 'eye'
+    | 'menu'
+    | 'panel'
+    | 'flag'
+    | 'lightbulb'
+    | 'circle'
+    | 'dot';
 
 const PATHS: Record<IconName, string> = {
     play: 'M7 5v14l11-7z',

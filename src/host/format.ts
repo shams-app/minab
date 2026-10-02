@@ -37,15 +37,13 @@ function formatTable(rows: Record<string, unknown>[]): string {
         for (const key of Object.keys(row)) if (!columns.includes(key)) columns.push(key);
     }
     const cells = rows.map(row => columns.map(column => renderCell(row[column])));
-    const widths = columns.map((column, index) =>
-        Math.max(column.length, ...cells.map(row => row[index].length))
-    );
-    const line = (values: string[]) => values.map((v, i) => v.padEnd(widths[i])).join('  ').trimEnd();
-    return [
-        line(columns),
-        widths.map(w => '-'.repeat(w)).join('  '),
-        ...cells.map(line)
-    ].join('\n');
+    const widths = columns.map((column, index) => Math.max(column.length, ...cells.map(row => row[index].length)));
+    const line = (values: string[]) =>
+        values
+            .map((v, i) => v.padEnd(widths[i]))
+            .join('  ')
+            .trimEnd();
+    return [line(columns), widths.map(w => '-'.repeat(w)).join('  '), ...cells.map(line)].join('\n');
 }
 
 function renderCell(value: unknown): string {

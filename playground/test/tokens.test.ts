@@ -30,7 +30,10 @@ describe('the tokenizer tracks the grammar', () => {
 });
 
 function types(source: string): string[] {
-    return tokenize(source).flat().filter(t => t.type !== 'whitespace').map(t => `${t.type}:${t.text}`);
+    return tokenize(source)
+        .flat()
+        .filter(t => t.type !== 'whitespace')
+        .map(t => `${t.type}:${t.text}`);
 }
 
 describe('sigils', () => {
@@ -41,9 +44,7 @@ describe('sigils', () => {
     });
 
     test('named scopes, calls, $ and .$index', () => {
-        expect(types('#Booking[.id != $]')).toEqual([
-            'sigil.alias:#Booking', 'delimiter:[', 'sigil.record:.id', 'operator:!=', 'sigil.field:$', 'delimiter:]'
-        ]);
+        expect(types('#Booking[.id != $]')).toEqual(['sigil.alias:#Booking', 'delimiter:[', 'sigil.record:.id', 'operator:!=', 'sigil.field:$', 'delimiter:]']);
         expect(types('&discounted(1)')).toEqual(['sigil.call:&discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
         expect(types('.$index')).toEqual(['sigil.index:.$index']);
     });
@@ -60,7 +61,11 @@ test('block comments carry across lines', () => {
 
 test('tokens reassemble into the source', () => {
     const source = 'FROM Order AS o // c\nWHERE .total >= 1.5 AND "x\\"y" != \'z\'';
-    expect(tokenize(source).map(line => line.map(t => t.text).join('')).join('\n')).toBe(source);
+    expect(
+        tokenize(source)
+            .map(line => line.map(t => t.text).join(''))
+            .join('\n')
+    ).toBe(source);
 });
 
 test('prettySql breaks only top-level clauses', () => {

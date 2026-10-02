@@ -26,11 +26,19 @@ class Capture implements CliIo {
 
     constructor(readonly cwd: string) {}
 
-    out(text: string): void { this.stdout.push(text); }
-    err(text: string): void { this.stderr.push(text); }
+    out(text: string): void {
+        this.stdout.push(text);
+    }
+    err(text: string): void {
+        this.stderr.push(text);
+    }
 
-    get output(): string { return this.stdout.join('\n'); }
-    get errors(): string { return this.stderr.join('\n'); }
+    get output(): string {
+        return this.stdout.join('\n');
+    }
+    get errors(): string {
+        return this.stderr.join('\n');
+    }
 }
 
 const CONFIG = {
@@ -270,14 +278,16 @@ describe('the config file', () => {
     test('carries the relation shapes execution needs', () => {
         const path = writeJson('relations.json', {
             schema: {
-                tables: [{
-                    name: 'T',
-                    primaryKey: 'id',
-                    columns: {
-                        one: { ref: 'U', foreignKey: 'u_id', nullable: false },
-                        many: { collection: 'U', foreignKey: 't_id' }
+                tables: [
+                    {
+                        name: 'T',
+                        primaryKey: 'id',
+                        columns: {
+                            one: { ref: 'U', foreignKey: 'u_id', nullable: false },
+                            many: { collection: 'U', foreignKey: 't_id' }
+                        }
                     }
-                }]
+                ]
             }
         });
         const table = loadConfigFile(path).schema.tables[0];
@@ -305,10 +315,7 @@ describe('the config file', () => {
 
 describe('the fixture data source', () => {
     test('answers in order, first matching response wins', async () => {
-        const executor = new FixtureExecutor([
-            { match: 'COUNT', rows: [{ value: 3 }] },
-            { rows: [{ value: 'anything else' }] }
-        ]);
+        const executor = new FixtureExecutor([{ match: 'COUNT', rows: [{ value: 3 }] }, { rows: [{ value: 'anything else' }] }]);
         expect(await executor.execute({ text: 'SELECT COUNT(*) ...', params: [] })).toEqual([{ value: 3 }]);
         expect(await executor.execute({ text: 'SELECT 1', params: [] })).toEqual([{ value: 'anything else' }]);
         expect(executor.statements).toHaveLength(2);
@@ -338,14 +345,16 @@ describe('output formatting', () => {
             range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
             message: 'headline\ndetail'
         };
-        expect(formatDiagnostic(diagnostic, 'x', 'x.minab').split('\n')).toEqual([
-            'x.minab:1:1: error: headline', '1 | x', '  | ^', '  | detail'
-        ]);
+        expect(formatDiagnostic(diagnostic, 'x', 'x.minab').split('\n')).toEqual(['x.minab:1:1: error: headline', '1 | x', '  | ^', '  | detail']);
     });
 
     test('summarize counts by severity', () => {
-        expect(summarize([{ severity: 1, range: r(), message: 'a' }, { severity: 2, range: r(), message: 'b' }]))
-            .toBe('1 error, 1 warning');
+        expect(
+            summarize([
+                { severity: 1, range: r(), message: 'a' },
+                { severity: 2, range: r(), message: 'b' }
+            ])
+        ).toBe('1 error, 1 warning');
         expect(summarize([])).toBe('');
     });
 
@@ -361,9 +370,12 @@ describe('output formatting', () => {
     });
 
     test('a table pads to the widest cell and renders null', () => {
-        expect(formatValue([{ a: 1, b: null }, { a: 22, b: 'x' }])).toBe(
-            ['a   b', '--  ----', '1   null', '22  x'].join('\n')
-        );
+        expect(
+            formatValue([
+                { a: 1, b: null },
+                { a: 22, b: 'x' }
+            ])
+        ).toBe(['a   b', '--  ----', '1   null', '22  x'].join('\n'));
     });
 });
 

@@ -93,7 +93,10 @@ describe('gallery examples', () => {
         const report = await run(workspace.source, workspace.host);
         assertExpectation(example, report);
         if (example.expect.kind !== 'diagnostics') {
-            expect(report.diagnostics.filter(d => d.severity === 1), example.id).toEqual([]);
+            expect(
+                report.diagnostics.filter(d => d.severity === 1),
+                example.id
+            ).toEqual([]);
         }
     });
 
@@ -105,8 +108,7 @@ describe('gallery examples', () => {
                 ...(preset.fieldValue !== undefined ? { fieldValue: preset.fieldValue } : {})
             });
             const report = await run(example.source, host);
-            expect(report.result, `${example.id} / ${preset.id}: ${describeReport(report)}`)
-                .toEqual({ kind: 'verdict', value: preset.expect });
+            expect(report.result, `${example.id} / ${preset.id}: ${describeReport(report)}`).toEqual({ kind: 'verdict', value: preset.expect });
         }
     });
 
@@ -141,7 +143,10 @@ describe('tour lessons', () => {
         expect(met, `${lesson.id}: ${describeReport(report)}`).toBe(nothingToChange);
         // A starter may fail its goal, but it must never be broken in a way the lesson doesn't intend.
         if (lesson.id !== 'strict-types') {
-            expect(report.diagnostics.filter(d => d.severity === 1), lesson.id).toEqual([]);
+            expect(
+                report.diagnostics.filter(d => d.severity === 1),
+                lesson.id
+            ).toEqual([]);
         }
     });
 
@@ -152,8 +157,7 @@ describe('tour lessons', () => {
                 ...(preset.fieldValue !== undefined ? { fieldValue: preset.fieldValue } : {})
             });
             const report = await run(lesson.solution, host);
-            expect(report.result, `${lesson.id} / ${preset.id}: ${describeReport(report)}`)
-                .toEqual({ kind: 'verdict', value: preset.expect });
+            expect(report.result, `${lesson.id} / ${preset.id}: ${describeReport(report)}`).toEqual({ kind: 'verdict', value: preset.expect });
         }
     });
 });

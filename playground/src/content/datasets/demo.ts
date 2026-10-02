@@ -134,13 +134,45 @@ const customers: Row[] = [
 ];
 
 const products: Row[] = [
-    { id: 'prd-espresso', name: 'Lever Espresso Machine', category: 'machines', price: 890, in_stock: true, tags: ['espresso', 'manual'], specs: { weight_kg: 12.5, voltage: 230, boiler_ml: 800 } },
-    { id: 'prd-grinder', name: 'Conical Burr Grinder', category: 'grinders', price: 389, in_stock: true, tags: ['espresso', 'filter'], specs: { burr_mm: 64, settings: 40 } },
-    { id: 'prd-kettle', name: 'Gooseneck Kettle', category: 'brewing', price: 79, in_stock: true, tags: ['filter'], specs: { capacity_l: 0.9, temperature_control: true } },
+    {
+        id: 'prd-espresso',
+        name: 'Lever Espresso Machine',
+        category: 'machines',
+        price: 890,
+        in_stock: true,
+        tags: ['espresso', 'manual'],
+        specs: { weight_kg: 12.5, voltage: 230, boiler_ml: 800 }
+    },
+    {
+        id: 'prd-grinder',
+        name: 'Conical Burr Grinder',
+        category: 'grinders',
+        price: 389,
+        in_stock: true,
+        tags: ['espresso', 'filter'],
+        specs: { burr_mm: 64, settings: 40 }
+    },
+    {
+        id: 'prd-kettle',
+        name: 'Gooseneck Kettle',
+        category: 'brewing',
+        price: 79,
+        in_stock: true,
+        tags: ['filter'],
+        specs: { capacity_l: 0.9, temperature_control: true }
+    },
     { id: 'prd-scale', name: 'Brew Scale', category: 'accessories', price: 23.5, in_stock: false, tags: ['espresso', 'filter'], specs: { precision_g: 0.1 } },
     { id: 'prd-tamper', name: 'Calibrated Tamper', category: 'accessories', price: 45, in_stock: true, tags: ['espresso'], specs: { diameter_mm: 58 } },
     { id: 'prd-dripper', name: 'Ceramic Dripper', category: 'brewing', price: 32, in_stock: true, tags: ['filter'], specs: { cups: [1, 4] } },
-    { id: 'prd-beans', name: 'Single-Origin Beans 1 kg', category: 'coffee', price: 38, in_stock: true, tags: ['espresso', 'filter', 'fresh'], specs: { origin: 'Ethiopia', process: 'washed' } },
+    {
+        id: 'prd-beans',
+        name: 'Single-Origin Beans 1 kg',
+        category: 'coffee',
+        price: 38,
+        in_stock: true,
+        tags: ['espresso', 'filter', 'fresh'],
+        specs: { origin: 'Ethiopia', process: 'washed' }
+    },
     { id: 'prd-filters', name: 'Paper Filters ×100', category: 'brewing', price: 6.5, in_stock: true, tags: ['filter'], specs: {} },
     { id: 'prd-cups', name: 'Cupping Set', category: 'accessories', price: 120, in_stock: false, tags: ['tasting'], specs: { pieces: 12 } }
 ];
@@ -151,30 +183,174 @@ type Line = [product: string, quantity: number];
 
 /** status · placed_on · tracking code (shipped and delivered orders only) · lines */
 const orderSpecs: Array<[id: string, customer: string, status: string, placedOn: string, tracking: string | null, lines: Line[]]> = [
-    ['ord-104', 'cus-ada', 'shipped', '2026-08-28', 'TRK-1042', [['prd-espresso', 1], ['prd-tamper', 2]]],
-    ['ord-112', 'cus-ada', 'delivered', '2026-06-03', 'TRK-0981', [['prd-grinder', 1], ['prd-beans', 3]]],
-    ['ord-121', 'cus-ada', 'delivered', '2026-07-15', 'TRK-1003', [['prd-cups', 1], ['prd-beans', 2], ['prd-filters', 4]]],
-    ['ord-133', 'cus-ada', 'paid', '2026-09-12', null, [['prd-kettle', 1], ['prd-dripper', 1]]],
+    [
+        'ord-104',
+        'cus-ada',
+        'shipped',
+        '2026-08-28',
+        'TRK-1042',
+        [
+            ['prd-espresso', 1],
+            ['prd-tamper', 2]
+        ]
+    ],
+    [
+        'ord-112',
+        'cus-ada',
+        'delivered',
+        '2026-06-03',
+        'TRK-0981',
+        [
+            ['prd-grinder', 1],
+            ['prd-beans', 3]
+        ]
+    ],
+    [
+        'ord-121',
+        'cus-ada',
+        'delivered',
+        '2026-07-15',
+        'TRK-1003',
+        [
+            ['prd-cups', 1],
+            ['prd-beans', 2],
+            ['prd-filters', 4]
+        ]
+    ],
+    [
+        'ord-133',
+        'cus-ada',
+        'paid',
+        '2026-09-12',
+        null,
+        [
+            ['prd-kettle', 1],
+            ['prd-dripper', 1]
+        ]
+    ],
     ['ord-140', 'cus-ada', 'cancelled', '2026-09-01', null, [['prd-scale', 2]]],
-    ['ord-87', 'cus-grace', 'shipped', '2026-09-05', 'TRK-1051', [['prd-grinder', 1], ['prd-scale', 1]]],
+    [
+        'ord-87',
+        'cus-grace',
+        'shipped',
+        '2026-09-05',
+        'TRK-1051',
+        [
+            ['prd-grinder', 1],
+            ['prd-scale', 1]
+        ]
+    ],
     ['ord-91', 'cus-grace', 'delivered', '2026-05-20', 'TRK-0950', [['prd-espresso', 1]]],
-    ['ord-95', 'cus-grace', 'delivered', '2026-08-02', 'TRK-1020', [['prd-beans', 4], ['prd-filters', 2]]],
-    ['ord-150', 'cus-alan', 'shipped', '2026-09-10', 'TRK-1060', [['prd-espresso', 1], ['prd-grinder', 1]]],
+    [
+        'ord-95',
+        'cus-grace',
+        'delivered',
+        '2026-08-02',
+        'TRK-1020',
+        [
+            ['prd-beans', 4],
+            ['prd-filters', 2]
+        ]
+    ],
+    [
+        'ord-150',
+        'cus-alan',
+        'shipped',
+        '2026-09-10',
+        'TRK-1060',
+        [
+            ['prd-espresso', 1],
+            ['prd-grinder', 1]
+        ]
+    ],
     ['ord-151', 'cus-alan', 'pending', '2026-09-17', null, [['prd-beans', 2]]],
-    ['ord-160', 'cus-edsger', 'delivered', '2026-04-11', 'TRK-0902', [['prd-kettle', 1], ['prd-dripper', 2], ['prd-filters', 3]]],
+    [
+        'ord-160',
+        'cus-edsger',
+        'delivered',
+        '2026-04-11',
+        'TRK-0902',
+        [
+            ['prd-kettle', 1],
+            ['prd-dripper', 2],
+            ['prd-filters', 3]
+        ]
+    ],
     ['ord-161', 'cus-edsger', 'shipped', '2026-09-14', 'TRK-1066', [['prd-cups', 2]]],
-    ['ord-170', 'cus-barbara', 'delivered', '2026-07-01', 'TRK-0990', [['prd-grinder', 1], ['prd-kettle', 1], ['prd-scale', 1]]],
+    [
+        'ord-170',
+        'cus-barbara',
+        'delivered',
+        '2026-07-01',
+        'TRK-0990',
+        [
+            ['prd-grinder', 1],
+            ['prd-kettle', 1],
+            ['prd-scale', 1]
+        ]
+    ],
     ['ord-171', 'cus-barbara', 'shipped', '2026-09-16', 'TRK-1070', [['prd-beans', 5]]],
-    ['ord-172', 'cus-barbara', 'paid', '2026-09-18', null, [['prd-tamper', 1], ['prd-dripper', 1]]],
+    [
+        'ord-172',
+        'cus-barbara',
+        'paid',
+        '2026-09-18',
+        null,
+        [
+            ['prd-tamper', 1],
+            ['prd-dripper', 1]
+        ]
+    ],
     ['ord-180', 'cus-donald', 'cancelled', '2026-02-02', null, [['prd-beans', 1]]],
     ['ord-181', 'cus-donald', 'cancelled', '2026-03-09', null, [['prd-filters', 2]]],
     ['ord-182', 'cus-donald', 'cancelled', '2026-04-21', null, [['prd-scale', 1]]],
     ['ord-183', 'cus-donald', 'cancelled', '2026-05-30', null, [['prd-dripper', 1]]],
     ['ord-184', 'cus-donald', 'cancelled', '2026-06-18', null, [['prd-kettle', 1]]],
-    ['ord-185', 'cus-donald', 'delivered', '2026-08-20', 'TRK-1030', [['prd-espresso', 1], ['prd-cups', 1]]],
-    ['ord-190', 'cus-margaret', 'shipped', '2026-09-11', 'TRK-1062', [['prd-espresso', 1], ['prd-grinder', 1], ['prd-scale', 1]]],
-    ['ord-191', 'cus-margaret', 'delivered', '2026-06-25', 'TRK-0985', [['prd-cups', 1], ['prd-beans', 3]]],
-    ['ord-200', 'cus-ken', 'delivered', '2026-05-05', 'TRK-0930', [['prd-dripper', 1], ['prd-filters', 2]]],
+    [
+        'ord-185',
+        'cus-donald',
+        'delivered',
+        '2026-08-20',
+        'TRK-1030',
+        [
+            ['prd-espresso', 1],
+            ['prd-cups', 1]
+        ]
+    ],
+    [
+        'ord-190',
+        'cus-margaret',
+        'shipped',
+        '2026-09-11',
+        'TRK-1062',
+        [
+            ['prd-espresso', 1],
+            ['prd-grinder', 1],
+            ['prd-scale', 1]
+        ]
+    ],
+    [
+        'ord-191',
+        'cus-margaret',
+        'delivered',
+        '2026-06-25',
+        'TRK-0985',
+        [
+            ['prd-cups', 1],
+            ['prd-beans', 3]
+        ]
+    ],
+    [
+        'ord-200',
+        'cus-ken',
+        'delivered',
+        '2026-05-05',
+        'TRK-0930',
+        [
+            ['prd-dripper', 1],
+            ['prd-filters', 2]
+        ]
+    ],
     ['ord-201', 'cus-ken', 'cancelled', '2026-07-09', null, [['prd-kettle', 1]]],
     ['ord-210', 'cus-radia', 'paid', '2026-09-15', null, [['prd-grinder', 1]]]
 ];

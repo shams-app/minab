@@ -13,10 +13,22 @@ export function ParamsTable({ params }: { params: unknown[] }) {
     if (params.length === 0) return null;
     return (
         <table className="mb-table mb-params" aria-label="Parameters">
-            <thead><tr><th scope="col">Parameter</th><th scope="col">Value</th></tr></thead>
+            <thead>
+                <tr>
+                    <th scope="col">Parameter</th>
+                    <th scope="col">Value</th>
+                </tr>
+            </thead>
             <tbody>
                 {params.map((p, i) => (
-                    <tr key={i}><td><code className="mb-inline-code"><span className="tok tok-sigil-field">${i + 1}</span></code></td><td>{formatCell(p)}</td></tr>
+                    <tr key={i}>
+                        <td>
+                            <code className="mb-inline-code">
+                                <span className="tok tok-sigil-field">${i + 1}</span>
+                            </code>
+                        </td>
+                        <td>{formatCell(p)}</td>
+                    </tr>
                 ))}
             </tbody>
         </table>
@@ -57,7 +69,9 @@ export function SqlView({ analysis, trace, onShowExecution }: SqlViewProps) {
                             <ParamsTable params={entry.params} />
                         </div>
                     ))}
-                    <button type="button" className="mb-link-button" onClick={onShowExecution}>See where each statement came from →</button>
+                    <button type="button" className="mb-link-button" onClick={onShowExecution}>
+                        See where each statement came from →
+                    </button>
                 </>
             )}
         </div>

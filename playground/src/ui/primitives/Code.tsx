@@ -10,9 +10,15 @@ function tokenClass(type: string): string {
 function renderLines(lines: Span[][]): ReactNode {
     return lines.map((line, index) => (
         <span className="mb-code-line" key={index}>
-            {line.map((span, i) => span.type === 'whitespace'
-                ? span.text
-                : <span key={i} className={tokenClass(span.type)}>{span.text}</span>)}
+            {line.map((span, i) =>
+                span.type === 'whitespace' ? (
+                    span.text
+                ) : (
+                    <span key={i} className={tokenClass(span.type)}>
+                        {span.text}
+                    </span>
+                )
+            )}
             {'\n'}
         </span>
     ));
@@ -40,7 +46,9 @@ export function CodeBlock({ code, language = 'minab', copyable, wrap, caption, c
     return (
         <figure className={`mb-code${className ? ` ${className}` : ''}`} data-language={language} data-wrap={wrap ? 'true' : undefined}>
             {caption && <figcaption className="mb-code-caption">{caption}</figcaption>}
-            <pre><code>{renderLines(lines)}</code></pre>
+            <pre>
+                <code>{renderLines(lines)}</code>
+            </pre>
             {copyable && (
                 <IconButton
                     className="mb-code-copy"
@@ -64,9 +72,9 @@ export function Inline({ text }: { text: string }) {
     const parts = text.split(/(`[^`]+`)/g);
     return (
         <>
-            {parts.map((part, i) => part.startsWith('`') && part.endsWith('`') && part.length > 2
-                ? <InlineCode key={i}>{part.slice(1, -1)}</InlineCode>
-                : part)}
+            {parts.map((part, i) =>
+                part.startsWith('`') && part.endsWith('`') && part.length > 2 ? <InlineCode key={i}>{part.slice(1, -1)}</InlineCode> : part
+            )}
         </>
     );
 }
@@ -74,7 +82,15 @@ export function Inline({ text }: { text: string }) {
 /** Inline code with Minab highlighting (`.status`, `#Booking`). */
 export function InlineCode({ children }: { children: string }) {
     const spans = highlightMinab(children)[0] ?? [];
-    return <code className="mb-inline-code">{spans.map((s, i) => <span key={i} className={tokenClass(s.type)}>{s.text}</span>)}</code>;
+    return (
+        <code className="mb-inline-code">
+            {spans.map((s, i) => (
+                <span key={i} className={tokenClass(s.type)}>
+                    {s.text}
+                </span>
+            ))}
+        </code>
+    );
 }
 
 const markdown = new Marked({
@@ -82,9 +98,11 @@ const markdown = new Marked({
     renderer: {
         code({ text, lang }) {
             const lines = lang === 'sql' ? highlightSql(text) : highlightMinab(text);
-            const html = lines.map(line => line.map(s => s.type === 'whitespace'
-                ? escapeHtml(s.text)
-                : `<span class="${tokenClass(s.type)}">${escapeHtml(s.text)}</span>`).join('')).join('\n');
+            const html = lines
+                .map(line =>
+                    line.map(s => (s.type === 'whitespace' ? escapeHtml(s.text) : `<span class="${tokenClass(s.type)}">${escapeHtml(s.text)}</span>`)).join('')
+                )
+                .join('\n');
             return `<figure class="mb-code" data-language="${lang ?? 'minab'}"><pre><code>${html}</code></pre></figure>`;
         },
         codespan({ text }) {
@@ -104,7 +122,12 @@ function escapeHtml(text: string): string {
 }
 
 function unescapeHtml(text: string): string {
-    return text.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    return text
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
 }
 
 /** Renders trusted, repository-authored Markdown (lessons, example notes, cheat-sheet prose). */

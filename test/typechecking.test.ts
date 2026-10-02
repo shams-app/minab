@@ -56,7 +56,10 @@ async function expectClean(source: string): Promise<void> {
 
 async function expectError(source: string, pattern: RegExp): Promise<void> {
     const ds = await diagnostics(source);
-    expect(ds.some(d => pattern.test(messageText(d))), ds.map(messageText).join('\n')).toBe(true);
+    expect(
+        ds.some(d => pattern.test(messageText(d))),
+        ds.map(messageText).join('\n')
+    ).toBe(true);
 }
 
 describe('no-implicit-coercion (spec §5.5)', () => {
@@ -101,7 +104,7 @@ describe('the §3.4 collection-vs-scalar boundary', () => {
         await expectError(`FROM Customer WHERE COUNT(.orders[2]) > 0 SELECT .id`, /positional index/);
     });
 
-    test('GROUPBY promotes a bare per-row field to the group\'s collection for an aggregate (spec §4.1)', async () => {
+    test("GROUPBY promotes a bare per-row field to the group's collection for an aggregate (spec §4.1)", async () => {
         await expectClean(`
             FROM Order
             GROUPBY .customer
@@ -208,7 +211,7 @@ describe('query-tailed functions return JSON (spec §8.6, §12 item 11)', () => 
         `);
     });
 
-    test('a plain-expression-tailed function\'s result must match its declared return type', async () => {
+    test("a plain-expression-tailed function's result must match its declared return type", async () => {
         await expectError(`fn double(x: INTEGER): TEXT { x * 2 } 1`, /doesn't match its declared return type/);
         await expectClean(`fn double(x: INTEGER): INTEGER { x * 2 } 1`);
     });

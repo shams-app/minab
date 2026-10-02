@@ -128,15 +128,17 @@ export function Tabs<T extends string>({ tabs, active, onChange, ariaLabel, size
 export function Kbd({ keys }: { keys: string[] }) {
     return (
         <span className="mb-kbd-group">
-            {keys.map(k => <kbd key={k} className="mb-kbd">{k}</kbd>)}
+            {keys.map(k => (
+                <kbd key={k} className="mb-kbd">
+                    {k}
+                </kbd>
+            ))}
         </span>
     );
 }
 
 export function Spinner({ size = 16, label }: { size?: number; label?: string }) {
-    return (
-        <span className="mb-spinner" style={{ width: size, height: size }} role={label ? 'status' : undefined} aria-label={label} />
-    );
+    return <span className="mb-spinner" style={{ width: size, height: size }} role={label ? 'status' : undefined} aria-label={label} />;
 }
 
 export interface EmptyStateProps {
@@ -158,7 +160,17 @@ export function EmptyState({ icon, title, children, action, tone = 'neutral' }: 
     );
 }
 
-export function Callout({ tone = 'info', icon, title, children }: { tone?: 'info' | 'warning' | 'danger' | 'success' | 'check-only' | 'pushdown'; icon?: IconName; title?: ReactNode; children?: ReactNode }) {
+export function Callout({
+    tone = 'info',
+    icon,
+    title,
+    children
+}: {
+    tone?: 'info' | 'warning' | 'danger' | 'success' | 'check-only' | 'pushdown';
+    icon?: IconName;
+    title?: ReactNode;
+    children?: ReactNode;
+}) {
     return (
         <div className="mb-callout" data-tone={tone} role={tone === 'danger' ? 'alert' : undefined}>
             {icon && <Icon name={icon} size={16} />}
@@ -175,7 +187,9 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
     return (
         <label className="mb-toggle" title={hint}>
             <input type="checkbox" role="switch" checked={checked} onChange={e => onChange(e.target.checked)} />
-            <span className="mb-toggle-track" aria-hidden="true"><span className="mb-toggle-thumb" /></span>
+            <span className="mb-toggle-track" aria-hidden="true">
+                <span className="mb-toggle-thumb" />
+            </span>
             <span className="mb-toggle-label">{label}</span>
         </label>
     );

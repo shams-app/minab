@@ -34,8 +34,7 @@ export const examples: Example[] = [
         id: 'first-query',
         title: 'A first pipeline query',
         summary: 'Filter, walk a relation, sort and limit — no JOIN written.',
-        notes:
-            '`.customer.name` walks the `customer` **ref** from each order to its customer. The schema says how the tables link, so the source never spells out a join. Open **SQL** to see the correlated subquery the compiler wrote instead.',
+        notes: '`.customer.name` walks the `customer` **ref** from each order to its customer. The schema says how the tables link, so the source never spells out a join. Open **SQL** to see the correlated subquery the compiler wrote instead.',
         source: firstQuery,
         tags: ['query'],
         level: 'beginner',
@@ -49,8 +48,7 @@ export const examples: Example[] = [
         id: 'top-customers',
         title: 'Top customers',
         summary: '`GROUPBY` a relation, filter groups with `HAVING`, read the group through `KEY`.',
-        notes:
-            'Grouping by `.customer` groups by the related **row**, so `KEY.name` reads a column straight off the customer — Minab turns that into a lookup on the foreign key, without a join in the source.',
+        notes: 'Grouping by `.customer` groups by the related **row**, so `KEY.name` reads a column straight off the customer — Minab turns that into a lookup on the foreign key, without a join in the source.',
         source: topCustomers,
         tags: ['query', 'aggregates'],
         level: 'intermediate',
@@ -64,8 +62,7 @@ export const examples: Example[] = [
         id: 'shipping-report',
         title: 'Shipping report',
         summary: 'An explicit `JOIN … ON` for tables the schema doesn’t relate.',
-        notes:
-            'Orders and shipments share a `tracking_code`, but no `ref` connects them — so this one *does* need a join, and says so. Aliases (`o`, `s`) name each side.',
+        notes: 'Orders and shipments share a `tracking_code`, but no `ref` connects them — so this one *does* need a join, and says so. Aliases (`o`, `s`) name each side.',
         source: shippingReport,
         tags: ['query', 'joins'],
         level: 'intermediate',
@@ -79,8 +76,7 @@ export const examples: Example[] = [
         id: 'cancelled-orders-limit',
         title: 'Fewer than five cancellations',
         summary: 'Filter a collection inline, then reduce it with `COUNT`.',
-        notes:
-            '`.orders[.status == "cancelled"]` narrows each customer’s orders; `COUNT` turns the collection into a number you can compare. Donald Knuth has five cancelled orders, so he is the one customer left out.',
+        notes: '`.orders[.status == "cancelled"]` narrows each customer’s orders; `COUNT` turns the collection into a number you can compare. Donald Knuth has five cancelled orders, so he is the one customer left out.',
         source: cancelledOrdersLimit,
         tags: ['query', 'aggregates'],
         level: 'beginner',
@@ -94,8 +90,7 @@ export const examples: Example[] = [
         id: 'booking-overlap',
         title: 'No double bookings',
         summary: 'A record-level rule with a correlated check against every other booking.',
-        notes:
-            'The rule validates **one booking** the host is about to save. `.end_date > .start_date` is answered from that record in memory; only `EXISTS(#Booking[…])` needs the table, so only it becomes SQL — one indexed lookup. Open **Execution** and hover the statement to see which part of the source it came from, then try the presets.',
+        notes: 'The rule validates **one booking** the host is about to save. `.end_date > .start_date` is answered from that record in memory; only `EXISTS(#Booking[…])` needs the table, so only it becomes SQL — one indexed lookup. Open **Execution** and hover the statement to see which part of the source it came from, then try the presets.',
         source: bookingOverlap,
         tags: ['record-rule'],
         level: 'intermediate',
@@ -112,21 +107,42 @@ export const examples: Example[] = [
                 label: 'Free slot',
                 expect: true,
                 note: 'Room 7 is free from Oct 1 to Oct 5 — the next booking starts on the 6th.',
-                record: { id: 'bkg-new', room_id: 'room-7', customer_id: 'cus-barbara', purpose: 'Board meeting', start_date: '2026-10-01', end_date: '2026-10-05' }
+                record: {
+                    id: 'bkg-new',
+                    room_id: 'room-7',
+                    customer_id: 'cus-barbara',
+                    purpose: 'Board meeting',
+                    start_date: '2026-10-01',
+                    end_date: '2026-10-05'
+                }
             },
             {
                 id: 'overlap',
                 label: 'Overlaps bkg-12',
                 expect: false,
                 note: 'Oct 4–8 collides with the espresso workshop (Oct 6–9) in the same room.',
-                record: { id: 'bkg-new', room_id: 'room-7', customer_id: 'cus-barbara', purpose: 'Board meeting', start_date: '2026-10-04', end_date: '2026-10-08' }
+                record: {
+                    id: 'bkg-new',
+                    room_id: 'room-7',
+                    customer_id: 'cus-barbara',
+                    purpose: 'Board meeting',
+                    start_date: '2026-10-04',
+                    end_date: '2026-10-08'
+                }
             },
             {
                 id: 'backwards',
                 label: 'Ends before it starts',
                 expect: false,
                 note: 'The local half fails first, so the database is never asked — zero statements.',
-                record: { id: 'bkg-new', room_id: 'room-7', customer_id: 'cus-barbara', purpose: 'Board meeting', start_date: '2026-10-10', end_date: '2026-10-08' }
+                record: {
+                    id: 'bkg-new',
+                    room_id: 'room-7',
+                    customer_id: 'cus-barbara',
+                    purpose: 'Board meeting',
+                    start_date: '2026-10-10',
+                    end_date: '2026-10-08'
+                }
             }
         ],
         focus: 'execution',
@@ -136,8 +152,7 @@ export const examples: Example[] = [
         id: 'customer-exists',
         title: 'The customer must exist',
         summary: 'A field-level rule: `$` is the value being validated.',
-        notes:
-            'Field rules check one value — here the `customer_id` of an order being saved. The host says what `$` is and its type (`UUID`). The whole rule is one relational question, so it goes to the database as a single `EXISTS`.',
+        notes: 'Field rules check one value — here the `customer_id` of an order being saved. The host says what `$` is and its type (`UUID`). The whole rule is one relational question, so it goes to the database as a single `EXISTS`.',
         source: customerExists,
         tags: ['field-rule'],
         level: 'beginner',
@@ -160,8 +175,7 @@ export const examples: Example[] = [
         id: 'discounted-total',
         title: 'A user function',
         summary: 'Typed parameters, a typed return, called with `&`.',
-        notes:
-            'The body’s last expression is the result — there is no `return`. User functions are called with `&`, which keeps bare names free for the built-ins (`COUNT`, `SUM`, …). Nothing here touches a table, so nothing reaches the database.',
+        notes: 'The body’s last expression is the result — there is no `return`. User functions are called with `&`, which keeps bare names free for the built-ins (`COUNT`, `SUM`, …). Nothing here touches a table, so nothing reaches the database.',
         source: discountedTotal,
         tags: ['functions'],
         level: 'beginner',
@@ -175,8 +189,7 @@ export const examples: Example[] = [
         id: 'order-status-switch',
         title: 'Priority by status',
         summary: '`switch` is an expression — each arm is a rule of its own.',
-        notes:
-            'Case values are literals; `_` is the default. Try the presets: the same order passes or fails depending on which arm its status selects.',
+        notes: 'Case values are literals; `_` is the default. Try the presets: the same order passes or fails depending on which arm its status selects.',
         source: orderStatusSwitch,
         tags: ['record-rule', 'control-flow'],
         level: 'intermediate',
@@ -188,10 +201,34 @@ export const examples: Example[] = [
             record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 }
         },
         presets: [
-            { id: 'high-750', label: 'high · 750', expect: true, note: '"high" needs a total over 500.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 } },
-            { id: 'high-400', label: 'high · 400', expect: false, note: '400 is under the "high" threshold.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 400 } },
-            { id: 'low-750', label: 'low · 750', expect: false, note: '"low" orders need a total over 5000.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'low', total: 750 } },
-            { id: 'other', label: 'archived · 9000', expect: false, note: 'No arm matches, so `_ => false` decides.', record: { id: 'ord-new', customer_id: 'cus-grace', status: 'archived', total: 9000 } }
+            {
+                id: 'high-750',
+                label: 'high · 750',
+                expect: true,
+                note: '"high" needs a total over 500.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 750 }
+            },
+            {
+                id: 'high-400',
+                label: 'high · 400',
+                expect: false,
+                note: '400 is under the "high" threshold.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'high', total: 400 }
+            },
+            {
+                id: 'low-750',
+                label: 'low · 750',
+                expect: false,
+                note: '"low" orders need a total over 5000.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'low', total: 750 }
+            },
+            {
+                id: 'other',
+                label: 'archived · 9000',
+                expect: false,
+                note: 'No arm matches, so `_ => false` decides.',
+                record: { id: 'ord-new', customer_id: 'cus-grace', status: 'archived', total: 9000 }
+            }
         ],
         focus: 'result',
         expect: { kind: 'verdict', value: true, statements: 0 }
@@ -200,8 +237,7 @@ export const examples: Example[] = [
         id: 'overdue-loop',
         title: 'Loops',
         summary: 'A `for-in` loop over a table, with a guard. Checks today; runs later.',
-        notes:
-            'Loops parse, resolve and type-check — hover `order` to see its type — but the evaluator doesn’t execute them yet, and says so rather than guessing.',
+        notes: 'Loops parse, resolve and type-check — hover `order` to see its type — but the evaluator doesn’t execute them yet, and says so rather than guessing.',
         source: overdueLoop,
         tags: ['control-flow', 'check-only'],
         level: 'advanced',
@@ -215,8 +251,7 @@ export const examples: Example[] = [
         id: 'order-dml',
         title: 'Declarative writes',
         summary: '`UPDATE` with an inline filter and a compound `+:`, then `INSERT … VALUES`.',
-        notes:
-            'Writes are specified and fully type-checked — change `+: 10` to `+: "ten"` and watch the checker object — but not executed yet.',
+        notes: 'Writes are specified and fully type-checked — change `+: 10` to `+: "ten"` and watch the checker object — but not executed yet.',
         source: orderDml,
         tags: ['check-only'],
         level: 'advanced',
@@ -230,8 +265,7 @@ export const examples: Example[] = [
         id: 'reconcile-overdue-accounts',
         title: 'Everything together',
         summary: 'Functions, loops, `if`/`else if`, `is`, and writes in one program.',
-        notes:
-            'The showcase’s finale. Every construct here type-checks against the host schema; loops and writes are the part the evaluator doesn’t run yet.',
+        notes: 'The showcase’s finale. Every construct here type-checks against the host schema; loops and writes are the part the evaluator doesn’t run yet.',
         source: reconcile,
         tags: ['functions', 'control-flow', 'json', 'check-only'],
         level: 'advanced',
@@ -247,9 +281,8 @@ export const examples: Example[] = [
         id: 'credit-limit',
         title: 'Within the credit limit',
         summary: 'A rule that walks from the record to a related row.',
-        notes:
-            '`.customer.credit_limit` isn’t on the order being validated — it lives on the customer. The interpreter pushes just that traversal down (looked up through the order’s key) and compares in memory. Ken’s limit is 800.',
-        source: '// An order may not exceed its customer\'s credit limit.\n.total <= .customer.credit_limit\n',
+        notes: '`.customer.credit_limit` isn’t on the order being validated — it lives on the customer. The interpreter pushes just that traversal down (looked up through the order’s key) and compares in memory. Ken’s limit is 800.',
+        source: "// An order may not exceed its customer's credit limit.\n.total <= .customer.credit_limit\n",
         tags: ['record-rule'],
         level: 'beginner',
         specRef: '§6.1',
@@ -259,8 +292,20 @@ export const examples: Example[] = [
             record: { id: 'ord-200', customer_id: 'cus-ken', status: 'pending', total: 900 }
         },
         presets: [
-            { id: 'over', label: 'total 900', expect: false, note: 'Over Ken’s 800 limit.', record: { id: 'ord-200', customer_id: 'cus-ken', status: 'pending', total: 900 } },
-            { id: 'under', label: 'total 500', expect: true, note: 'Comfortably inside the limit.', record: { id: 'ord-200', customer_id: 'cus-ken', status: 'pending', total: 500 } }
+            {
+                id: 'over',
+                label: 'total 900',
+                expect: false,
+                note: 'Over Ken’s 800 limit.',
+                record: { id: 'ord-200', customer_id: 'cus-ken', status: 'pending', total: 900 }
+            },
+            {
+                id: 'under',
+                label: 'total 500',
+                expect: true,
+                note: 'Comfortably inside the limit.',
+                record: { id: 'ord-200', customer_id: 'cus-ken', status: 'pending', total: 500 }
+            }
         ],
         focus: 'execution',
         expect: { kind: 'verdict', value: false, statements: 1 }
@@ -269,8 +314,7 @@ export const examples: Example[] = [
         id: 'order-amount',
         title: 'A valid order amount',
         summary: 'A field rule mixing a local check with a relational one.',
-        notes:
-            '`$ >= 0` is settled from the value alone; `.customer.credit_limit` needs the database. Try **−5**: `AND` short-circuits, and no statement is sent at all.',
+        notes: '`$ >= 0` is settled from the value alone; `.customer.credit_limit` needs the database. Try **−5**: `AND` short-circuits, and no statement is sent at all.',
         source: '// The total being entered must be positive and within credit.\n$ >= 0 AND $ <= .customer.credit_limit\n',
         tags: ['field-rule'],
         level: 'intermediate',
@@ -293,15 +337,20 @@ export const examples: Example[] = [
         id: 'cancellation-limit',
         title: 'Cancellation limit, as a rule',
         summary: '`#Table` opens any table inside a rule; `^` reaches back to the record.',
-        notes:
-            'Inside `#Order[…]`, `.` is each order and `^` is the customer being validated. The whole count is one statement.',
+        notes: 'Inside `#Order[…]`, `.` is each order and `^` is the customer being validated. The whole count is one statement.',
         source: '// A customer may have at most four cancelled orders.\nCOUNT(#Order[.customer == ^ AND .status == "cancelled"]) < 5\n',
         tags: ['record-rule', 'aggregates'],
         level: 'intermediate',
         specRef: '§2.2, §3.3',
         host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
         presets: [
-            { id: 'donald', label: 'Donald', expect: false, note: 'Five cancelled orders.', record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
+            {
+                id: 'donald',
+                label: 'Donald',
+                expect: false,
+                note: 'Five cancelled orders.',
+                record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' }
+            },
             { id: 'ada', label: 'Ada', expect: true, note: 'One cancellation.', record: { id: 'cus-ada', name: 'Ada Lovelace', tier: 'gold' } }
         ],
         focus: 'execution',
@@ -311,17 +360,27 @@ export const examples: Example[] = [
         id: 'tiered-credit',
         title: 'Credit caps by tier',
         summary: '`let` with an `if` / `else if` expression, then a rule over it.',
-        notes:
-            '`if` is an expression that yields a value, so a variable can be computed from the record. Everything here is local — zero statements.',
-        source:
-            '// Each tier has a ceiling on the credit it may be granted.\nlet cap: DECIMAL = if .tier == "gold" {\n    5000\n} else if .tier == "silver" {\n    2500\n} else {\n    1000\n};\n\n.credit_limit <= cap\n',
+        notes: '`if` is an expression that yields a value, so a variable can be computed from the record. Everything here is local — zero statements.',
+        source: '// Each tier has a ceiling on the credit it may be granted.\nlet cap: DECIMAL = if .tier == "gold" {\n    5000\n} else if .tier == "silver" {\n    2500\n} else {\n    1000\n};\n\n.credit_limit <= cap\n',
         tags: ['record-rule', 'control-flow'],
         level: 'intermediate',
         specRef: '§9.1',
         host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-barbara', tier: 'silver', credit_limit: 2500 } },
         presets: [
-            { id: 'silver-ok', label: 'silver · 2500', expect: true, note: 'Exactly at the silver cap.', record: { id: 'cus-barbara', tier: 'silver', credit_limit: 2500 } },
-            { id: 'silver-over', label: 'silver · 3000', expect: false, note: 'Above the silver cap.', record: { id: 'cus-barbara', tier: 'silver', credit_limit: 3000 } },
+            {
+                id: 'silver-ok',
+                label: 'silver · 2500',
+                expect: true,
+                note: 'Exactly at the silver cap.',
+                record: { id: 'cus-barbara', tier: 'silver', credit_limit: 2500 }
+            },
+            {
+                id: 'silver-over',
+                label: 'silver · 3000',
+                expect: false,
+                note: 'Above the silver cap.',
+                record: { id: 'cus-barbara', tier: 'silver', credit_limit: 3000 }
+            },
             { id: 'gold', label: 'gold · 4000', expect: true, note: 'Gold allows up to 5000.', record: { id: 'cus-barbara', tier: 'gold', credit_limit: 4000 } }
         ],
         focus: 'result',
@@ -332,15 +391,26 @@ export const examples: Example[] = [
         title: 'A function inside a rule',
         summary: 'Declare a `fn`, call it on the record with `&`.',
         notes: 'Functions run in the interpreter, next to the record — `&withTax(.total, 21)` never becomes SQL.',
-        source:
-            'fn withTax(amount: DECIMAL, rate: DECIMAL): DECIMAL {\n    amount + amount * rate / 100\n}\n\n// Orders over 1500 including VAT need approval.\n&withTax(.total, 21) <= 1500\n',
+        source: 'fn withTax(amount: DECIMAL, rate: DECIMAL): DECIMAL {\n    amount + amount * rate / 100\n}\n\n// Orders over 1500 including VAT need approval.\n&withTax(.total, 21) <= 1500\n',
         tags: ['record-rule', 'functions'],
         level: 'intermediate',
         specRef: '§8',
         host: { dataset: 'demo', rule: { recordTable: 'Order' }, record: { id: 'ord-new', customer_id: 'cus-ada', status: 'pending', total: 980 } },
         presets: [
-            { id: 'small', label: 'total 980', expect: true, note: '980 + 21% = 1185.80.', record: { id: 'ord-new', customer_id: 'cus-ada', status: 'pending', total: 980 } },
-            { id: 'large', label: 'total 1302.50', expect: false, note: '1302.50 + 21% = 1576.03.', record: { id: 'ord-new', customer_id: 'cus-ada', status: 'pending', total: 1302.5 } }
+            {
+                id: 'small',
+                label: 'total 980',
+                expect: true,
+                note: '980 + 21% = 1185.80.',
+                record: { id: 'ord-new', customer_id: 'cus-ada', status: 'pending', total: 980 }
+            },
+            {
+                id: 'large',
+                label: 'total 1302.50',
+                expect: false,
+                note: '1302.50 + 21% = 1576.03.',
+                record: { id: 'ord-new', customer_id: 'cus-ada', status: 'pending', total: 1302.5 }
+            }
         ],
         focus: 'result',
         expect: { kind: 'verdict', value: true, statements: 0 }
@@ -362,10 +432,8 @@ export const examples: Example[] = [
         id: 'overlapping-bookings',
         title: 'Bookings that already collide',
         summary: 'A correlated `EXISTS` inside a query, using an alias.',
-        notes:
-            'The same overlap test as the rule, turned into a report: `b` names the outer booking, `.` is each candidate inside the filter.',
-        source:
-            'FROM Booking AS b\nWHERE EXISTS(#Booking[.id != b.id AND .room_id == b.room_id\n                     AND .start_date < b.end_date AND .end_date > b.start_date])\nSELECT b.id, b.room_id, b.purpose\nORDERBY b.id\n',
+        notes: 'The same overlap test as the rule, turned into a report: `b` names the outer booking, `.` is each candidate inside the filter.',
+        source: 'FROM Booking AS b\nWHERE EXISTS(#Booking[.id != b.id AND .room_id == b.room_id\n                     AND .start_date < b.end_date AND .end_date > b.start_date])\nSELECT b.id, b.room_id, b.purpose\nORDERBY b.id\n',
         tags: ['query'],
         level: 'advanced',
         specRef: '§4.2',
@@ -416,8 +484,7 @@ export const examples: Example[] = [
         id: 'email-lookup',
         title: 'Case-insensitive lookup',
         summary: 'A `CITEXT` column and an explicit `CAST` — no implicit coercion.',
-        notes:
-            '`email` is `CITEXT`, so comparing it to a plain `TEXT` literal is a type error: Minab never coerces silently. `CAST` states the intent, and Postgres matches regardless of case. Delete the `CAST` to see the diagnostic.',
+        notes: '`email` is `CITEXT`, so comparing it to a plain `TEXT` literal is a type error: Minab never coerces silently. `CAST` states the intent, and Postgres matches regardless of case. Delete the `CAST` to see the diagnostic.',
         source: 'FROM Customer\nWHERE .email == CAST("ADA.LOVELACE@EXAMPLE.COM" AS CITEXT)\nSELECT .name, .email\n',
         tags: ['query', 'types'],
         level: 'intermediate',
@@ -430,8 +497,7 @@ export const examples: Example[] = [
         id: 'strict-types',
         title: 'Strict types, on purpose',
         summary: 'Comparing TEXT with a number is caught before anything runs.',
-        notes:
-            'This program is **broken on purpose**. The checker reports exactly where, and nothing reaches the database. Fix it by comparing with a string: `.status == "paid"`.',
+        notes: 'This program is **broken on purpose**. The checker reports exactly where, and nothing reaches the database. Fix it by comparing with a string: `.status == "paid"`.',
         source: 'FROM Order\nWHERE .status == 5\nSELECT .id, .total\n',
         tags: ['query', 'types'],
         level: 'beginner',

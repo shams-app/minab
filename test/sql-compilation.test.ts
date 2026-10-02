@@ -148,8 +148,7 @@ describe('a FROM/WHERE/SELECT pipeline (spec §4.3)', () => {
     test('SELECT * and SELECT DISTINCT (spec §4.3)', async () => {
         expect((await compile(`FROM Customer SELECT *`)).text).toBe('SELECT * FROM "Customer"');
         expect((await compile(`FROM Order SELECT DISTINCT .customer.country`)).text).toBe(
-            'SELECT DISTINCT (SELECT "_r0"."country" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")' +
-                ' FROM "Order"'
+            'SELECT DISTINCT (SELECT "_r0"."country" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")' + ' FROM "Order"'
         );
     });
 

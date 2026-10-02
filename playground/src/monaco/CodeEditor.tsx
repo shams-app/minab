@@ -74,8 +74,7 @@ export function CodeEditor(props: CodeEditorProps) {
         applyEditorTheme();
         watchTheme();
         const uri = monaco.Uri.parse(`inmemory://minab/${props.path}`);
-        const model = monaco.editor.getModel(uri)
-            ?? monaco.editor.createModel(props.value, props.language ?? LANGUAGE_ID, uri);
+        const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(props.value, props.language ?? LANGUAGE_ID, uri);
         if (model.getValue() !== props.value) model.setValue(props.value);
         if (props.jsonSchema) registerJsonSchema(props.path, props.jsonSchema);
         const font = editorFont();
@@ -152,12 +151,16 @@ export function CodeEditor(props: CodeEditorProps) {
     useEffect(() => {
         const model = editorRef.current?.getModel();
         if (!model || props.language === 'json') return;
-        monaco.editor.setModelMarkers(model, 'minab', (props.diagnostics ?? []).map(d => ({
-            ...toMonacoRange(d.range),
-            severity: SEVERITY[d.severity] ?? monaco.MarkerSeverity.Error,
-            message: d.message,
-            source: d.source === 'syntax' ? 'syntax' : 'minab'
-        })));
+        monaco.editor.setModelMarkers(
+            model,
+            'minab',
+            (props.diagnostics ?? []).map(d => ({
+                ...toMonacoRange(d.range),
+                severity: SEVERITY[d.severity] ?? monaco.MarkerSeverity.Error,
+                message: d.message,
+                source: d.source === 'syntax' ? 'syntax' : 'minab'
+            }))
+        );
     }, [props.diagnostics, props.language]);
 
     // Pushed-down spans and check-only constructs → persistent decorations.
@@ -169,7 +172,9 @@ export function CodeEditor(props: CodeEditorProps) {
                 range: toMonacoRange(entry.origin.range),
                 options: {
                     inlineClassName: 'minab-pushdown',
-                    hoverMessage: { value: `**Statement ${entry.index}** reached the database — ${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} in ${entry.durationMs.toFixed(1)} ms. Everything else in this program was answered in memory.` },
+                    hoverMessage: {
+                        value: `**Statement ${entry.index}** reached the database — ${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} in ${entry.durationMs.toFixed(1)} ms. Everything else in this program was answered in memory.`
+                    },
                     stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
                 }
             });
@@ -190,9 +195,11 @@ export function CodeEditor(props: CodeEditorProps) {
     // A transient highlight: hovering a trace entry, an AST node, a problem.
     useEffect(() => {
         const highlight = props.highlight;
-        highlightDecorations.current?.set(highlight
-            ? [{ range: toMonacoRange(highlight.range), options: { className: `minab-highlight minab-highlight-${highlight.kind}`, isWholeLine: false } }]
-            : []);
+        highlightDecorations.current?.set(
+            highlight
+                ? [{ range: toMonacoRange(highlight.range), options: { className: `minab-highlight minab-highlight-${highlight.kind}`, isWholeLine: false } }]
+                : []
+        );
         if (highlight) editorRef.current?.revealRangeInCenterIfOutsideViewport(toMonacoRange(highlight.range));
     }, [props.highlight]);
 

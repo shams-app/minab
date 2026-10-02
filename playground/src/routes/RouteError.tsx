@@ -11,7 +11,14 @@ export function RouteError() {
                 icon="alert"
                 tone="danger"
                 title="Something broke on this page"
-                action={<div className="mb-row"><Button variant="primary" onClick={() => window.location.reload()}>Reload</Button><Button onClick={restartEngine}>Restart the engine</Button></div>}
+                action={
+                    <div className="mb-row">
+                        <Button variant="primary" onClick={() => window.location.reload()}>
+                            Reload
+                        </Button>
+                        <Button onClick={restartEngine}>Restart the engine</Button>
+                    </div>
+                }
             >
                 <p>{error?.message ?? 'An unexpected error occurred.'}</p>
                 <p className="mb-muted">Your work is saved in this browser — reloading won’t lose it.</p>

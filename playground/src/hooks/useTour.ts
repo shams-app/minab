@@ -72,14 +72,18 @@ export function useTour(lessonId: string | undefined): TourView {
         if (goalMet) markLessonComplete(lesson.id);
     }, [goalMet, lesson.id]);
 
-    const summaries = useMemo(() => lessons.map(l => ({
-        id: l.id,
-        number: l.number,
-        title: l.title,
-        summary: l.summary,
-        completed: completedIds.includes(l.id),
-        current: l.id === lesson.id
-    })), [completedIds, lesson.id]);
+    const summaries = useMemo(
+        () =>
+            lessons.map(l => ({
+                id: l.id,
+                number: l.number,
+                title: l.title,
+                summary: l.summary,
+                completed: completedIds.includes(l.id),
+                current: l.id === lesson.id
+            })),
+        [completedIds, lesson.id]
+    );
 
     const index = lessons.indexOf(lesson);
     return {

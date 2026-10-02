@@ -42,7 +42,8 @@ export const cheatsheet: CheatSection[] = [
                 id: 'current-record',
                 title: 'Current record',
                 syntax: '.field    .customer.name',
-                description: '`.` is the row in scope — the row being filtered, selected or validated. `.field` reads a column; more dots walk `ref` relations.',
+                description:
+                    '`.` is the row in scope — the row being filtered, selected or validated. `.field` reads a column; more dots walk `ref` relations.',
                 specRef: '§2',
                 exampleId: 'first-query'
             },
@@ -168,7 +169,8 @@ export const cheatsheet: CheatSection[] = [
                 id: 'record-rule',
                 title: 'Record-level rule',
                 syntax: '.end_date > .start_date',
-                description: 'A condition over `.` — the record about to be saved. Parts that need other rows are pushed down to the database; the rest is answered in memory.',
+                description:
+                    'A condition over `.` — the record about to be saved. Parts that need other rows are pushed down to the database; the rest is answered in memory.',
                 specRef: '§6.1',
                 exampleId: 'booking-overlap'
             },
@@ -284,11 +286,49 @@ export const cheatsheet: CheatSection[] = [
         title: 'Built-in functions',
         intro: 'Called without `&`. Each takes one collection.',
         entries: [
-            { id: 'count', title: 'COUNT', syntax: 'COUNT(.orders)  →  INTEGER', description: 'How many rows or elements.', specRef: '§5.3.1', keywords: ['COUNT'], exampleId: 'never-ordered' },
-            { id: 'sum', title: 'SUM · AVG', syntax: 'SUM(.orders.total)  →  N\nAVG(.price)  →  DECIMAL', description: 'Over a numeric column spread across a collection.', specRef: '§5.3.1', keywords: ['SUM', 'AVG'], exampleId: 'order-items' },
-            { id: 'minmax', title: 'MIN · MAX', syntax: 'MAX(.orders.total)  →  T', description: 'Over an orderable column: text, numbers, dates, times.', specRef: '§5.3.1', keywords: ['MIN', 'MAX'] },
-            { id: 'exists', title: 'EXISTS', syntax: 'EXISTS(#Customer[.id == $])  →  BOOLEAN', description: 'Whether the collection has any element — pushed down as one `SELECT EXISTS`.', specRef: '§5.3.1', keywords: ['EXISTS'], exampleId: 'customer-exists' },
-            { id: 'allany', title: 'ALL · ANY', syntax: 'ALL(flags)  ANY(flags)  →  BOOLEAN', description: 'Over a collection of booleans.', specRef: '§5.3.1', keywords: ['ALL', 'ANY'] }
+            {
+                id: 'count',
+                title: 'COUNT',
+                syntax: 'COUNT(.orders)  →  INTEGER',
+                description: 'How many rows or elements.',
+                specRef: '§5.3.1',
+                keywords: ['COUNT'],
+                exampleId: 'never-ordered'
+            },
+            {
+                id: 'sum',
+                title: 'SUM · AVG',
+                syntax: 'SUM(.orders.total)  →  N\nAVG(.price)  →  DECIMAL',
+                description: 'Over a numeric column spread across a collection.',
+                specRef: '§5.3.1',
+                keywords: ['SUM', 'AVG'],
+                exampleId: 'order-items'
+            },
+            {
+                id: 'minmax',
+                title: 'MIN · MAX',
+                syntax: 'MAX(.orders.total)  →  T',
+                description: 'Over an orderable column: text, numbers, dates, times.',
+                specRef: '§5.3.1',
+                keywords: ['MIN', 'MAX']
+            },
+            {
+                id: 'exists',
+                title: 'EXISTS',
+                syntax: 'EXISTS(#Customer[.id == $])  →  BOOLEAN',
+                description: 'Whether the collection has any element — pushed down as one `SELECT EXISTS`.',
+                specRef: '§5.3.1',
+                keywords: ['EXISTS'],
+                exampleId: 'customer-exists'
+            },
+            {
+                id: 'allany',
+                title: 'ALL · ANY',
+                syntax: 'ALL(flags)  ANY(flags)  →  BOOLEAN',
+                description: 'Over a collection of booleans.',
+                specRef: '§5.3.1',
+                keywords: ['ALL', 'ANY']
+            }
         ]
     },
     {

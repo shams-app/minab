@@ -26,11 +26,27 @@ export function useEngine(): EngineView {
         }
         switch (status.database) {
             case 'booting':
-                return { indicator: 'booting-db', label: 'Starting Postgres…', detail: 'Booting PostgreSQL (WebAssembly) in your browser — about a second, once.', restart: restartEngine };
+                return {
+                    indicator: 'booting-db',
+                    label: 'Starting Postgres…',
+                    detail: 'Booting PostgreSQL (WebAssembly) in your browser — about a second, once.',
+                    restart: restartEngine
+                };
             case 'ready':
-                return { indicator: 'db-ready', label: 'Postgres ready', detail: 'Programs run against a real PostgreSQL, compiled to WebAssembly, in this tab.', restart: restartEngine };
+                return {
+                    indicator: 'db-ready',
+                    label: 'Postgres ready',
+                    detail: 'Programs run against a real PostgreSQL, compiled to WebAssembly, in this tab.',
+                    restart: restartEngine
+                };
             case 'failed':
-                return { indicator: 'failed', label: 'Postgres failed', detail: status.databaseError ?? 'The database could not start.', error: status.databaseError, restart: restartEngine };
+                return {
+                    indicator: 'failed',
+                    label: 'Postgres failed',
+                    detail: status.databaseError ?? 'The database could not start.',
+                    error: status.databaseError,
+                    restart: restartEngine
+                };
             default:
                 return { indicator: 'ready', label: 'Ready', detail: 'The checker is ready; Postgres starts on the first run.', restart: restartEngine };
         }
