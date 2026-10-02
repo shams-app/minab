@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, eval, query, rule.
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
  *  - After you change an entry, run `npm run docs:diagnostics`.
@@ -85,6 +85,12 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" expects ${p.expected} argument(s), got ${p.actual}`,
         doc: 'A user function needs one argument for each declared parameter. Add or remove arguments.'
+    }),
+
+    'eval.integerOutOfRange': entry({
+        severity: error,
+        message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
+        doc: 'INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers.'
     }),
 
     'null.likeWithNull': entry({

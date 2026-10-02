@@ -8,13 +8,6 @@ const record = { id: 1, a: 7, b: 2, x: 0.1, y: 0.2, z: 0.3, s: '12', ci: 'Hello'
 
 export const cases: DifferentialCase[] = [
     {
-        name: 'decimal addition is exact',
-        schema,
-        record,
-        expr: '.x + .y == .z',
-        knownGap: { card: 'C2', note: 'the interpreter adds in binary floating point: 0.1 + 0.2 is not 0.3' }
-    },
-    {
         name: 'CAST DECIMAL to INTEGER',
         schema,
         record: { ...record, x: 3.7 },

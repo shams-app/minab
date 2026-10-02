@@ -109,6 +109,14 @@ A function call is wrong.
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
 
+## eval
+
+A program fails while it runs.
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
+
 ## query
 
 A query is used in a way its shape does not allow.

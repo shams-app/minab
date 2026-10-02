@@ -15,7 +15,7 @@ fill it with the parameters. Minab ships English only.
 ## Rules
 
 - A code is `<area>.<camelCaseName>`. Areas: `syntax`, `scope`, `type`, `null`,
-  `call`, `query`, `rule`.
+  `call`, `eval`, `query`, `rule`.
 - Keep the entries in `codes.ts` sorted by code. A test checks it.
 - Every entry needs a test program in `test/diagnostic-codes.test.ts`.
   An entry with no program fails the test, so there are no dead codes.
@@ -26,7 +26,8 @@ fill it with the parameters. Minab ships English only.
   A test fails when that page is out of date.
 - From 1.0 on, a code never changes its meaning (D38). Before 1.0, a phase may
   rename or change a code. It marks that with `breaking: true` in its changelog fragment.
-- Run-time and compile-time errors do not have codes yet. Phase R4 adds them.
+- Most run-time and compile-time errors do not have codes yet. Phase R4 adds them.
+  Only `eval.integerOutOfRange` exists (C2). Its code is written at the start of the error message.
 - Where the code goes: the validator puts it in the LSP `code` field and puts the
   parameters in `data.params`. The type checker and the scope resolver return
   `code` and `params` next to `reason` (the English message).

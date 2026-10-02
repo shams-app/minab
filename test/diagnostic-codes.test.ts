@@ -11,6 +11,7 @@
  * a node that has no check of its own (a `Block`, a `Subquery`, a bare name).
  * Those are tested at the type checker (`via: 'checker'`). Two scope
  * messages come only from the scope resolver (`via: 'resolver'`).
+ * One entry is a run-time error (`via: 'runtime'`): the program runs in the interpreter.
  * Two entries are guards that the current grammar cannot reach; they are
  * tested with a hand-made node (`via: 'guard'`).
  */
@@ -71,6 +72,7 @@ type Case =
     | { via: 'validator'; program: string; setting?: Setting }
     | { via: 'checker'; program: string; target: Pick; setting?: Setting }
     | { via: 'resolver'; program: string; target: Pick }
+    | { via: 'runtime'; program: string }
     | { via: 'guard' };
 
 /** One program per code. Keep it in the same order as the registry. */
@@ -86,6 +88,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
 
+    'eval.integerOutOfRange': { via: 'runtime', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
@@ -178,7 +181,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^(syntax|scope|type|null|call|query|rule)\.[a-z][A-Za-z0-9]*$/);
+        expect(code).toMatch(/^(syntax|scope|type|null|call|eval|query|rule)\.[a-z][A-Za-z0-9]*$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);
@@ -228,6 +231,13 @@ describe('every code is reported by a program', () => {
                     expect(result.code).toBe(expected);
                     expect(result.reason).toBe(DIAGNOSTICS[expected].message(result.params as never));
                 }
+                break;
+            }
+            case 'runtime': {
+                // Run-time errors do not carry a code field yet (R4). The code leads the message.
+                const { document } = await validate.record(testCase.program);
+                const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
+                expect(result).toEqual({ ok: false, reason: `${expected}: ${DIAGNOSTICS[expected].message({} as never)}` });
                 break;
             }
             case 'guard':

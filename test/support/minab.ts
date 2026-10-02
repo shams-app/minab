@@ -74,7 +74,7 @@ export function sameValue(a: unknown, b: unknown): boolean {
     if (a === null || a === undefined) return b === null || b === undefined;
     if (b === null || b === undefined) return false;
     if (a instanceof Decimal || b instanceof Decimal) {
-        const text = (v: unknown) => (v instanceof Decimal ? v.text : typeof v === 'number' ? String(v) : undefined);
+        const text = (v: unknown) => (v instanceof Decimal ? v.text : typeof v === 'number' || typeof v === 'string' ? String(v) : undefined);
         const [x, y] = [text(a), text(b)];
         return x !== undefined && y !== undefined && canonicalDecimal(x) === canonicalDecimal(y);
     }

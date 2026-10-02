@@ -23,6 +23,7 @@ const AREAS = {
     type: 'A type rule is broken. Minab never converts types by itself (spec §5.5).',
     null: 'A null rule is broken (spec §7.7).',
     call: 'A function call is wrong.',
+    eval: 'A program fails while it runs.',
     query: 'A query is used in a way its shape does not allow.',
     rule: 'A rule cannot be checked in this setting.'
 };
