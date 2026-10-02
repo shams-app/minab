@@ -1,5 +1,7 @@
 # Minab Implementation Roadmap
 
+> The plan after Phase 9 is the production plan: [`docs/production/README.md`](production/README.md).
+
 Head-to-tail plan from the current state (grammar scaffolded, nothing semantic yet) to a working, documented implementation. Each phase has one job and one defined output, so it can be picked up in a fresh session — Claude, Cursor, or otherwise — without needing prior conversation context. Start each phase by reading `docs/query-language-spec.md` and this file; that's the whole handoff.
 
 ## How to use this doc

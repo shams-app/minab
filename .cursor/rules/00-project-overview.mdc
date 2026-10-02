@@ -26,3 +26,10 @@ Hard constraints, all the time:
 - Keyword casing is a deliberate, load-bearing convention: SQL-style pipeline keywords are UPPERCASE (`FROM`, `WHERE`, `GROUPBY`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, ...); loop/JSON/control-flow/function keywords are lowercase (`let`, `fn`, `if`, `if!`, `loop`, `switch`, `is`, `isnot`, `null`, ...). After any grammar addition, grep for collisions between the two sets.
 - `docs/query-language-spec.md` and `docs/showcase.md` are controlled artifacts, and so is the grammar they document. Do not change any of them on your own judgment — including changes that look like obvious bugs. See the spec-governance rule for the required approval cycle, and for the narrow exception (an example that contradicts the spec's own unambiguous prose, like the three found on 2026-09-13, can be fixed directly — see that rule for what qualifies).
 - Spec §12 logs 18 design questions; the spec is marked Stable, and the still-open ones (items 1–4, 13, 17, and the second-`let`-redeclaration sub-question of 8) are deliberate deferrals. Don't silently resolve any of them either way — surface it and ask, following the spec-governance cycle.
+
+## Working on the production plan
+
+- The plan to 1.0 lives in `docs/production/`. Read its `README.md` before any phase; each phase has a card in `docs/production/phases/`.
+- Each phase writes one status file, `docs/production/status/<ID>.md`, and never edits another phase's.
+- User-visible changes get a changelog fragment in `changes/<ID>.md`, not an edit to `CHANGELOG.md`.
+- Protected files, and which phases may edit them, are listed in `docs/production/README.md`. A guard (`scripts/plan-guard.mjs`) checks this on every pull request.

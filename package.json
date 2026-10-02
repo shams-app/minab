@@ -27,6 +27,8 @@
     "LICENSE",
     "CHANGELOG.md",
     "docs",
+    "!docs/production/**",
+    "!docs/release-future/**",
     "examples"
   ],
   "publishConfig": {
