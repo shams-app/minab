@@ -784,7 +784,7 @@ Shamsine's `expect` has six values (condition schema; the surface schema should 
 | `dateTime` | `DATETIME` |
 | `list` | any array type `T[]` |
 
-Minab has no implicit coercion (spec §7). So `number` accepts both numeric types as a **result**, and there is no conversion. A program must give the right type itself (`CAST(...)` when needed). A `{ minab: "INTEGER" }` form exists for hosts that want one exact type. R5 or R2 builds the check. This is one question for the owner (see the status file).
+Minab has no implicit coercion (spec §7). So `number` accepts both numeric types as a **result**, and there is no conversion. A program must give the right type itself (`CAST(...)` when needed). `expect` also accepts **any Minab type by name**, for hosts that want one exact type: `{ minab: "TEXT" }`, `{ minab: "BOOLEAN" }`, `{ minab: "INTEGER" }`, `{ minab: "DECIMAL" }`, `{ minab: "INTEGER[]" }`, and so on. R2 builds the check. The owner confirmed this on 2026-10-02: `number` accepts both `INTEGER` and `DECIMAL`, and `expect` can name any data type.
 
 ### Host inputs, the clock, the data port
 
@@ -808,8 +808,8 @@ M.8's draft body is `{ expressions[], datasetId, recordId?, context }`, which se
 Not made here (this phase never changes the monorepo). G2 collects them:
 
 - M.3 and M.7: replace `DataSource` with the SQL `DataPort` (D28).
-- M.8: the stored-program request body above, instead of expression text.
-- The surface schema's `expect` uses the six values.
+- M.8: the stored-program request body above, instead of expression text (confirmed by the owner, 2026-10-02). The designer's live preview of unsaved `data` expressions is a development-mode feature.
+- The surface schema's `expect` uses the six values (confirmed by the owner, 2026-10-02).
 - M.5: `MinabSchema.version` from the field hash.
 
 ## 14. Alternatives considered
