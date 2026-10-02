@@ -1,15 +1,24 @@
-# Claude Design prompts
+# Claude Design briefs
 
-Paste these into Claude Design in order: **one prompt per message**, iterating until you're happy before you move on. They use real content and real data from the playground, so the designs look like the product rather than lorem ipsum.
+**You (the owner) do not paste these.** The W1 Claude Code session reads them and builds the designs in Claude Design for you. You only review the result. See [`../../docs/production/phases/W1.md`](../../docs/production/phases/W1.md).
+
+Do not mix this file up with [`docs/production/phases/prompts.md`](../../docs/production/phases/prompts.md):
+
+| File | What it holds | Who uses it |
+|---|---|---|
+| `docs/production/phases/prompts.md` | One prompt per phase, to **start a Claude Code session** | You paste one into Claude Code |
+| `playground/design/design-briefs.md` (this file) | What each screen must show, with real content | The W1 session (briefs 0–14); W2 and W3 (brief 15) |
+
+The briefs use real content and real data from the playground, so the designs look like the product.
 
 **Conventions used below:**
-- `‹…›` marks something for you to choose (e.g. the brand direction).
-- Every prompt ends with **Deliver:**, the exact frames or components to produce.
-- Component and token names match `design/contract.md`, so the handoff to Claude Code maps one-to-one. Don't let Claude Design rename them; if it does, ask it to rename them back.
+- `‹…›` marks a choice. The W1 session fills it in from decision D40.
+- Every brief ends with **Deliver:**, the exact frames or components to produce.
+- Component and token names match `contract.md`, so the build maps one-to-one. The design must not rename them.
 
 ---
 
-## 0 · Context primer (paste once, at the start of the project)
+## 0 · Context primer (the start of every design)
 
 > I'm designing the website for **Minab**, a small programming language I created, as a **showcase for my portfolio** and the language's public playground. Please read this context carefully; every later request builds on it.
 >
@@ -219,7 +228,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 > - No single statement: a pushdown Callout "No single SQL statement — It reads the record under validation, so it has no single SQL form. Running it evaluates those parts in memory and pushes each table-touching part down as its own statement." Then "What the last run sent:" with one statement.
 >
 > **ExecutionView:**
-> - 1 statement (as in prompt 3).
+> - 1 statement (as in brief 3).
 > - 0 statements: "The rule was settled from the record alone."
 > - Nothing ran: fix problems first.
 >
@@ -251,7 +260,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >    - "10 rows in Customer — real rows in the in-browser Postgres."
 >    - A rows table with 10 customers: Ada Lovelace, Grace Hopper, Alan Turing, Edsger Dijkstra, Barbara Liskov, Donald Knuth, Margaret Hamilton, Ken Thompson (country null), Radia Perlman, Tim Berners-Lee.
 >    - Also the SqlConsole open, with `SELECT name, country FROM "Customer" ORDER BY name;` and its result.
-> 3. **RecordView:** as in prompt 3, plus the "not a rule" EmptyState and the JSON toggle state.
+> 3. **RecordView:** as in brief 3, plus the "not a rule" EmptyState and the JSON toggle state.
 > 4. **FieldView:**
 >    - "Type of `$`: DECIMAL".
 >    - PresetChips: ✓ 500 · ✗ 950 · ✗ −5 (active), with the note "Fails locally — the database is never asked."
@@ -411,19 +420,19 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 > Before handoff, audit the whole project:
 > 1. Every token from the primer is defined for light and dark, with no unnamed one-off colors.
 > 2. Component names match the list in the primer exactly.
-> 3. Every state from prompts 3–5 exists.
+> 3. Every state from briefs 3–5 exists.
 > 4. Contrast: all text and syntax colors pass AA in both themes. List any that don't, and fix them.
 > 5. Mobile screens exist for landing, workbench, tour, gallery and reference.
 >
 > Summarize the design decisions in a short rationale, to go with the handoff. Then prepare the **handoff to Claude Code**.
 
-Then use **Export → Handoff to Claude Code** (or "Send to Claude Code"). See `design/README.md`, *Step E*.
+Then the W1 session writes `handoff.md` (see `README.md`, *Step E*).
 
 ---
 
-## 15 · The Claude Code wiring prompt (paste into Claude Code, in this repo, with the handoff)
+## 15 · The wiring rules (for W2 and W3, not for Claude Design)
 
-> You're receiving a Claude Design handoff for the Minab Playground (`playground/`). Implement the design **without touching the logic side**. Read these first: `playground/design/contract.md` (the seam — what may and may not change), `playground/design/screens.md` (every screen and state), and `playground/README.md`.
+> You're building the approved Claude Design for the Minab Playground (`playground/`). The design links and decisions are in `playground/design/handoff.md`. Implement the design **without touching the logic side**. Read these first: `playground/design/contract.md` (the seam — what may and may not change), `playground/design/screens.md` (every screen and state), and `playground/README.md`.
 >
 > Plan, then implement, in this order:
 > 1. **Tokens.** Map the design's tokens into `playground/src/styles/tokens.css`. Keep every existing custom-property name, and fill both themes (update both dark blocks identically). Add fonts (self-hosted in `public/fonts/`, or Google Fonts in `index.html`) and set `--font-*`.
