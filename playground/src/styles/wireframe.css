@@ -186,7 +186,7 @@ code, kbd, pre { font-family: var(--font-mono); }
 .tok-sigil-field { color: var(--syntax-sigil-field); font-weight: var(--weight-semibold); }
 .tok-sigil-parent { color: var(--syntax-sigil-parent); font-weight: var(--weight-semibold); }
 .tok-sigil-alias { color: var(--syntax-sigil-alias); }
-.tok-sigil-call { color: var(--syntax-sigil-call); }
+.tok-function { color: var(--syntax-function); }
 .tok-sigil-key { color: var(--syntax-sigil-key); font-weight: var(--weight-semibold); }
 .tok-sigil-index { color: var(--syntax-sigil-index); }
 .tok-member { color: var(--syntax-member); }

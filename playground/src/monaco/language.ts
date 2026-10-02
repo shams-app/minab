@@ -113,7 +113,7 @@ export function registerMinab(): void {
     });
 
     monaco.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-        triggerCharacters: ['.', '#', '&'],
+        triggerCharacters: ['.', '#'],
         async provideCompletionItems(model, position, context) {
             const offset = model.getOffsetAt(position);
             const report = await engine.call('complete', model.getValue(), offset).catch(() => undefined);

@@ -305,10 +305,10 @@ describe('the interpreted layer proper', () => {
         const result = await value(
             `
             fn factorial(n: INTEGER): INTEGER {
-                if n <= 1 { 1 } else { n * &factorial(n - 1) }
+                if n <= 1 { 1 } else { n * factorial(n - 1) }
             }
 
-            &factorial(5) == 120
+            factorial(5) == 120
             `,
             { executor, record: { id: 'o-1' }, recordTable: 'Order' }
         );
@@ -324,7 +324,7 @@ describe('the interpreted layer proper', () => {
                 n > 0
             }
 
-            &isPositive(.total) AND NOT EXISTS(#Customer[.id == "blocked"])
+            isPositive(.total) AND NOT EXISTS(#Customer[.id == "blocked"])
             `,
             { executor, record: { id: 'o-1', total: 10 }, recordTable: 'Order' }
         );

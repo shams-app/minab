@@ -70,7 +70,7 @@ Each lexical category has its own token. Monaco and every static snippet (landin
 | `--syntax-sigil-field` | **`$`** field value | `$` |
 | `--syntax-sigil-parent` | **`^`** parent record | `^` |
 | `--syntax-sigil-alias` | **`#`** named scope / table | `#Booking` |
-| `--syntax-sigil-call` | **`&`** user function call | `&discounted` |
+| `--syntax-function` | A user function call | `discounted` |
 | `--syntax-sigil-key` | **`KEY`** group key | `KEY` |
 | `--syntax-sigil-index` | `.$index` | `.$index` |
 | `--syntax-member` | A member after a dot | `.customer`**`.name`** |

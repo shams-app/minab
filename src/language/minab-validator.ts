@@ -8,8 +8,9 @@
  *  - `#alias` (`NamedScope`) referencing an undeclared table/scope.
  *  - Phase 4: no-implicit-coercion (spec §5.5), the §3.4 collection-vs-
  *    scalar boundary, the §7.7 null-operand rules, unknown-function calls
- *    and the built-in/`&`-prefixed split (§5.3), and the two `FunctionDecl`
- *    rules from §5.3/§8.6 (reserved built-in names; a `Query`-tailed
+ *    (§5.3), the function-name rules of D10 and D11 (a `fn` name needs a
+ *    lowercase letter; a `fn` may not share a name with a table, `let` or
+ *    parameter), and the `FunctionDecl` rule from §8.6 (a `Query`-tailed
  *    function's return type must be `JSON`).
  *
  * The first three are thin wrappers around `MinabScopeResolver` (Phase 2),
@@ -28,8 +29,10 @@
  * mistake, one diagnostic.
  */
 
-import type { AstNode, DiagnosticInfo, ValidationAcceptor, ValidationChecks } from 'langium';
+import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
+    isFunctionDecl,
+    isModel,
     isQuery,
     isTypeRef,
     type AssignmentStatement,
@@ -38,7 +41,6 @@ import {
     type CurrentRecord,
     type FieldValue,
     type FilterAccess,
-    type FunctionCall,
     type FunctionDecl,
     type GroupByClause,
     type GroupKeyRef,
@@ -48,6 +50,7 @@ import {
     type MemberAccess,
     type MinabAstType,
     type NamedScope,
+    type Param,
     type SwitchExpr,
     type TupleAccess,
     type UnaryExpression,
@@ -55,7 +58,6 @@ import {
     type WhereClause
 } from './generated/ast.js';
 import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
-import { isBuiltinName } from './minab-builtins.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
@@ -82,7 +84,6 @@ export function registerValidationChecks(services: MinabServices): void {
         TupleAccess: validator.checkExpressionTypeChecks,
         FilterAccess: validator.checkExpressionTypeChecks,
         CallExpression: validator.checkExpressionTypeChecks,
-        FunctionCall: validator.checkExpressionTypeChecks,
         ListLiteral: validator.checkExpressionTypeChecks,
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
@@ -91,8 +92,9 @@ export function registerValidationChecks(services: MinabServices): void {
         HavingClause: validator.checkConditionIsBoolean,
         GroupByClause: validator.checkGroupKeysNotCollection,
         AssignmentStatement: validator.checkAssignmentTypeCompatible,
-        VariableDecl: validator.checkVariableDeclTypeCompatible,
-        FunctionDecl: [validator.checkFunctionDeclNotReservedName, validator.checkFunctionDeclReturnType]
+        VariableDecl: [validator.checkVariableDeclTypeCompatible, validator.checkVariableNotFunctionName],
+        Param: validator.checkParamNotFunctionName,
+        FunctionDecl: [validator.checkFunctionDeclName, validator.checkFunctionDeclReturnType]
     };
     registry.register(checks, validator);
 }
@@ -138,7 +140,6 @@ export class MinabValidator {
             | TupleAccess
             | FilterAccess
             | CallExpression
-            | FunctionCall
             | ListLiteral
             | IfExpr
             | SwitchExpr
@@ -230,10 +231,37 @@ export class MinabValidator {
         }
     }
 
-    checkFunctionDeclNotReservedName(node: FunctionDecl, accept: ValidationAcceptor): void {
-        if (isBuiltinName(node.name)) {
-            report(accept, coded('call.reservedName', { name: node.name }), { node, property: 'name' });
+    /**
+     * D10: a built-in name is ALL UPPERCASE, so a `fn` name must have a
+     * lowercase letter. A new built-in can then never clash with a `fn`.
+     * D11: a `fn` may not have the name of a schema table.
+     */
+    checkFunctionDeclName(node: FunctionDecl, accept: ValidationAcceptor): void {
+        if (!/\p{Ll}/u.test(node.name)) {
+            report(accept, coded('call.functionNameCase', { name: node.name }), { node, property: 'name' });
         }
+        if (this.services.schema.getTable(node.name)) {
+            report(accept, coded('scope.functionNameIsTable', { name: node.name }), { node, property: 'name' });
+        }
+    }
+
+    /** D11: a `let` may not have the name of a declared `fn`. */
+    checkVariableNotFunctionName(node: VariableDecl, accept: ValidationAcceptor): void {
+        if (this.isFunctionName(node, node.name)) {
+            report(accept, coded('scope.nameIsFunction', { name: node.name }), { node, property: 'name' });
+        }
+    }
+
+    /** D11: a parameter may not have the name of a declared `fn`. */
+    checkParamNotFunctionName(node: Param, accept: ValidationAcceptor): void {
+        if (this.isFunctionName(node, node.name)) {
+            report(accept, coded('scope.nameIsFunction', { name: node.name }), { node, property: 'name' });
+        }
+    }
+
+    private isFunctionName(node: AstNode, name: string): boolean {
+        const model = AstUtils.getContainerOfType(node, isModel);
+        return model?.declarations.some(d => isFunctionDecl(d) && d.name === name) ?? false;
     }
 
     /**

@@ -154,41 +154,40 @@ describe('built-in vs. user-defined functions (spec §5.3, §12 item 10)', () =>
         await expectError(`FROM Order WHERE totallyUnknownFn(.total) > 0 SELECT .id`, /unknown function/);
     });
 
-    test('calling a user-defined function without & is rejected', async () => {
-        await expectError(
-            `
-            fn double(x: INTEGER): INTEGER { x * 2 }
-            double(5) > 0
-            `,
-            /user-defined function.*&double/
-        );
-    });
-
-    test('calling a user-defined function with & is accepted', async () => {
+    test('a bare user-defined function call is accepted', async () => {
         await expectClean(`
             fn double(x: INTEGER): INTEGER { x * 2 }
-            &double(5) > 0
+            double(5) > 0
         `);
     });
 
-    test('calling a built-in with & is rejected', async () => {
-        await expectError(`&SUM(5) > 0`, /built-in function.*without the & prefix/);
+    test('a call to a name that is neither built-in nor declared is rejected', async () => {
+        await expectError(`foo(1)`, /unknown function "foo"/);
     });
 
-    test('declaring a fn with a reserved built-in name is rejected', async () => {
-        await expectError(
-            `
-            fn SUM(x: INTEGER): INTEGER { x }
-            1
-            `,
-            /reserved built-in function name/
-        );
+    test('D10: a fn name needs a lowercase letter, so ALL-CAPS names stay for built-ins', async () => {
+        await expectError(`fn SUM(x: INTEGER): INTEGER { x }\n1`, /function name needs a lowercase letter/);
+        await expectError(`fn TAX(x: DECIMAL): DECIMAL { x }\n1`, /function name needs a lowercase letter/);
+        await expectClean(`fn tax(x: DECIMAL): DECIMAL { x }\n1`);
+    });
+
+    test('D11: a let or a parameter may not have the name of a fn', async () => {
+        await expectError(`fn total(a: DECIMAL): DECIMAL { a }\nlet total: DECIMAL = 5;`, /"total" is the name of a function/);
+        await expectError(`fn total(a: DECIMAL): DECIMAL { a }\nfn check(total: DECIMAL): BOOLEAN { true }`, /"total" is the name of a function/);
+    });
+
+    test('D11: a fn may not have the name of a table', async () => {
+        await expectError(`fn Customer(): INTEGER { 1 }`, /"Customer" is a table name/);
+    });
+
+    test('an old `&name(...)` call is a syntax error', async () => {
+        await expectError(`fn double(x: INTEGER): INTEGER { x * 2 }\n&double(5) > 0`, /./);
     });
 
     test('a user function call checks argument count and types', async () => {
-        await expectError(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } &add(1) > 0`, /expects 2 argument/);
-        await expectError(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } &add(1, "x") > 0`, /argument 2/);
-        await expectClean(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } &add(1, 2) > 0`);
+        await expectError(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } add(1) > 0`, /expects 2 argument/);
+        await expectError(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } add(1, "x") > 0`, /argument 2/);
+        await expectClean(`fn add(a: INTEGER, b: INTEGER): INTEGER { a + b } add(1, 2) > 0`);
     });
 });
 

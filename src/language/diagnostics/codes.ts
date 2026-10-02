@@ -36,11 +36,6 @@ function entry<P extends DiagnosticParams = NoParams>(value: DiagnosticEntry<P>)
 const error = 'error' as const;
 
 export const DIAGNOSTICS = {
-    'call.ampersandOnBuiltin': entry<{ name: string }>({
-        severity: error,
-        message: p => `"${p.name}" is a built-in function — call it without the & prefix: ${p.name}(...)`,
-        doc: 'A built-in function is called by its bare name. Remove the "&".'
-    }),
     'call.argumentType': entry<{ name: string; position: number; expected: string; actual: string }>({
         severity: error,
         message: p => `"${p.name}" argument ${p.position}: expected ${p.expected}, got ${p.actual} (no implicit coercion)`,
@@ -73,28 +68,18 @@ export const DIAGNOSTICS = {
     }),
     'call.calleeNotName': entry({
         severity: error,
-        message: () => 'a function call must be a plain name — e.g. COUNT(...) or &myFunction(...)',
+        message: () => 'a function call must be a plain name — e.g. COUNT(...) or myFunction(...)',
         doc: 'Only a plain name can be called. Write the function name before the parentheses.'
     }),
-    'call.missingAmpersand': entry<{ name: string }>({
+    'call.functionNameCase': entry<{ name: string }>({
         severity: error,
-        message: p => `"${p.name}" is a user-defined function — call it as &${p.name}(...)`,
-        doc: 'A user-defined function is called with the "&" prefix. Add "&" before the name.'
-    }),
-    'call.reservedName': entry<{ name: string }>({
-        severity: error,
-        message: p => `"${p.name}" is a reserved built-in function name and can't be used for a user-defined function`,
-        doc: 'COUNT, SUM, AVG, MIN, MAX, EXISTS, ALL and ANY are reserved. Choose another name for your function.'
+        message: p => `"${p.name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins`,
+        doc: 'Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it.'
     }),
     'call.unknownFunction': entry<{ name: string }>({
         severity: error,
-        message: p => `unknown function "${p.name}" — built-ins are COUNT/SUM/AVG/MIN/MAX/EXISTS/ALL/ANY; a user function needs &${p.name}(...)`,
-        doc: 'The name is not a built-in function. Use one of the eight built-ins, or call your own function as &name(...).'
-    }),
-    'call.unknownUserFunction': entry<{ name: string }>({
-        severity: error,
         message: p => `unknown function "${p.name}"`,
-        doc: 'No function with this name is declared in the program. Declare it with "fn", or fix the name.'
+        doc: 'The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name.'
     }),
     'call.userArity': entry<{ name: string; expected: number; actual: number }>({
         severity: error,
@@ -160,6 +145,11 @@ export const DIAGNOSTICS = {
         message: () => '"." has no statically known table here',
         doc: 'The current record has no known table. Use "." inside a query, or give the host a record table.'
     }),
+    'scope.functionNameIsTable': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is a table name — a function may not use it`,
+        doc: 'A function may not have the name of a table in the schema. Rename the function.'
+    }),
     'scope.keyInWrongClause': entry({
         severity: error,
         message: () => 'KEY is only valid in HAVING, SELECT, ORDERBY, or LIMIT, after GROUPBY',
@@ -174,6 +164,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => 'KEY is only valid after a GROUPBY clause',
         doc: 'This query has no GROUPBY. Add a GROUPBY clause, or remove KEY.'
+    }),
+    'scope.nameIsFunction': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is the name of a function — a variable or parameter may not reuse it`,
+        doc: 'A let or a parameter may not have the name of a function declared in the program. Rename it.'
     }),
     'scope.noActiveScope': entry({
         severity: error,

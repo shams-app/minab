@@ -22,7 +22,7 @@ fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
     let flaggedCount: INTEGER = 0;
 
     loop customer in #Customers where .balance > cutoff {
-        let daysLate: INTEGER = &daysSincePayment(.id);
+        let daysLate: INTEGER = daysSincePayment(.id);
 
         let newStatus: TEXT = if daysLate > 90 {
             let notes: JSON = .metadata;
@@ -53,4 +53,4 @@ fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
     flaggedCount
 }
 
-&reconcileOverdueAccounts(1000, 14)
+reconcileOverdueAccounts(1000, 14)

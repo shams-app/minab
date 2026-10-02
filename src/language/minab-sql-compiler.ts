@@ -511,7 +511,12 @@ export class MinabSqlCompiler {
     private call(expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         const callee = expr.callee;
         if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
-            fail('only the built-in aggregate/predicate functions have a SQL form');
+            // A user `fn` runs in the interpreter. Emitting `name(...)` would call a database function of that name: a wrong answer.
+            fail(
+                isNameRef(callee)
+                    ? `"${callee.name}" is a user function — it has no SQL form (it belongs to the interpreted layer)`
+                    : 'only the built-in aggregate/predicate functions have a SQL form'
+            );
         }
         const name = callee.name;
         const arg = expr.args[0];

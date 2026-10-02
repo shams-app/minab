@@ -27,9 +27,11 @@ A name, table, column or sigil cannot be found.
 | `scope.columnNeedsTable` | error | column "{column}" needs a statically known table (requires the Phase 4 type system) | `column` | The scope has no known table, so the column cannot be looked up. Open a table first, for example with FROM. |
 | `scope.computedReceiver` | error | member access on a computed receiver requires the Phase 4 type system | none | The scope resolver cannot follow a member access on a computed value. Use the type checker for this case. |
 | `scope.currentRecordNoTable` | error | "." has no statically known table here | none | The current record has no known table. Use "." inside a query, or give the host a record table. |
+| `scope.functionNameIsTable` | error | "{name}" is a table name — a function may not use it | `name` | A function may not have the name of a table in the schema. Rename the function. |
 | `scope.keyInWrongClause` | error | KEY is only valid in HAVING, SELECT, ORDERBY, or LIMIT, after GROUPBY | none | KEY is the group key. Use it only in the clauses that come after GROUPBY. |
 | `scope.keyOutsideQuery` | error | KEY used outside any query | none | KEY is the group key of a query. Use it inside a query with GROUPBY. |
 | `scope.keyWithoutGroupBy` | error | KEY is only valid after a GROUPBY clause | none | This query has no GROUPBY. Add a GROUPBY clause, or remove KEY. |
+| `scope.nameIsFunction` | error | "{name}" is the name of a function — a variable or parameter may not reuse it | `name` | A let or a parameter may not have the name of a function declared in the program. Rename it. |
 | `scope.noActiveScope` | error | no active scope for "." | none | There is no current record here. Use "." inside a query, a filter or a loop. |
 | `scope.noParentScope` | error | "^" has no enclosing parent scope here | none | The "^" sigil means the record one level up. Use it only inside a nested scope. |
 | `scope.noStaticTable` | error | no statically known table at this point | none | The checker cannot tell which table this refers to. Open the table explicitly, for example with #Table. |
@@ -96,18 +98,15 @@ A function call is wrong.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
-| `call.ampersandOnBuiltin` | error | "{name}" is a built-in function — call it without the & prefix: {name}(...) | `name` | A built-in function is called by its bare name. Remove the "&". |
 | `call.argumentType` | error | "{name}" argument {position}: expected {expected}, got {actual} (no implicit coercion) | `name`, `position`, `expected`, `actual` | An argument of a user function must have the declared parameter type. Pass a value of that type, or use CAST. |
 | `call.builtinArity` | error | {name} expects exactly one argument, got {actual} | `name`, `actual` | A built-in function takes exactly one argument. Pass one collection. |
 | `call.builtinNeedsBooleanCollection` | error | {name} expects a collection of BOOLEAN, got {actual} | `name`, `actual` | ALL and ANY read a collection of BOOLEAN values. Pass such a collection, for example a filter or a comparison over a collection. |
 | `call.builtinNeedsCollection` | error | {name} expects a collection, got {actual} | `name`, `actual` | COUNT and EXISTS read a collection or an array. Pass one, for example a to-many relation. |
 | `call.builtinNeedsNumericCollection` | error | {name} expects a collection of INTEGER or DECIMAL, got {actual} | `name`, `actual` | SUM and AVG add up numbers. Pass a collection of INTEGER or DECIMAL values. |
 | `call.builtinNeedsOrderableCollection` | error | {name} expects a collection of an orderable type, got {actual} | `name`, `actual` | MIN and MAX compare values. Pass a collection of numbers, text, dates or times. |
-| `call.calleeNotName` | error | a function call must be a plain name — e.g. COUNT(...) or &myFunction(...) | none | Only a plain name can be called. Write the function name before the parentheses. |
-| `call.missingAmpersand` | error | "{name}" is a user-defined function — call it as &{name}(...) | `name` | A user-defined function is called with the "&" prefix. Add "&" before the name. |
-| `call.reservedName` | error | "{name}" is a reserved built-in function name and can't be used for a user-defined function | `name` | COUNT, SUM, AVG, MIN, MAX, EXISTS, ALL and ANY are reserved. Choose another name for your function. |
-| `call.unknownFunction` | error | unknown function "{name}" — built-ins are COUNT/SUM/AVG/MIN/MAX/EXISTS/ALL/ANY; a user function needs &{name}(...) | `name` | The name is not a built-in function. Use one of the eight built-ins, or call your own function as &name(...). |
-| `call.unknownUserFunction` | error | unknown function "{name}" | `name` | No function with this name is declared in the program. Declare it with "fn", or fix the name. |
+| `call.calleeNotName` | error | a function call must be a plain name — e.g. COUNT(...) or myFunction(...) | none | Only a plain name can be called. Write the function name before the parentheses. |
+| `call.functionNameCase` | error | "{name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins | `name` | Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it. |
+| `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
 
 ## query

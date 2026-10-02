@@ -89,7 +89,6 @@ function seedOf(raw: Record<string, unknown>): Record<string, Row[]> {
 
 /** Readable names for the constructs that live only in the interpreted layer. */
 const INTERPRETED_ONLY: Record<string, string> = {
-    FunctionCall: 'a user function call (`&fn`)',
     SwitchExpr: '`switch`',
     IfExpr: '`if`',
     TypeTestExpression: 'an `is` shape test',

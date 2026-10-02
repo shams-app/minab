@@ -42,8 +42,7 @@ export const landing = {
             { sigil: '$', token: 'sigil-field', name: 'value under validation', example: '$ <= .credit_limit' },
             { sigil: '^', token: 'sigil-parent', name: 'one scope up', example: '.room_id == ^.room_id' },
             { sigil: '#', token: 'sigil-alias', name: 'a table, inline', example: '#Booking[.id != ^.id]' },
-            { sigil: 'KEY', token: 'sigil-key', name: 'the group', example: 'KEY.name' },
-            { sigil: '&', token: 'sigil-call', name: 'your functions', example: '&discounted(200, 15)' }
+            { sigil: 'KEY', token: 'sigil-key', name: 'the group', example: 'KEY.name' }
         ]
     },
 

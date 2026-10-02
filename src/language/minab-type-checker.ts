@@ -27,7 +27,6 @@ import {
     isCurrentRecord,
     isFieldValue,
     isFilterAccess,
-    isFunctionCall,
     isFunctionDecl,
     isGroupByClause,
     isGroupKeyRef,
@@ -60,7 +59,6 @@ import {
     type CurrentRecord,
     type Expression,
     type FilterAccess,
-    type FunctionCall,
     type FunctionDecl,
     type GroupKeyRef,
     type IfExpr,
@@ -80,7 +78,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
-import { getBuiltin, isBuiltinName } from './minab-builtins.js';
+import { getBuiltin } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
@@ -176,7 +174,6 @@ export class MinabTypeChecker {
         if (isTupleAccess(node)) return this.inferTupleAccess(node);
         if (isFilterAccess(node)) return this.inferFilterAccess(node);
         if (isCallExpression(node)) return this.inferCallExpression(node);
-        if (isFunctionCall(node)) return this.inferFunctionCall(node);
         if (isCastExpr(node)) return ok(typeRefToMinabType(node.targetType));
         if (isTypeTestExpression(node)) return ok(scalarType('BOOLEAN'));
         if (isBinaryExpression(node)) return this.inferBinaryExpression(node);
@@ -420,12 +417,7 @@ export class MinabTypeChecker {
         }
         const name = node.callee.name;
         const builtin = getBuiltin(name);
-        if (!builtin) {
-            if (this.findFunctionDecl(node, name)) {
-                return err('call.missingAmpersand', { name });
-            }
-            return err('call.unknownFunction', { name });
-        }
+        if (!builtin) return this.inferUserCall(node, name);
         if (node.args.length !== 1) {
             return err('call.builtinArity', { name, actual: node.args.length });
         }
@@ -439,6 +431,24 @@ export class MinabTypeChecker {
             if (retried.ok) return ok(retried.type);
         }
         return failWith(result);
+    }
+
+    /** A call whose name is not a built-in: it must be a declared `fn` (D10). */
+    private inferUserCall(node: CallExpression, name: string): TypeResult {
+        const decl = this.findFunctionDecl(node, name);
+        if (!decl) return err('call.unknownFunction', { name });
+        if (node.args.length !== decl.params.length) {
+            return err('call.userArity', { name, expected: decl.params.length, actual: node.args.length });
+        }
+        for (let i = 0; i < node.args.length; i++) {
+            const argType = this.inferType(node.args[i]);
+            if (!argType.ok) return argType;
+            const paramType = astTypeToMinabType(decl.params[i].type);
+            if (argType.type.kind !== 'null' && !baseTypesEqual(argType.type, paramType)) {
+                return err('call.argumentType', { name, position: i + 1, expected: formatType(paramType), actual: formatType(argType.type) });
+            }
+        }
+        return ok(astTypeToMinabType(decl.returnType));
     }
 
     /**
@@ -457,26 +467,6 @@ export class MinabTypeChecker {
         if (t.kind === 'scalar' && !t.array) return scalarType(t.base, { nullable: t.nullable, array: true });
         if (t.kind === 'record') return { kind: 'collection', table: t.table };
         return undefined;
-    }
-
-    private inferFunctionCall(node: FunctionCall): TypeResult {
-        if (isBuiltinName(node.name)) {
-            return err('call.ampersandOnBuiltin', { name: node.name });
-        }
-        const decl = this.findFunctionDecl(node, node.name);
-        if (!decl) return err('call.unknownUserFunction', { name: node.name });
-        if (node.args.length !== decl.params.length) {
-            return err('call.userArity', { name: node.name, expected: decl.params.length, actual: node.args.length });
-        }
-        for (let i = 0; i < node.args.length; i++) {
-            const argType = this.inferType(node.args[i]);
-            if (!argType.ok) return argType;
-            const paramType = astTypeToMinabType(decl.params[i].type);
-            if (argType.type.kind !== 'null' && !baseTypesEqual(argType.type, paramType)) {
-                return err('call.argumentType', { name: node.name, position: i + 1, expected: formatType(paramType), actual: formatType(argType.type) });
-            }
-        }
-        return ok(astTypeToMinabType(decl.returnType));
     }
 
     // ---- queries used as values (spec §5.4, §7.1) -----------------------

@@ -181,7 +181,7 @@ describe('minab compile', () => {
     });
 
     test('a program with no SQL form points at `run` instead of failing blankly', async () => {
-        write('fn.minab', 'fn double(x: INTEGER): INTEGER { x * 2 }\n&double(21)');
+        write('fn.minab', 'fn double(x: INTEGER): INTEGER { x * 2 }\ndouble(21)');
         const result = await cli('compile', 'fn.minab');
         expect(result.code).toBe(EXIT_PROGRAM_ERROR);
         expect(result.errors).toContain('does not compile to SQL on its own');

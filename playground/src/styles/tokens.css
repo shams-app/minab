@@ -94,7 +94,7 @@
     --syntax-sigil-field: #c2410c;
     --syntax-sigil-parent: #be185d;
     --syntax-sigil-alias: #7c3aed;
-    --syntax-sigil-call: #047857;
+    --syntax-function: #047857;
     --syntax-sigil-key: #a16207;
     --syntax-sigil-index: #a16207;
     --syntax-member: #1f2937;
@@ -242,7 +242,7 @@
         --syntax-sigil-field: #ffa657;
         --syntax-sigil-parent: #ff7eb6;
         --syntax-sigil-alias: #c4a2ff;
-        --syntax-sigil-call: #56d364;
+        --syntax-function: #56d364;
         --syntax-sigil-key: #e3b341;
         --syntax-sigil-index: #e3b341;
         --syntax-member: #d7dbe2;
@@ -324,7 +324,7 @@
     --syntax-sigil-field: #ffa657;
     --syntax-sigil-parent: #ff7eb6;
     --syntax-sigil-alias: #c4a2ff;
-    --syntax-sigil-call: #56d364;
+    --syntax-function: #56d364;
     --syntax-sigil-key: #e3b341;
     --syntax-sigil-index: #e3b341;
     --syntax-member: #d7dbe2;
