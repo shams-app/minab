@@ -8,103 +8,73 @@ The playground already **works end to end**. What's left is its look. This guide
 | [`flows.md`](flows.md) | Every user journey, step by step, with the states it passes through |
 | [`screens.md`](screens.md) | Every screen, region and state, the checklist a design must cover |
 | [`contract.md`](contract.md) | The seam: design tokens, the component inventory and props, and what may and may not change |
-| [`prompts.md`](prompts.md) | Ready-to-paste Claude Design prompts (0–14), plus the Claude Code wiring prompt (15) |
+| [`design-briefs.md`](design-briefs.md) | What each screen must show (briefs 0–14), used by the W1 session inside Claude Design, plus the wiring rules for W2 and W3 (brief 15). **You do not paste these.** |
+| `handoff.md` | Written by W1: the Claude Design canvas link and every approved decision. W2 and W3 build from it. |
 | [`launch-kit.md`](launch-kit.md) | Demo storyboard, screenshot list, case-study outline, launch posts |
 
-> Claude Design is a fast-moving product (a research preview in April 2026, beta since June 2026). Button labels and commands below were current when this was written. If a label differs, look for the equivalent.
+> **Short version for the owner:** paste the W1 prompt from [`docs/production/phases/prompts.md`](../../docs/production/phases/prompts.md) into **Claude Code** (claude.ai/code, or the Code tab in the Claude desktop app). The session asks you 4 questions, builds the designs in Claude Design, and sends you links to review. That is all. The steps below say what the session does.
+
+> Claude Design is a fast-moving product (beta since June 2026). Today it is a **Design** template you can start from any Claude chat (Output → Design), from the Artifacts tab, or from Claude Code. The separate page claude.ai/design still exists but has its own setting and is **not needed** here. If a label differs, look for the equivalent.
 
 ---
 
-## Step A — See what you're designing (15 min)
+## Step A — Look at the app (the session does this)
+
+The W1 session can run the app to check details:
 
 ```bash
-cd playground
-npm install
-npm run dev          # http://localhost:5173
+npm ci                      # at the repository root, once: the playground builds the parser from ../src
+cd playground && npm ci
+npm run dev                 # http://localhost:5173
 ```
 
-The first run generates the Minab parser in the repository root, which needs `npm install` at the root once.
+It may take screenshots with the pre-installed Chromium for its own reference. They stay in its scratchpad, not in the repository. The owner does not take or upload screenshots.
 
-Walk through `flows.md` in the running app:
-1. landing → playground;
-2. `booking-overlap` → click the presets → open Execution and hover the statement;
-3. break a query to see the Problems tab;
-4. do tour lessons 1, 6 and 7;
-5. share a link;
-6. try `/embed?example=credit-limit`.
-
-Screenshot the key states at 1440 px and 375 px, in light and dark. The top-bar icon toggles the theme. These screenshots are useful context to upload to Claude Design.
-
-**Decide before designing:** the brand direction (`brief.md`, A/B/C) and the open items in the brief (the story behind the name, domain, portfolio URL).
+The owner's choices (brand direction, name story, domain, portfolio URL) are in decision D40. The W1 session asks only the ones that are still open.
 
 ---
 
-## Step B — Set up the Claude Design project (10 min)
+## Step B — Create the canvas (the session does this)
 
-1. Open **claude.ai/design**. It needs a Pro, Max, Team or Enterprise plan; on Enterprise, an admin enables it under Organization settings → Artifacts. Create a new project, e.g. "Minab Playground".
-2. **Give it the codebase**, so it designs with the real component names. Either:
-   - **Link the GitHub repo** (`shams-app/minab`) when creating or setting up the design system. It reads `playground/src/ui/**` and `playground/src/styles/tokens.css`; or
-   - from this repo, in Claude Code, run **`/design-sync`**. It pushes the local component library into a Claude Design design-system project and keeps it in sync incrementally.
-3. **Upload context files:**
-   - `design/brief.md`
-   - `design/screens.md`
-   - `design/contract.md`
-   - the screenshots from Step A
-4. If your organization has a design system set up, the project inherits it. For Minab you're creating a new one, which is what prompt 1 does.
+The session creates **one** Claude Design canvas, "Minab Playground", with its Artifact tool (the **Design** type). It puts brief 0, the context primer, in first. It links no repository and runs no `/design-sync`: the briefs already carry every token and component name. (`/design-sync` becomes useful after W2, see Step G.)
+
+**Fallback**, only if the session says it cannot create a canvas: open claude.ai (browser or desktop app), start a new chat, and choose **Output → Design** in the message box (or the Artifacts tab → **Design** template). Paste the one text the session gives you. Then paste the design's link back into the Claude Code chat.
 
 ---
 
-## Step C — Design, prompt by prompt (2–5 hours, spread out)
+## Step C — Design in four rounds (2–5 hours, spread out)
 
-Open [`prompts.md`](prompts.md) and paste the prompts **one per message, in order**:
+The session adds the briefs from [`design-briefs.md`](design-briefs.md) to the canvas, one round at a time. After each round it sends you the link and waits for your "approved" or your changes.
 
-| # | Produces | Tip |
-|---|---|---|
-| 0 | Shared understanding | Answer its questions before continuing |
-| 1 | Brand + design system | Spend the most time here; everything inherits from it |
-| 2 | Landing | Ask for the three hero variations, pick one |
-| 3 | Workbench | The Execution tab is the showcase moment, so push it |
-| 4 | Output states sheet | Check every state is there |
-| 5 | Host panel | |
-| 6 | Tour | Include the celebration moment |
-| 7 | Gallery | |
-| 8 | Reference + drawer | |
-| 9 | Embed | Judge it inside a mock blog post |
-| 10 | Mobile pass | Tap targets ≥ 44 px |
-| 11 | Overlays, toasts, 404, errors, hover and completion | |
-| 12 | OG image + icons | Check legibility at thumbnail size |
-| 13 | Motion spec | |
-| 14 | Final audit | Fix anything it reports before handoff |
+| Round | Briefs | Produces | Tip for your review |
+|---|---|---|---|
+| 1 | 0, 1 | Brand and design system | Spend the most time here; everything inherits from it |
+| 2 | 2–5 | Landing, workbench, output states, host panel | Pick one of the three hero variations. The Execution tab is the showcase moment |
+| 3 | 6–13 | Tour, gallery, reference, embed, mobile, overlays, icons, motion | Check the OG image at thumbnail size, and tap targets on mobile |
+| 4 | 14 | Final audit, then `handoff.md` | Anything it reports is fixed before you approve |
 
-**Prompting habits that work well with Claude Design:**
-- **State the goal, layout, content and audience.** The prompts already do this. Add your own taste on top ("more whitespace", "less rounded").
-- **Ask for variations** when unsure: "show three alternatives: A…, B…, C…".
-- **Ask for states explicitly:** empty, loading, error, stale, narrow. Designs that skip them are what makes an implementation look unfinished.
-- **Keep names stable.** If it invents new component names, ask it to use the names from the primer. They carry through the handoff.
-- **Write down reasoning in the chat** ("we chose X because…"). It travels with the handoff and helps Claude Code make the same calls.
+**Good review habits:**
+- **Be specific:** "tighten the spacing between form fields", not "this doesn't look right".
+- **Ask for variations** when unsure: "show three alternatives".
+- **Ask for states:** empty, loading, error, stale, narrow.
+- **Say why** ("we chose X because…"). The session writes it into `handoff.md`, and W2 and W3 make the same calls.
 
 ---
 
 ## Step D — Iterate
 
-Three ways to refine, in order of scope:
-1. **Chat** for broad changes: "make the dark theme warmer", "tighten vertical rhythm on the landing".
-2. **Inline comments** on a canvas element for targeted fixes: "this badge needs more contrast", "align this with the editor gutter".
-3. **Direct edits on the canvas** (drag, resize, align) for nudges.
-
-Before moving on, re-run **prompt 14 (final audit)**. Contrast and missing states are the usual gaps.
+Three ways to give feedback, in order of scope:
+1. **The Claude Code chat** for broad changes: "make the dark theme warmer". This is the main way.
+2. **Comments on the canvas** for targeted fixes: "this badge needs more contrast". Tell the session you left comments; it reads them.
+3. **Direct edits on the canvas** (drag, resize, align) for nudges. Tell the session, so it records them.
 
 ---
 
-## Step E — Hand off to Claude Code
+## Step E — Hand off to Claude Code (the session does this)
 
-1. In Claude Design: **Export → Handoff to Claude Code** (or "Send to Claude Code" for the web version). The bundle contains the component structure as a machine-readable spec, the tokens used, the layout hierarchy, and the assets.
-2. In Claude Code, in this repository, on a new branch:
-   ```bash
-   git checkout -b playground-design
-   ```
-3. Give Claude Code the bundle together with **prompt 15** from `prompts.md` (the wiring prompt). It tells Claude Code exactly what to change (tokens, `src/ui/**`, styles, icons, assets) and what never to touch (engine, state, hooks, content).
-4. Let it plan first, review the plan, then let it implement.
+At the end of each approved round, the W1 session writes `handoff.md`: the canvas link at the top, then the approved layout, tokens (names and values, both themes), component states, copy, keyboard behavior and motion. It commits and pushes after each round.
+
+W2 and W3 read `handoff.md` and the canvas, and follow **brief 15** (the wiring rules) in `design-briefs.md`. There is no bundle to export or attach.
 
 ---
 

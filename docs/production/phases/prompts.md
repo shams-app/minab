@@ -6,6 +6,10 @@ How the plan works, and the rules every session follows: [`../README.md`](../REA
 
 **In a cloud session:** attach the `shams-app/minab` repository. Phases R1 and G2 also read `shams-app/monorepo` (read only).
 
+**Where to paste a prompt:** in **Claude Code**, never in a normal Claude chat and never in Claude Design. Use claude.ai/code in the browser, or the **Code** tab in the Claude desktop app. Start a new session with the `shams-app/minab` repository and paste the prompt as your first message.
+
+**Not to be confused with** `playground/design/design-briefs.md`: those are the screen briefs the W1 session uses inside Claude Design. You never paste them yourself.
+
 ## Helper prompts
 
 **Which phases can I start now?**
@@ -380,8 +384,16 @@ Read CLAUDE.md, docs/production/README.md and docs/production/phases/G2.md, then
 
 ### W1 Website design pass (Claude Design)
 
+Paste this in Claude Code (see "Where to paste a prompt" above), not in Claude Design. The session builds the designs and sends you links. See "How this phase works" in [`W1.md`](W1.md).
+
 ```text
-Read CLAUDE.md if it exists (otherwise the three files in .cursor/rules/), docs/production/README.md and docs/production/phases/W1.md, then do phase W1 exactly as its card says. Its Depends: A2. Before anything else, check that docs/production/status/ has a file with "Status: done" for each of them; if one is missing or not done, stop and tell me. Its decisions: D40. Read them in docs/production/decisions.md; if one has no answer (or says "ask at phase W1"), ask me before you start, show the options and the recommendation, and write my answer there. The card has "Ask first" questions: ask me all of them in one message and wait for my answers before you start the work. This is a design phase with Claude Design: follow Steps A–D in playground/design/README.md with me; I drive Claude Design, you prepare and adjust the prompts and keep the notes. Write no code except the author URL the card names. When you finish, set the status to "waiting for approval": I review the designs and `handoff.md` with the "Review a phase waiting for approval" helper prompt. Follow "Rules for every phase" in docs/production/README.md: the start and end checklists, the size budget, the split rule (never create a new card), the protected files, and when to stop and ask. Do not start any other phase. At the end: run every check the rules list, write docs/production/status/W1.md (and changes/W1.md if users can see the change), then commit, push your branch and open a pull request titled "[W1] Website design pass (Claude Design)". Do not edit another phase's status file or a protected file your card does not allow.
+Read CLAUDE.md, docs/production/README.md and docs/production/phases/W1.md, then do phase W1 exactly as its card says. Its Depends: A2. Before anything else, check that docs/production/status/ has a file with "Status: done" for each of them; if one is missing or not done, stop and tell me. Its decisions: D40. Ask me the card's four "Ask first" questions in one message, with your recommendation for each, and wait for my answers; write them under D40 in docs/production/decisions.md. Do not ask me anything else about setup: the card decides how Claude Design is used. You build the designs yourself in one Claude Design canvas (Artifact tool, Design type), in the card's four rounds. After each round, send me the link and a short list of what to check, wait for my "approved" or my changes, then write that round into playground/design/handoff.md, commit and push. If you cannot create a Claude Design canvas, tell me in one line and use the card's fallback. Write no code except the author URL the card names. After round 4, set the status to "waiting for approval". Follow "Rules for every phase" in docs/production/README.md: the start and end checklists, the size budget, the split rule (never create a new card), the protected files, and when to stop and ask. Do not start any other phase. At the end: run every check the rules list, write docs/production/status/W1.md (and changes/W1.md if users can see the change), then commit, push your branch and open a pull request titled "[W1] Website design pass (Claude Design)". Do not edit another phase's status file or a protected file your card does not allow.
+```
+
+**Continue W1** (when a W1 session stopped in the middle; paste in a new Claude Code session):
+
+```text
+Read CLAUDE.md, docs/production/README.md, docs/production/phases/W1.md, docs/production/status/W1.md (if it exists) and playground/design/handoff.md. Phase W1 was started and stopped. Check out the W1 branch from its open pull request titled "[W1] Website design pass (Claude Design)" (if there is no pull request, find the branch that changed playground/design/handoff.md). The Claude Design canvas link is at the top of handoff.md: read it with the Artifact tool. Tell me in three lines which rounds are approved and what comes next, then continue from the first round that is not approved, exactly as the card says. Do not ask the "Ask first" questions again if D40 already has the answers.
 ```
 
 ### W2 Build the design: tokens, shell and workbench
