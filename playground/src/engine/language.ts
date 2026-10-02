@@ -67,7 +67,10 @@ export function diagnosticsOf(document: LangiumDocument): EngineDiagnostic[] {
         message: typeof d.message === 'string' ? d.message : String(d.message),
         range: d.range,
         source:
-            d.data && typeof d.data === 'object' && 'code' in d.data && (d.data.code === 'lexing-error' || d.data.code === 'parsing-error') ? 'syntax' : 'minab'
+            d.data && typeof d.data === 'object' && 'code' in d.data && (d.data.code === 'lexing-error' || d.data.code === 'parsing-error')
+                ? 'syntax'
+                : 'minab',
+        ...(typeof d.code === 'string' ? { code: d.code } : {})
     }));
 }
 

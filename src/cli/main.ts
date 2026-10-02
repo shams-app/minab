@@ -213,6 +213,10 @@ async function execute(options: Options, io: CliIo): Promise<number> {
     }
     if (diagnostics.some(isError)) {
         io.err(`minab: ${summarize(diagnostics)} — ${STOPPED[options.command]}`);
+        if (options.command === 'check' && options.json) {
+            // Tools read this: each diagnostic carries its stable `code` and `data.params`.
+            io.out(JSON.stringify({ ok: false, diagnostics }, null, 2));
+        }
         return EXIT_PROGRAM_ERROR;
     }
 

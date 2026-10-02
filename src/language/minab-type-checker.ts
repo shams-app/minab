@@ -79,6 +79,7 @@ import {
     type TypeRef,
     type UnaryExpression
 } from './generated/ast.js';
+import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
 import { getBuiltin, isBuiltinName } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
@@ -105,14 +106,19 @@ import type { MinabRuleContext, SchemaProvider } from './schema.js';
  * that actually caused it, rather than once per enclosing node that
  * re-infers the same failing subexpression.
  */
-export type TypeResult = { ok: true; type: MinabType } | { ok: false; reason: string; origin?: AstNode };
+export type TypeResult = { ok: true; type: MinabType } | ({ ok: false; origin?: AstNode } & CodedMessage);
 
 function ok(type: MinabType): TypeResult {
     return { ok: true, type };
 }
 
-function err(reason: string): TypeResult {
-    return { ok: false, reason };
+function err<C extends DiagnosticCode>(code: C, ...args: ParamsArgs<C>): TypeResult {
+    return { ok: false, ...coded(code, ...args) };
+}
+
+/** Passes on a failure that a scope resolver or a built-in check already coded. */
+function failWith(failure: CodedMessage): TypeResult {
+    return { ok: false, code: failure.code, params: failure.params, reason: failure.reason };
 }
 
 export function typeRefToMinabType(t: TypeRef): ScalarType {
@@ -156,7 +162,7 @@ export class MinabTypeChecker {
         // as `undefined`, and the alternative to this guard is a
         // `TypeError` reaching the user as a stack trace. Found by running
         // the Phase 6 CLI over a file with a typo in it.
-        if (node === undefined) return err('incomplete expression (the program has a syntax error here)');
+        if (node === undefined) return err('syntax.incompleteExpression');
         if (isStringLiteral(node)) return ok(scalarType('TEXT'));
         if (isBooleanLiteral(node)) return ok(scalarType('BOOLEAN'));
         if (isNullLiteral(node)) return ok(NULL_TYPE);
@@ -181,22 +187,22 @@ export class MinabTypeChecker {
         if (isSubquery(node)) return this.inferSubquery(node);
         if (isIfExpr(node)) return this.inferIfExpr(node);
         if (isSwitchExpr(node)) return this.inferSwitchExpr(node);
-        if (isBlock(node)) return node.tail ? this.inferMainStatement(node.tail) : err('a block with no tail has no value');
+        if (isBlock(node)) return node.tail ? this.inferMainStatement(node.tail) : err('type.blockNoValue');
         if (isIndexRef(node)) return ok(scalarType('INTEGER'));
         if (isNameRef(node)) return this.inferNameRef(node);
         if (isTableRef(node)) {
             const res = this.scopeResolver.resolveTableRef(node);
             return this.inferSigilRecord(res);
         }
-        return err(`cannot infer a type for "${node.$type}"`);
+        return err('type.cannotInfer', { nodeType: node.$type });
     }
 
     // ---- sigils --------------------------------------------------------
 
     private inferSigilRecord(res: ScopeResolution): TypeResult {
-        if (!res.found) return err(res.reason);
+        if (!res.found) return failWith(res);
         const tableName = res.scope.tableName ?? this.rootFallbackTable(res.scope.owner);
-        if (!tableName) return err('no statically known table at this point');
+        if (!tableName) return err('scope.noStaticTable');
         return ok({ kind: 'record', table: tableName });
     }
 
@@ -225,8 +231,8 @@ export class MinabTypeChecker {
      */
     private inferNamedScope(node: NamedScope): TypeResult {
         const res = this.scopeResolver.resolveNamedScope(node);
-        if (!res.found) return err(res.reason);
-        if (!res.scope.tableName) return err('no statically known table at this point');
+        if (!res.found) return failWith(res);
+        if (!res.scope.tableName) return err('scope.noStaticTable');
         if (res.scope.owner === node) {
             return ok({ kind: 'collection', table: res.scope.tableName });
         }
@@ -235,27 +241,27 @@ export class MinabTypeChecker {
 
     private inferCurrentRecord(node: CurrentRecord): TypeResult {
         const base = this.scopeResolver.resolveCurrentRecordBase(node);
-        if (!base.found) return err(base.reason);
+        if (!base.found) return failWith(base);
         const tableName = base.scope.tableName ?? this.rootFallbackTable(base.scope.owner);
         if (!node.field) {
-            if (!tableName) return err('"." has no statically known table here');
+            if (!tableName) return err('scope.currentRecordNoTable');
             return ok({ kind: 'record', table: tableName });
         }
-        if (!tableName) return err(`column "${node.field}" needs a statically known table`);
+        if (!tableName) return err('type.columnNeedsTable', { column: node.field });
         return this.lookupColumn(tableName, node.field);
     }
 
     private inferFieldValue(): TypeResult {
-        if (!this.ruleContext.isFieldRule) return err('"$" is only valid in a field-level rule');
-        if (!this.ruleContext.fieldType) return err('the host did not supply a type for "$" (MinabRuleContext.fieldType)');
+        if (!this.ruleContext.isFieldRule) return err('rule.fieldValueOutsideFieldRule');
+        if (!this.ruleContext.fieldType) return err('rule.fieldTypeMissing');
         return ok(this.ruleContext.fieldType);
     }
 
     private inferGroupKeyRef(node: GroupKeyRef): TypeResult {
         const res = this.scopeResolver.resolveGroupKeyRef(node);
-        if (!res.found) return err(res.reason);
+        if (!res.found) return failWith(res);
         const groupBy = res.scope.owner;
-        if (!isGroupByClause(groupBy)) return err('KEY used outside GROUPBY');
+        if (!isGroupByClause(groupBy)) return err('scope.keyWithoutGroupBy');
         if (groupBy.keys.length === 1) return this.inferType(groupBy.keys[0]);
         const elements: MinabType[] = [];
         for (const key of groupBy.keys) {
@@ -268,7 +274,7 @@ export class MinabTypeChecker {
 
     private inferNameRef(node: NameRef): TypeResult {
         const res = this.scopeResolver.resolveNameRef(node);
-        if (!res.found) return err(res.reason);
+        if (!res.found) return failWith(res);
         if (res.scope.tableName) {
             return ok({ kind: 'record', table: res.scope.tableName });
         }
@@ -283,20 +289,20 @@ export class MinabTypeChecker {
                 return this.elementOfIterable(iterableType.type);
             }
         }
-        return err(`cannot determine the type of "${node.name}"`);
+        return err('type.cannotDetermine', { name: node.name });
     }
 
     private elementOfIterable(t: MinabType): TypeResult {
         if (t.kind === 'collection') return ok({ kind: 'record', table: t.table });
         if (t.kind === 'scalar' && t.array) return ok(scalarType(t.base, { nullable: t.nullable }));
-        return err(`cannot iterate over ${formatType(t)}`);
+        return err('type.notIterable', { actual: formatType(t) });
     }
 
     // ---- traversal (spec §3) -------------------------------------------
 
     private lookupColumn(table: string, field: string): TypeResult {
         const col = this.schema.getColumn(table, field);
-        if (!col) return err(`unknown column "${field}" on table "${table}"`);
+        if (!col) return err('scope.unknownColumn', { column: field, table });
         switch (col.type.kind) {
             case 'scalar':
                 return ok(col.type.type);
@@ -309,7 +315,7 @@ export class MinabTypeChecker {
 
     private lookupBroadcastColumn(table: string, field: string): TypeResult {
         const col = this.schema.getColumn(table, field);
-        if (!col) return err(`unknown column "${field}" on table "${table}"`);
+        if (!col) return err('scope.unknownColumn', { column: field, table });
         switch (col.type.kind) {
             case 'scalar':
                 return ok(scalarType(col.type.type.base, { nullable: col.type.type.nullable, array: true }));
@@ -329,7 +335,7 @@ export class MinabTypeChecker {
         const t = receiver.type;
         if (t.kind === 'record') return this.lookupColumn(t.table, node.member);
         if (t.kind === 'collection') return this.lookupBroadcastColumn(t.table, node.member);
-        return err(`"${node.member}" accessed on a non-record value (${formatType(t)})`);
+        return err('type.memberOnNonRecord', { member: node.member, actual: formatType(t) });
     }
 
     /**
@@ -350,7 +356,7 @@ export class MinabTypeChecker {
         if (t.kind === 'tuple') {
             const idx = node.index;
             if (idx < 0 || idx >= t.elements.length) {
-                return err(`tuple index ${idx} out of bounds (tuple has ${t.elements.length} element(s))`);
+                return err('type.tupleIndexOutOfBounds', { index: idx, count: t.elements.length });
             }
             return ok(t.elements[idx]);
         }
@@ -361,9 +367,9 @@ export class MinabTypeChecker {
             return ok(scalarType(t.base, { nullable: t.nullable }));
         }
         if (t.kind === 'collection') {
-            return err("a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5)");
+            return err('type.positionalIndexOnCollection');
         }
-        return err(`[${node.index}] used on a non-tuple, non-array value (${formatType(t)})`);
+        return err('type.indexOnNonTuple', { index: node.index, actual: formatType(t) });
     }
 
     private inferFilterAccess(node: FilterAccess): TypeResult {
@@ -380,25 +386,25 @@ export class MinabTypeChecker {
             if (isNumeric(filter.type) && filter.type.kind === 'scalar' && filter.type.base === 'INTEGER') {
                 return ok(scalarType('JSON', { nullable: true }));
             }
-            return err('"[...]" needs a BOOLEAN filter or an INTEGER index');
+            return err('type.invalidFilter');
         }
 
         if (this.isBoolean(filter.type)) {
             if (receiver.type.kind === 'collection' || (receiver.type.kind === 'scalar' && receiver.type.array)) {
                 return ok(receiver.type);
             }
-            return err(`cannot filter a non-collection value (${formatType(receiver.type)})`);
+            return err('type.filterOnNonCollection', { actual: formatType(receiver.type) });
         }
         if (filter.type.kind === 'scalar' && filter.type.base === 'INTEGER' && !filter.type.array) {
             if (receiver.type.kind === 'collection') {
-                return err("a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5)");
+                return err('type.positionalIndexOnCollection');
             }
             if (receiver.type.kind === 'scalar' && receiver.type.array) {
                 return ok(scalarType(receiver.type.base, { nullable: receiver.type.nullable }));
             }
-            return err(`cannot index a non-array value (${formatType(receiver.type)})`);
+            return err('type.indexOnNonArray', { actual: formatType(receiver.type) });
         }
-        return err('"[...]" needs a BOOLEAN filter or an INTEGER index');
+        return err('type.invalidFilter');
     }
 
     // ---- functions (spec §5.3, §8) --------------------------------------
@@ -410,18 +416,18 @@ export class MinabTypeChecker {
 
     private inferCallExpression(node: CallExpression): TypeResult {
         if (!isNameRef(node.callee)) {
-            return err('a function call must be a plain name — e.g. COUNT(...) or &myFunction(...)');
+            return err('call.calleeNotName');
         }
         const name = node.callee.name;
         const builtin = getBuiltin(name);
         if (!builtin) {
             if (this.findFunctionDecl(node, name)) {
-                return err(`"${name}" is a user-defined function — call it as &${name}(...)`);
+                return err('call.missingAmpersand', { name });
             }
-            return err(`unknown function "${name}" — built-ins are COUNT/SUM/AVG/MIN/MAX/EXISTS/ALL/ANY; a user function needs &${name}(...)`);
+            return err('call.unknownFunction', { name });
         }
         if (node.args.length !== 1) {
-            return err(`${name} expects exactly one argument, got ${node.args.length}`);
+            return err('call.builtinArity', { name, actual: node.args.length });
         }
         const argType = this.inferType(node.args[0]);
         if (!argType.ok) return argType;
@@ -432,7 +438,7 @@ export class MinabTypeChecker {
             const retried = builtin.check(promoted);
             if (retried.ok) return ok(retried.type);
         }
-        return err(result.reason);
+        return failWith(result);
     }
 
     /**
@@ -455,19 +461,19 @@ export class MinabTypeChecker {
 
     private inferFunctionCall(node: FunctionCall): TypeResult {
         if (isBuiltinName(node.name)) {
-            return err(`"${node.name}" is a built-in function — call it without the & prefix: ${node.name}(...)`);
+            return err('call.ampersandOnBuiltin', { name: node.name });
         }
         const decl = this.findFunctionDecl(node, node.name);
-        if (!decl) return err(`unknown function "${node.name}"`);
+        if (!decl) return err('call.unknownUserFunction', { name: node.name });
         if (node.args.length !== decl.params.length) {
-            return err(`"${node.name}" expects ${decl.params.length} argument(s), got ${node.args.length}`);
+            return err('call.userArity', { name: node.name, expected: decl.params.length, actual: node.args.length });
         }
         for (let i = 0; i < node.args.length; i++) {
             const argType = this.inferType(node.args[i]);
             if (!argType.ok) return argType;
             const paramType = astTypeToMinabType(decl.params[i].type);
             if (argType.type.kind !== 'null' && !baseTypesEqual(argType.type, paramType)) {
-                return err(`"${node.name}" argument ${i + 1}: expected ${formatType(paramType)}, got ${formatType(argType.type)} (no implicit coercion)`);
+                return err('call.argumentType', { name: node.name, position: i + 1, expected: formatType(paramType), actual: formatType(argType.type) });
             }
         }
         return ok(astTypeToMinabType(decl.returnType));
@@ -493,7 +499,7 @@ export class MinabTypeChecker {
      */
     private inferQueryShape(query: Query): TypeResult {
         if (!query.selectClause || query.selectClause.all || query.selectClause.items.length !== 1) {
-            return err('a query used as a value must SELECT exactly one column');
+            return err('query.singleColumnRequired');
         }
         return this.inferType(query.selectClause.items[0].expression);
     }
@@ -537,7 +543,7 @@ export class MinabTypeChecker {
             case 'LIKE':
                 return this.inferLike(node);
             default:
-                return err(`unsupported operator "${node.operator}"`);
+                return err('type.unsupportedOperator', { operator: node.operator });
         }
     }
 
@@ -547,7 +553,7 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (!this.isBoolean(left.type) || !this.isBoolean(right.type)) {
-            return err(`"${node.operator}" requires BOOLEAN operands, got ${formatType(left.type)} and ${formatType(right.type)}`);
+            return err('type.logicalNeedsBoolean', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
     }
@@ -562,11 +568,11 @@ export class MinabTypeChecker {
             if (left.type.kind === 'scalar' && right.type.kind === 'scalar' && left.type.base === right.type.base) {
                 return ok(scalarType(left.type.base, { nullable: left.type.nullable || right.type.nullable }));
             }
-            return err(`"+" between ${formatType(left.type)} and ${formatType(right.type)} requires an explicit CAST (no implicit coercion)`);
+            return err('type.implicitCoercion', { operator: '+', left: formatType(left.type), right: formatType(right.type) });
         }
 
         if (!isNumeric(left.type) || !isNumeric(right.type)) {
-            return err(`"${node.operator}" requires numeric operands, got ${formatType(left.type)} and ${formatType(right.type)}`);
+            return err('type.arithmeticNeedsNumeric', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         const base = widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
         const nullable = (left.type as ScalarType).nullable || (right.type as ScalarType).nullable;
@@ -580,7 +586,7 @@ export class MinabTypeChecker {
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') return ok(scalarType('BOOLEAN'));
         if (!baseTypesEqual(left.type, right.type)) {
-            return err(`"${node.operator}" between ${formatType(left.type)} and ${formatType(right.type)} requires an explicit CAST (no implicit coercion)`);
+            return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
     }
@@ -591,13 +597,13 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') {
-            return err(`"${node.operator}" doesn't accept null as an operand`);
+            return err('null.orderingWithNull', { operator: node.operator });
         }
         if (!isOrderable(left.type) || !isOrderable(right.type)) {
-            return err(`"${node.operator}" requires orderable operands, got ${formatType(left.type)} and ${formatType(right.type)}`);
+            return err('type.orderingNeedsOrderable', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         if (!baseTypesEqual(left.type, right.type)) {
-            return err(`"${node.operator}" between ${formatType(left.type)} and ${formatType(right.type)} requires an explicit CAST (no implicit coercion)`);
+            return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
     }
@@ -621,14 +627,12 @@ export class MinabTypeChecker {
         if (isSubquery(node.right)) {
             const q = node.right.query;
             if (!q.selectClause || q.selectClause.all || q.selectClause.items.length !== 1) {
-                return err('a subquery used with IN must SELECT exactly one column');
+                return err('query.inSingleColumnRequired');
             }
             const itemType = this.inferType(q.selectClause.items[0].expression);
             if (!itemType.ok) return itemType;
             if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !baseTypesEqual(left.type, itemType.type)) {
-                return err(
-                    `"IN" between ${formatType(left.type)} and a subquery of ${formatType(itemType.type)} requires matching types (no implicit coercion)`
-                );
+                return err('type.inSubqueryMismatch', { left: formatType(left.type), right: formatType(itemType.type) });
             }
             return ok(scalarType('BOOLEAN'));
         }
@@ -637,10 +641,10 @@ export class MinabTypeChecker {
         if (!right.ok) return right;
         const rightElement = this.arrayOrCollectionElement(right.type);
         if (!rightElement) {
-            return err(`"IN" expects a list or collection on the right, got ${formatType(right.type)}`);
+            return err('type.inNeedsCollection', { actual: formatType(right.type) });
         }
         if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !baseTypesEqual(left.type, rightElement)) {
-            return err(`"IN" between ${formatType(left.type)} and a collection of ${formatType(rightElement)} requires matching types (no implicit coercion)`);
+            return err('type.inCollectionMismatch', { left: formatType(left.type), right: formatType(rightElement) });
         }
         return ok(scalarType('BOOLEAN'));
     }
@@ -651,10 +655,10 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') {
-            return err('"LIKE" doesn\'t accept null as an operand');
+            return err('null.likeWithNull');
         }
         if (!isTextual(left.type) || !isTextual(right.type)) {
-            return err(`"LIKE" requires TEXT/CITEXT operands, got ${formatType(left.type)} and ${formatType(right.type)}`);
+            return err('type.likeNeedsText', { left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
     }
@@ -663,10 +667,10 @@ export class MinabTypeChecker {
         const operand = this.inferType(node.operand);
         if (!operand.ok) return operand;
         if (node.negated) {
-            if (!this.isBoolean(operand.type)) return err(`"NOT" requires a BOOLEAN operand, got ${formatType(operand.type)}`);
+            if (!this.isBoolean(operand.type)) return err('type.notNeedsBoolean', { actual: formatType(operand.type) });
             return ok(scalarType('BOOLEAN'));
         }
-        if (!isNumeric(operand.type)) return err(`unary "${node.operator}" requires a numeric operand, got ${formatType(operand.type)}`);
+        if (!isNumeric(operand.type)) return err('type.unaryNeedsNumeric', { operator: String(node.operator), actual: formatType(operand.type) });
         return ok(operand.type);
     }
 
@@ -686,7 +690,7 @@ export class MinabTypeChecker {
                 continue;
             }
             if (itemType.type.kind !== 'scalar' || itemType.type.array) {
-                return err(`list literal elements must be plain scalar values, got ${formatType(itemType.type)}`);
+                return err('type.listElementNotScalar', { actual: formatType(itemType.type) });
             }
             if (itemType.type.nullable) nullable = true;
             if (base === undefined) {
@@ -695,7 +699,7 @@ export class MinabTypeChecker {
                 if (NUMERIC_BASES.has(base) && NUMERIC_BASES.has(itemType.type.base)) {
                     base = widenNumeric(base, itemType.type.base);
                 } else {
-                    return err(`list literal elements must share one type (no implicit coercion) — found both ${base} and ${itemType.type.base}`);
+                    return err('type.listElementsMixed', { first: base, second: itemType.type.base });
                 }
             }
         }
@@ -730,7 +734,7 @@ export class MinabTypeChecker {
         const elseType = this.inferType(elseNode);
         if (!elseType.ok) return elseType;
         if (!baseTypesEqual(thenType.type, elseType.type)) {
-            return err(`if/else branches must agree on type (no implicit coercion) — got ${formatType(thenType.type)} and ${formatType(elseType.type)}`);
+            return err('type.ifBranchesDiffer', { then: formatType(thenType.type), else: formatType(elseType.type) });
         }
         return ok(thenType.type);
     }
@@ -743,7 +747,7 @@ export class MinabTypeChecker {
             const caseType = this.inferType(c.result);
             if (!caseType.ok) return caseType;
             if (!baseTypesEqual(result, caseType.type)) {
-                return err(`switch arms must agree on type (no implicit coercion) — got ${formatType(result)} and ${formatType(caseType.type)}`);
+                return err('type.switchArmsDiffer', { first: formatType(result), second: formatType(caseType.type) });
             }
         }
         return ok(result);

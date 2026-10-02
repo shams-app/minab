@@ -81,6 +81,13 @@ describe('no-implicit-coercion (spec §5.5)', () => {
     test('DECIMAL vs TEXT without CAST is rejected', async () => {
         await expectError(`FROM Order WHERE .total == .status SELECT .id`, /explicit CAST/);
     });
+
+    test('TEXT vs INTEGER is code type.implicitCoercion, and the parameters name both types (D35)', async () => {
+        const ds = await diagnostics(`FROM Order WHERE .status == 1 SELECT .id`);
+        const diagnostic = ds.find(d => d.code === 'type.implicitCoercion');
+        expect(diagnostic, ds.map(messageText).join('\n')).toBeDefined();
+        expect((diagnostic!.data as { params: unknown }).params).toEqual({ operator: '==', left: 'TEXT', right: 'INTEGER' });
+    });
 });
 
 describe('the §3.4 collection-vs-scalar boundary', () => {

@@ -6,6 +6,7 @@ import { MinabGeneratedModule, MinabGeneratedSharedModule, MinabLanguageMetaData
 import { MinabDefinitionProvider } from './lsp/minab-definition-provider.js';
 import { MinabHoverProvider } from './lsp/minab-hover-provider.js';
 import { MinabInterpreter } from './minab-interpreter.js';
+import { MinabDocumentValidator } from './diagnostics/minab-document-validator.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
 import { MinabSqlCompiler } from './minab-sql-compiler.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
@@ -109,6 +110,9 @@ function createMinabModule(
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),
         interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler),
+        validation: {
+            DocumentValidator: services => new MinabDocumentValidator(services)
+        },
         lsp: {
             HoverProvider: services => new MinabHoverProvider(services),
             DefinitionProvider: services => new MinabDefinitionProvider(services)

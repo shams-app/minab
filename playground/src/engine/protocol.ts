@@ -27,6 +27,8 @@ export interface EngineDiagnostic {
     range: Range;
     /** Where the diagnostic came from: the lexer/parser, or Minab's validator/type checker. */
     source: 'syntax' | 'minab';
+    /** The stable diagnostic code, for example `type.implicitCoercion`. Not shown in the UI yet. */
+    code?: string;
 }
 
 // ---- host ---------------------------------------------------------------
