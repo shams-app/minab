@@ -29,8 +29,8 @@ Minab 1.0 is production ready when all of these are true. Phase **V4** checks th
 4. **Safe.** A program written by an end user cannot run forever, cannot crash the host, cannot inject SQL, cannot read outside the schema it was given, and does not leak data into logs. There is a security policy and a way to report problems.
 5. **Fast enough.** Budgets for check time, run time, bundle size and memory, checked in CI.
 6. **Ready for Shamsine.** Unicode and quoted names (Persian, Arabic, Turkish field names), exact decimals for money, stable error codes so messages can be translated, analysis that says if a program runs in the browser or needs the server, Monaco support, and a CommonJS build for Jest and NestJS.
-7. **Stable.** Semantic versioning, a language version stored with every program, a golden corpus that old programs must keep passing.
-8. **Released by machine.** A tag publishes npm (with provenance), the VS Code extension and a GitHub release. Every merge can publish a `next` prerelease.
+7. **Stable.** From 1.0 on (before 1.0 anything may break, D38): semantic versioning, a language version stored with every program, a golden corpus that old programs must keep passing.
+8. **Released by machine.** A tag publishes npm (with provenance only if the repository becomes public: D04 keeps it private), the VS Code extension and a GitHub release. Every merge can publish a `next` prerelease.
 9. **Documented.** Spec, showcase, embedding guide, API reference, error code reference, Shamsine guide, security notes, performance notes.
 10. **Visible.** The playground site is live, checked (Lighthouse, accessibility), with launch material and a demo that is safe to run live on TV.
 
@@ -76,7 +76,7 @@ Stop and ask, in one clear message with your recommendation, when:
 - a test that passed before now fails, and the fix is **outside your card**;
 - you would go over **twice the size budget**;
 - a Depends phase is done, but its output **does not match** what your card expects, and adapting would change your card's scope (if the difference is a name or a small detail, adapt and note it in your status file);
-- after the first public release (V1): you are about to make a **breaking change** to something already published.
+- after the 1.0 release (V5): you are about to make a **breaking change** to something already published. Before 1.0, breaking changes are allowed (D38): mark them `breaking: true` in your changelog fragment.
 
 ### Size budget
 
@@ -142,6 +142,7 @@ Some files are edited by many phases. Depends chains keep those phases from runn
 If `main` moved while you worked, merge `main` into your branch (do not rebase a branch someone else may use), then:
 
 - **`package-lock.json`**: take `main`'s version, run `npm install`, commit the result.
+- **`bun.lock`** (D07 keeps it): take `main`'s version, run `bun install`, commit the result.
 - **Generated files** (`src/language/generated/**`, `vscode-extension/syntaxes/minab.tmLanguage.json`, `docs/reference/diagnostics.md`): never resolve by hand. Run the generator (`npm run langium:generate`, `npm run docs:diagnostics`).
 - **Registries and lists** (diagnostic codes, cheat sheet, gallery, package dependencies): keep both sides; keep the list sorted.
 - **Anything else**: resolve it, then run all end-of-session checks again.
