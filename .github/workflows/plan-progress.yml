@@ -1,0 +1,74 @@
+# Rebuilds docs/production/progress.md after every merge to main.
+#
+# Phase pull requests never edit progress.md (see docs/production/README.md,
+# "Why pull requests will not block each other"). This workflow is the only
+# writer: it reads the phase list and every status file with
+# docs/production/tools/progress.mjs, and commits the page when it changed.
+# It can also be started by hand from the Actions tab.
+name: Plan progress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/production/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two merges close together: run one after the other, never at the same time.
+concurrency:
+  group: plan-progress
+  cancel-in-progress: false
+
+jobs:
+  progress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build progress.md and commit it if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Retry if main moves between our checkout and our push. Phase PRs
+          # never touch progress.md, so starting again from the newest main
+          # and rebuilding the page is always safe.
+          for attempt in 1 2 3; do
+            git fetch --quiet origin main
+            git reset --quiet --hard origin/main
+            node docs/production/tools/progress.mjs --write
+            if git diff --quiet -- docs/production/progress.md; then
+              echo "progress.md is already up to date."
+              exit 0
+            fi
+            git add docs/production/progress.md
+            git commit --quiet -m "docs(plan): update progress [skip ci]"
+            if git push --quiet origin HEAD:main; then
+              echo "Pushed the new progress.md (attempt $attempt)."
+              exit 0
+            fi
+            echo "Push refused (attempt $attempt); trying again from the newest main."
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push progress.md to main. If main is protected, allow GitHub Actions to push to it, or rebuild the page by hand with the helper prompt 'Rebuild the progress page by hand' in docs/production/phases/prompts.md."
+          exit 1
+
+      - name: Show the progress page in the run summary
+        if: always()
+        run: |
+          if [ -f docs/production/progress.md ]; then
+            cat docs/production/progress.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Last, so a problem in the plan files never stops the page from updating,
+      # but still turns the run red.
+      - name: Check the plan files
+        run: node docs/production/tools/progress.mjs --check
