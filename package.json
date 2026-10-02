@@ -47,7 +47,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json",
-    "prepack": "npm run build:release"
+    "prepack": "npm run build:release",
+    "lint": "oxlint --type-aware src test scripts && oxlint vscode-extension/src",
+    "format": "oxfmt --write src test scripts vscode-extension/src",
+    "format:check": "oxfmt --check src test scripts vscode-extension/src"
   },
   "dependencies": {
     "langium": "~4.4.0",
@@ -60,6 +63,9 @@
     "@types/pg": "^8.23.1",
     "concurrently": "^9.0.0",
     "langium-cli": "~4.4.0",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003",
     "pg": "^8.23.0",
     "typescript": "~5.9.3",
     "vitest": "~5.0.0"
