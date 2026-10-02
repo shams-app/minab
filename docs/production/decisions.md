@@ -615,7 +615,7 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 - (a) **SQL text plus parameters, as today. Recommended.** It is right on a server and with an in-browser database (PGlite). A browser **never** sends SQL to a server: when a browser program needs server data, the browser sends the program's **id and inputs**, and the server runs it itself (D34). A structured, non-SQL data request is written into ADR 0002 as the upgrade path, not built.
 - (b) A structured data request (table, filters, projection), safe to send from a browser. The SQL compiler splits into a request builder and a SQL emitter: a large change to every pushdown.
 
-**Answer:** ask at phase R1
+**Answer:** (a) — 2026-10-02
 
 <a id="d29"></a>
 ### D29 — When the schema is loaded
