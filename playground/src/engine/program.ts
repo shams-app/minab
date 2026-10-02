@@ -5,10 +5,10 @@
  */
 
 import { AstUtils, type AstNode, type LangiumDocument } from 'langium';
-import { isFunctionDecl, isQuery, isVariableDecl, type Model } from '../../../src/language/generated/ast.js';
-import { formatType } from '../../../src/language/minab-types.js';
+import { isFunctionDecl, isVariableDecl, type Model } from '../../../src/language/generated/ast.js';
+import { classifyProgram } from '../../../src/runtime/program-kind.js';
 import type { MinabServices } from '../../../src/language/minab-module.js';
-import type { CheckOnlyConstruct, ProgramInfo, ProgramKind, Range } from './protocol.js';
+import type { CheckOnlyConstruct, ProgramInfo, Range } from './protocol.js';
 
 /**
  * Constructs that parse, resolve and type-check but aren't executed yet
@@ -56,25 +56,7 @@ function typeText(node: AstNode | undefined): string | undefined {
 
 export function describeProgram(document: LangiumDocument<Model>, services: MinabServices): ProgramInfo {
     const model = document.parseResult.value;
-    const ruleContext = services.ruleContext;
-    const tail = model.tail;
-
-    let kind: ProgramKind;
-    if (!tail) kind = model.declarations.length === 0 ? 'empty' : 'value';
-    else if (isQuery(tail)) kind = 'query';
-    else if (ruleContext.isFieldRule) kind = 'field-rule';
-    else if (ruleContext.recordTable) kind = 'record-rule';
-    else kind = 'value';
-
-    let resultType: string | undefined;
-    if (tail && !isQuery(tail)) {
-        try {
-            const inferred = services.typeChecker.inferType(tail);
-            if (inferred.ok) resultType = formatType(inferred.type);
-        } catch {
-            // A half-parsed tail can trip inference; the type is a nicety, not a requirement.
-        }
-    }
+    const { kind, resultType } = classifyProgram(model, services);
 
     const symbols: ProgramInfo['symbols'] = [];
     for (const declaration of model.declarations) {
