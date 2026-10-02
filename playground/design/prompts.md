@@ -17,13 +17,17 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >
 > **What the site is:** a working playground. Everything runs in the visitor's browser: the Minab toolchain in a Web Worker, a real PostgreSQL compiled to WebAssembly, and a Monaco editor. Pages:
 > - Landing (`/`)
-> - Playground workbench (`/play`): editor, output tabs (Result, SQL, Execution, Problems, AST), and a host panel (Schema, Data, Record, Field)
+> - Playground workbench (`/play`): editor, output tabs (Result, SQL, Execution, Console, Problems, AST), and a host panel (Schema, Data, Record, Field)
 > - Guided tour of 12 lessons (`/learn`)
 > - Example gallery (`/examples`)
 > - Cheat sheet (`/reference`)
 > - Embeddable mini-workbench for iframes (`/embed`)
 >
 > **Audience, in order:** hiring managers skimming my portfolio (30–90 seconds, may not code); engineers evaluating my work; programming-language enthusiasts; developers who might use it.
+>
+> **Brand:** direction B "Terminal Noir": dark-first, charcoal, glowing syntax; light theme kept, dark is the default.
+>
+> **Why the name Minab:** Minab is a city in Iran. A school there, with 168 children and a few teachers, was bombed and all were killed. The language is made to remember them. The site says this once, quietly and factually (one short line, see prompt 2). Nothing else on the site is built around it.
 >
 > **Tone:** precise, calm, confident. Let running code make the argument. Honest about what's unfinished: loops and writes "check today, run later".
 >
@@ -47,7 +51,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 
 ## 1 · Brand and design system
 
-> Let's build the design system first. Direction: **‹A "Instrument" — calm, editorial, precise: warm paper and ink, one saturated accent, typography-led, the sigils are the brand / B "Terminal Noir" — dark-first dev-tool, glowing syntax / C "Blueprint" — technical drawing, cyan grid, annotation lines›**.
+> Let's build the design system first. Direction: **B "Terminal Noir": dark-first, developer-tool native, deep charcoal surfaces, glowing syntax colors, subtle glassy chrome, very IDE. Dark is the default theme. The light theme is the same system turned over (cool paper-white, same sigil hues adjusted to pass contrast), designed with equal care.** The sigil colors are the brand and appear only in code.
 >
 > 1. **Wordmark:** `.minab` in lowercase. The leading dot is Minab's current-record sigil, so it gets `--syntax-sigil-record` color. Show 3 variations of the wordmark and a square app icon built from the dot.
 > 2. **Color:** define every token listed in the primer for **light and dark**. Show them as swatches with names and hex values.
@@ -135,7 +139,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 > 6. **Comparison:** "What you write, what runs". Minab on the left, the compiled SQL on the right, with an arrow. Caption: "compiled live — the same text `minab compile` prints".
 > 7. **FeatureGrid:** No implicit coercion · Relations without joins · Rules run next to the record · Real tooling (language server, VS Code, CLI) · Checked before it runs · Runs right here.
 > 8. **CtaBand:** "Try it on real data". Buttons: Open the playground / Browse examples.
-> 9. **Footer:** "Minab — designed and built by Hamed Zakery Miab", with links to GitHub, the language spec and the VS Code extension. "Built with Langium, PGlite, Monaco and React."
+> 9. **Footer:** "Minab — designed and built by Hamed Zakery Miab" (links to https://hamcker.github.com), plus one quiet line on the name: "Minab is a city in Iran. A school there, with 168 children and a few teachers, was bombed, and all were killed. This language is made to remember them." (design its placement and tone; no decoration), with links to GitHub, the language spec and the VS Code extension. "Built with Langium, PGlite, Monaco and React."
 >
 > The top bar (**AppShell**) has the wordmark, nav (Playground · Tour · Examples · Reference), "Search ⌘K", a theme toggle and GitHub.
 >
@@ -167,7 +171,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >   - PresetChips: ✓ Free slot (active) · ✗ Overlaps bkg-12 · ✗ Ends before it starts, and under them "Room 7 is free from Oct 1 to Oct 5 — the next booking starts on the 6th."
 >   - The record form: id `bkg-new`, room_id `room-7`, customer_id `cus-barbara`, purpose `Board meeting`, start_date `2026-10-01`, end_date `2026-10-05`.
 >
-> **Right column (45%):** the **OutputPanel**, with tabs Result · SQL · Execution (badge 1, pushdown tone) · Problems · AST. **Execution** is active:
+> **Right column (45%):** the **OutputPanel**, with tabs Result · SQL · Execution (badge 1, pushdown tone) · Console · Problems · AST. **Execution** is active. (Also design the **Console** tab next to Execution: a list of log lines from the program, each with a source link that selects its range in the editor; with an empty state.)
 > - Summary: "1 statement reached Postgres; everything else was answered from the record in memory." Timings: parse 1.2 ms · check 0.8 ms · run 2.1 ms.
 > - One **TraceItem**:
 >   - "Statement 1" badge; "1 row · 2.1 ms"
@@ -209,7 +213,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 > 5. VerdictCard **Passes**: "The Booking under validation passes this rule." plus "1 statement reached the database — see how →".
 > 6. VerdictCard **Fails**: "Answered entirely from the record — nothing reached the database."
 > 7. Field-rule verdict: "The value `-5` is rejected for Order."
-> 8. Value: `1302.5` with a `DECIMAL` badge.
+> 8. Value: `"1302.50"` with a `DECIMAL` badge (exact decimals are shown as strings, so `"24.90"` keeps its zero).
 > 9. Problems to fix first: "1 problem to fix first — Minab checks everything before it runs anything; nothing was sent to the database." with a "Show problems" button.
 > 10. Check-only Callout: "Checked ✓ — loops aren't executed yet". Body: "This program parses, resolves and type-checks. The evaluator doesn't run **loops** (spec §9.4) yet, and says so rather than guessing." Plus the evaluator's words in muted text: `"LoopStatement" is not executed yet`.
 > 11. Database error Callout: "The database refused a statement", with a message and the SQL.
@@ -223,10 +227,12 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 > - 0 statements: "The rule was settled from the record alone."
 > - Nothing ran: fix problems first.
 >
-> **ProblemsList:**
+> **Console (new):** log lines such as `info  checking credit for cus-barbara  · line 3` and `warn  limit reached`, each ending with a source link (`2:7–2:28`) that selects that range in the editor. Empty state: "No log lines. Call `LOG(...)` in your program."
+>
+> **ProblemsList** (each row shows a stable error code, e.g. `MNB2001`, before the message):
 > - 2 problems:
->   - error `"==" between TEXT and INTEGER requires an explicit CAST (no implicit coercion)` · minab · 2:7
->   - error `Expecting: one of these possible Token sequences…` · syntax · 1:17
+>   - error `MNB…` `"==" between TEXT and INTEGER requires an explicit CAST (no implicit coercion)` · minab · 2:7
+>   - error `MNB…` `Expecting: one of these possible Token sequences…` · syntax · 1:17
 > - Plus the empty state: "No problems".
 >
 > **AstView:** a tree for `FROM Order WHERE .total > 5 SELECT .id`, with inferred-type badges (DECIMAL, BOOLEAN, UUID) and one row hovered.
@@ -310,6 +316,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >   - "The customer must exist": A field-level rule: `$` is the value being validated.
 >   - "Case-insensitive lookup": A `CITEXT` column and an explicit `CAST` — no implicit coercion.
 >   - "Loops": A `for-in` loop over a table, with a guard. Checks today; runs later. (check-only)
+> - **One Persian example** among the cards: a rule whose field names are Persian (for example `.قیمت > 0`), tagged "Unicode". The code stays left-to-right; only the names inside are Persian, in a font that has Persian glyphs. Show it in the code preview.
 > - Hover and focus states for a card, the active chip state, and the "No examples match" empty state.
 >
 > **Deliver:** the gallery in its default, filtered and empty states, at desktop and mobile, light and dark.

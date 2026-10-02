@@ -39,7 +39,7 @@ Every screen, its regions, and every state each region can be in. Component name
 | Comparison | `Comparison` | Minab (left) → PostgreSQL (right), compiled live | SQL loading ("Compiling…") |
 | Features | `FeatureGrid` | 6 features with icons | — |
 | CTA | `CtaBand` | Title, body, 2 buttons | — |
-| Footer | `Footer` | Author credit (+ portfolio link), GitHub, spec, VS Code extension, "Built with…" | — |
+| Footer | `Footer` | Author credit (+ portfolio link `https://hamcker.github.com`), the one-line name story (Minab school), GitHub, spec, VS Code extension, "Built with…" | — |
 
 **Responsive:**
 - Wide: hero in 2 columns (copy | demo).
@@ -60,7 +60,7 @@ Every screen, its regions, and every state each region can be in. Component name
 │                                   [📖] [⤓] [</>] [Share] [▶ Run ⌘↵]  │
 ├───────────────────────────────┬───────────────────────────────────────┤
 │ Editor (Monaco)               │ OutputPanel                           │
-│                               │ [Result][SQL][Execution ①][Problems][AST]
+│                               │ [Result][SQL][Execution ①][Console][Problems][AST]
 │                               │                                       │
 ├ EditorStatusBar ──────────────┤  (tab body)                           │
 │ Record rule → BOOLEAN  ✓ No problems                                  │
@@ -103,7 +103,7 @@ Things Monaco draws, all colored by tokens:
 - The problems summary as a button: ✓ No problems, or ⚠ N errors.
 
 ### OutputPanel tabs
-Badges: Result shows the row count; Execution shows the statement count (pushdown tone); Problems shows the count (danger tone).
+Badges: Result shows the row count; Execution shows the statement count (pushdown tone); Console shows the line count; Problems shows the count (danger tone).
 
 **Result (`ResultView`)**, one of:
 1. **Nothing run yet.** EmptyState + Run button.
@@ -117,7 +117,7 @@ Badges: Result shows the row count; Execution shows the statement count (pushdow
    - **Passes**: pass tone, check mark. **Fails**: fail tone, cross.
    - A sentence about what was validated.
    - A link: "N statements reached the database — see how →", or "Answered entirely from the record".
-5. **Value** (`ValueView`): the JSON value, with its type badge.
+5. **Value** (`ValueView`): the JSON value, with its type badge. Exact decimals are strings, e.g. `"24.90"`.
 6. **Problems to fix first.** EmptyState in danger tone + "Show problems".
 7. **Check-only** (Callout, check-only tone): "Checked ✓ — loops aren't executed yet", with the spec § and the evaluator's words.
 8. **Error** (Callout, danger tone). One of: config error, evaluation error, "The database refused a statement" (+ SQL), or internal.
@@ -139,8 +139,12 @@ Badges: Result shows the row count; Execution shows the statement count (pushdow
 - **Nothing ran:** fix problems first.
 - Legend: "Underlined in the editor: the parts that became SQL."
 
+**Console (`ConsoleView`, new, L7)**:
+- A list of log lines: level icon, message, and a source link (`line:col–line:col`) that selects the range in the editor.
+- Empty: EmptyState "No log lines" with a hint. Not run yet: same, with a Run button.
+
 **Problems (`ProblemsList`)**:
-- A list of clickable rows: severity icon, message, `syntax|minab · line:col`.
+- A list of clickable rows: severity icon, **stable error code** (B1, e.g. `MNB2001`), message, `syntax|minab · line:col`.
 - A host-config error, when there is one, shown first.
 - Empty: ✓ "No problems — the program parses, resolves and type-checks against this host's schema."
 
@@ -186,6 +190,7 @@ Badges: Result shows the row count; Execution shows the statement count (pushdow
   - tag badges, with a warning tone for check-only;
   - level, spec §, and "from the repo".
 - **Empty:** "No examples match" + Clear filters.
+- **Persian example (L3):** one card shows a program with Persian names (tag "Unicode"). Code stays left-to-right; Persian names use a font with Persian glyphs.
 
 ---
 

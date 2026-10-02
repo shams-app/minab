@@ -49,22 +49,23 @@ What Minab is **not**, and the site shouldn't imply it is:
 - Use short sentences and no buzzwords.
 - Put a little wit in empty states and the 404. For example: `EXISTS(#Page[.path == $])` answered `false`.
 
-## Brand direction: pick one and tell Claude Design
+## Brand direction: (B) "Terminal Noir" (chosen, D40)
 
-There are no brand assets yet. Three directions, from safest to boldest:
+The owner chose **B** at the A2 sitting (the brief had recommended A). Dark is the default theme, and a light theme is kept and designed with equal care. The three directions are kept below for reference; Claude Design gets only B.
 
-**A. "Instrument" (recommended)**
+**A. "Instrument" (not chosen; the first recommendation)**
 - Calm, precise, editorial: warm off-white "paper" and near-black "ink", with one saturated accent.
 - Typography does the work: a sharp grotesk for UI and an excellent monospace.
 - The sigils are the brand. Each gets its own color, and those colors appear only in code, so the code becomes the illustration.
 - Light and dark are designed with equal care.
 
-**B. "Terminal Noir"**
+**B. "Terminal Noir" (CHOSEN)**
 - Dark-first and developer-tool native, with deep charcoal surfaces.
 - The syntax palette glows; the chrome is subtle and glassy.
-- Very "IDE". It's striking in screenshots, but less distinctive, because many tools look like this.
+- Very "IDE". It's striking in screenshots, but less distinctive, because many tools look like this. To stand out, the sigil colors are the brand: they glow on charcoal, and they appear only in code.
+- The light theme is the same system turned over: cool paper-white surfaces, the same sigil hues adjusted to pass contrast. It is not a different brand.
 
-**C. "Blueprint"**
+**C. "Blueprint" (not chosen)**
 - Technical drawing: a cyan grid, thin lines, and annotation arrows linking source spans to the SQL they became.
 - The execution map becomes the hero visual.
 - The most memorable of the three, and the hardest to execute well.
@@ -84,15 +85,26 @@ There are no brand assets yet. Three directions, from safest to boldest:
 ## Constraints the design must respect
 
 - **Heavy runtime.** Monaco (~870 KB gzipped) and PGlite (~3.5 MB gzipped WASM, plus its data file) load lazily, and never on the landing page's first paint. Design loading states for them. The first Postgres boot takes about 1–3 s.
-- **Two themes.** Light and dark, following the OS, with a manual override.
+- **Two themes.** Dark is the default (brand B). Light is kept. The OS preference may switch it, with a manual override.
 - **Mobile.** Everything must work at 375 px. Below 760 px of workbench width, the workbench becomes tabs: Code · Result · Host.
 - **Tokens only.** Every color and size is a design token (`src/styles/tokens.css`). The Monaco editor reads the tokens at runtime, so the editor theme comes free with the design.
 - **Accessibility.** WCAG AA contrast (including every syntax color against the editor background), visible focus, reduced motion respected, and a verdict never shown by color alone.
 
-## Open items for Hamed
+## The name
 
-- [ ] **Name.** What does "Minab" mean or refer to? The story is worth a line on the landing page if it's a good one.
-- [ ] **Domain.** For example `minab.dev`, or a path on the portfolio. Set `PLAYGROUND_BASE` if it's served under a path.
-- [ ] **Portfolio URL.** Goes in `src/content/landing.ts` → `footer.authorUrl`.
-- [ ] **Social handles.** For the launch posts.
-- [ ] **Brand direction.** A, B or C above.
+Minab is the name of a city in Iran. A school there, with 168 children and a few teachers, was bombed by the enemy, and all of them were killed. The language is made to remember them.
+
+How the site uses this:
+- One short, quiet, factual line on the landing page (for example in the footer or a small "Why Minab" note). No decoration, no hero use, no mourning visuals, no motion.
+- It must not read as marketing. The product tone stays precise and calm; this line is the only place that speaks about the loss.
+- Claude Design should place it and set its tone; the owner approves the wording in the design round.
+
+## Open items for Hamed (answered in W1, 2026-10-02)
+
+- [x] **Name.** The story above.
+- [x] **Domain.** `minab-lang.org` (D40).
+- [x] **Portfolio URL.** `https://hamcker.github.com`, set in `src/content/landing.ts` → `footer.authorUrl`. (To check: GitHub Pages sites usually end in `.github.io`.)
+- [x] **Social handles.** None. The launch posts name no handles.
+- [x] **Brand direction.** B "Terminal Noir".
+- [x] **Site languages.** English for 1.0, plus one Persian example program (D40). A full Persian site is post-1.0.
+- [x] **Light theme.** Kept next to dark; dark is the default.
