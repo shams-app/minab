@@ -264,7 +264,7 @@ describe('§10 functions', () => {
             }
 
             FROM Customer
-            SELECT .id, &discountedTotal(.id, .discount_rate) AS discounted
+            SELECT .id, discountedTotal(.id, .discount_rate) AS discounted
         `);
     });
 
@@ -310,7 +310,7 @@ describe('§11 if/else expression, if! statement, switch', () => {
     test('if! as a mid-block statement, not the block tail', async () => {
         await expectNoErrors(`
             if! .status == "flagged" {
-                let notified: BOOLEAN = &notifyManager(.customer_id);
+                let notified: BOOLEAN = notifyManager(.customer_id);
             }
 
             .total > 0
@@ -332,7 +332,7 @@ describe('§11 if/else expression, if! statement, switch', () => {
         await expectNoErrors(`
             if .total > 1000 {
                 total = total + 100;
-                let notified: BOOLEAN = &notifyManager(.customer_id);
+                let notified: BOOLEAN = notifyManager(.customer_id);
                 "flagged"
             } else {
                 "ok"
@@ -533,7 +533,7 @@ describe('§14 everything together', () => {
                 let flaggedCount: INTEGER = 0;
 
                 loop customer in #Customers where .balance > cutoff {
-                    let daysLate: INTEGER = &daysSincePayment(.id);
+                    let daysLate: INTEGER = daysSincePayment(.id);
 
                     let newStatus: TEXT = if daysLate > 90 {
                         let notes: JSON = .metadata;

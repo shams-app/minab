@@ -61,7 +61,7 @@ describe('analysis', () => {
     });
 
     test('lists declared symbols', async () => {
-        const report = await engine.analyze('fn twice(x: DECIMAL): DECIMAL { x * 2 }\nlet a: DECIMAL = 1;\n&twice(a)');
+        const report = await engine.analyze('fn twice(x: DECIMAL): DECIMAL { x * 2 }\nlet a: DECIMAL = 1;\ntwice(a)');
         expect(report.program.symbols.map(s => `${s.kind}:${s.name}`)).toEqual(['function:twice', 'variable:a']);
         expect(report.program.symbols[0].detail).toBe('fn twice(x: DECIMAL): DECIMAL');
     });
@@ -180,10 +180,17 @@ describe('editor intelligence', () => {
         expect(from.entries.map(e => e.label)).toEqual(expect.arrayContaining(['Order', 'Customer']));
     });
 
-    test('completion after & offers the program’s functions as snippets', async () => {
-        const source = 'fn twice(x: DECIMAL): DECIMAL { x * 2 }\n&';
+    test('where an expression can start, the program’s functions are offered as snippets, next to the built-ins', async () => {
+        const source = 'fn twice(x: DECIMAL): DECIMAL { x * 2 }\n';
         const report = await engine.complete(source, source.length);
-        expect(report.entries).toEqual([expect.objectContaining({ label: 'twice', insertText: 'twice(${1:x})' })]);
+        expect(report.entries).toEqual(expect.arrayContaining([expect.objectContaining({ label: 'twice', kind: 'function', insertText: 'twice(${1:x})' })]));
+        expect(report.entries.map(e => e.label)).toContain('COUNT');
+    });
+
+    test('hover on a called function shows its signature', async () => {
+        const source = 'fn twice(x: DECIMAL): DECIMAL { x * 2 }\ntwice(2)';
+        const hover = await engine.hover(source, source.indexOf('twice(2)') + 2);
+        expect(hover?.contents).toContain('fn twice(x: DECIMAL): DECIMAL');
     });
 
     test('keywords come from the grammar, and built-ins only where an expression can start', async () => {

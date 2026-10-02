@@ -4,4 +4,4 @@ fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
 
 let rate: DECIMAL = 20;
 
-&discounted(1302.5, rate)
+discounted(1302.5, rate)

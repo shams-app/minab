@@ -268,7 +268,7 @@ export const lessons: Lesson[] = [
         id: 'functions',
         number: 10,
         title: 'Variables and functions',
-        summary: '`let`, `fn`, and calls with `&`.',
+        summary: '`let`, `fn`, and calls by name.',
         body: functionsBody,
         starter: functionsStarter,
         solution: functionsSolution,
@@ -276,7 +276,7 @@ export const lessons: Lesson[] = [
         task: 'Use a `rate` variable of 20 to discount a 1302.5 order.',
         goal: ({ report, source }) =>
             report.stage === 'done' && report.result?.kind === 'value' && report.result.value === 1042 && /\blet\s+rate\b/.test(source),
-        hints: ['Declarations come before the final expression: `let rate: DECIMAL = 20;`.', 'Then call `&discounted(1302.5, rate)`.'],
+        hints: ['Declarations come before the final expression: `let rate: DECIMAL = 20;`.', 'Then call `discounted(1302.5, rate)`.'],
         focus: 'result'
     },
     {

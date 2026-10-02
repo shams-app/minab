@@ -1,11 +1,11 @@
 /**
  * The eight built-in aggregate/predicate functions (spec §5.3.1) — called
- * bare (`Name(...)`), never `&`-prefixed. Each is polymorphic over its
+ * by name (`NAME(...)`), like user functions. Each is polymorphic over its
  * collection's element type, so a signature here is a small type-checking
  * function rather than a single fixed `MinabType`.
  *
- * These names are reserved: a user `fn` may not declare one of them (spec
- * §5.3) — see `minab-validator.ts`'s `checkFunctionDeclNotReservedName`.
+ * Built-in names are ALL UPPERCASE; a user `fn` name must have a lowercase
+ * letter (D10, spec §5.3) — see `minab-validator.ts`'s `checkFunctionDeclName`.
  */
 
 import { formatType, isNumeric, isOrderable, scalarType, type MinabType } from './minab-types.js';

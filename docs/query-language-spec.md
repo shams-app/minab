@@ -286,7 +286,10 @@ COUNT(.orders) > 0
 AVG(.orders.total)
 ```
 
-**Built-in vs. user-defined, resolved (§12 item 10):** the grammar alone can't tell a built-in call from a user-defined one — `CallExpression` (bare `Name(...)`) parses for any identifier, not just the eight names above. The rule is a closed set, enforced semantically: bare `Name(...)` is legal **only** for the eight built-in names below; any other bare-called name is a semantic error telling the caller to use `&name(...)` instead. `&name(...)` (`FunctionCall`, §8.4), conversely, always resolves against a user-declared `fn` — never one of the built-ins. To keep the two calling conventions from ever colliding, **the eight built-in names are reserved**: declaring `fn SUM(...): ...` (or any other built-in name) is itself a semantic error.
+**Built-in vs. user-defined (§12 item 10, revised 2026-09-24):** a user function is called by its name, exactly like a built-in: `discounted(.total, 15)`. The grammar does not tell the two apart — `CallExpression` (`Name(...)`) parses for any identifier. The type checker resolves the name: a built-in first, otherwise a `fn` declared in the program; a name that is neither is the error `unknown function "foo"`. Two rules keep the two apart, so a built-in added later can never change the meaning of an existing program:
+
+- **Built-in names are ALL UPPERCASE** (`COUNT`, `SUM`, `EXISTS`, ...). A user `fn` name **must contain at least one lowercase letter**. Declaring `fn SUM(...)` or `fn TAX(...)` is an error (`call.functionNameCase`); `fn tax(...)` is fine.
+- **A function name is not reused.** A `let` or a parameter may not have the name of a declared `fn` (`scope.nameIsFunction`), and a `fn` may not have the name of a table in the schema (`scope.functionNameIsTable`). Functions are not values in Minab (§8), so a name before `(` can only be a function; this rule keeps `total` and `total(...)` from looking related.
 
 #### 5.3.1 Built-in function signatures
 
@@ -594,7 +597,7 @@ The natural reading of this — stated here as an explicit generalization, not s
 
 ## 8. Functions
 
-Minab supports user-defined functions: a named, reusable computation with **mandatory** parameter and return types. Every function is implicitly **asynchronous** — there is no synchronous function variant and no `async` keyword, since `fn` always means async. A user-defined function is called with an **`&` prefix** — `&name(arg, ...)` — which keeps it visually distinct from built-in aggregate and predicate functions (`SUM`, `COUNT`, `EXISTS`, etc., §5.3), which are called without a prefix. The call is implicitly awaited: `&name(...)` evaluates, as an expression, to the function's resolved value — never to a pending value the caller has to unwrap separately.
+Minab supports user-defined functions: a named, reusable computation with **mandatory** parameter and return types. Every function is implicitly **asynchronous** — there is no synchronous function variant and no `async` keyword, since `fn` always means async. A user-defined function is called by its name — `name(arg, ...)` — the same way as a built-in aggregate or predicate function (`SUM`, `COUNT`, `EXISTS`, etc., §5.3). A function name needs a lowercase letter and built-in names are ALL UPPERCASE, so the two never collide (§5.3). The call is implicitly awaited: `name(...)` evaluates, as an expression, to the function's resolved value — never to a pending value the caller has to unwrap separately.
 
 ### 8.1 Declaration
 
@@ -650,7 +653,7 @@ The tail (whether a `Query` or a bare expression) takes any `Expression`/`Query`
 
 A function body ends in **exactly one tail** as its result. What the grammar doesn't enforce is that the tail is actually *present*: it's grammatically optional, even though the declared return type is mandatory, so a function with no tail would have nothing to satisfy that type. Requiring a tail whenever a return type is declared is therefore a semantic check, not a parse-time one — same category as the type-checking rules in §12.
 
-**`yield` has been retired.** An earlier iteration of this design let a function body emit any number of `yield <expr>;` statements ahead of its tail, intended as some kind of intermediate/progress value distinct from the final result — but what `&name(...)` should actually produce when a function both `yield`s and has a tail was never resolved (see the now-closed discussion in §12 item 9's history), and Minab has no iterator/generator protocol yet for a caller to actually consume a sequence of yielded values against. Rather than keep a keyword whose call-site semantics were undefined, `yield` and `YieldStatement` have been removed from the grammar entirely. It may come back once iterators are designed properly, but as a different mechanism built for that purpose — not a re-add of this same form.
+**`yield` has been retired.** An earlier iteration of this design let a function body emit any number of `yield <expr>;` statements ahead of its tail, intended as some kind of intermediate/progress value distinct from the final result — but what a call `name(...)` should actually produce when a function both `yield`s and has a tail was never resolved (see the now-closed discussion in §12 item 9's history), and Minab has no iterator/generator protocol yet for a caller to actually consume a sequence of yielded values against. Rather than keep a keyword whose call-site semantics were undefined, `yield` and `YieldStatement` have been removed from the grammar entirely. It may come back once iterators are designed properly, but as a different mechanism built for that purpose — not a re-add of this same form.
 
 ### 8.3 Types
 
@@ -664,20 +667,20 @@ fn swap(a: INTEGER, b: INTEGER): (INTEGER, INTEGER) {
 
 ### 8.4 Calling a function
 
-A call to a user-defined function is written `&name(arg, ...)` — the leading `&` is required, and marks the call as resolving to a user-defined function rather than a built-in one:
+A call to a user-defined function is written `name(arg, ...)`, like a built-in call. The name must be a `fn` declared in the program (§5.3); any other name that is not a built-in is the error `unknown function "name"`:
 
 ```
 FROM Customer
-SELECT .id, &cumulativeAdd(.orders.total) AS lifetime_total
+SELECT .id, cumulativeAdd(.orders.total) AS lifetime_total
 ```
 
 ```
-&discountedTotal(.id, .discount_rate) <= .total
+discountedTotal(.id, .discount_rate) <= .total
 ```
 
-`&name(...)` is itself a `Primary` expression, so it chains with the ordinary postfix operators like anything else — `&getPrimaryContact(.id).email`, `&recentOrders(.id)[.status == "shipped"]`, and so on.
+`name(...)` is a `CallExpression` (§11), so it chains with the ordinary postfix operators like anything else — `getPrimaryContact(.id).email`, `recentOrders(.id)[.status == "shipped"]`, and so on.
 
-A function may also call itself or another function via the same `&name(...)` syntax, including **recursively**, and regardless of where the other function is declared in the file (so mutual recursion between two functions is allowed too).
+A function may also call itself or another function in the same way, including **recursively**, and regardless of where the other function is declared in the file (so mutual recursion between two functions is allowed too).
 
 ### 8.5 Scope
 
@@ -698,7 +701,7 @@ fn cancelledOrdersFor(customerId: UUID): JSON {
     WHERE .customer.id == customerId AND .status == "cancelled"
     SELECT .id
 }
-// &cancelledOrdersFor(x) : JSON — a JSON array of UUIDs (one per cancelled order)
+// cancelledOrdersFor(x) : JSON — a JSON array of UUIDs (one per cancelled order)
 
 fn recentOrders(customerId: UUID): JSON {
     FROM Order
@@ -707,7 +710,7 @@ fn recentOrders(customerId: UUID): JSON {
     LIMIT 10
     SELECT *
 }
-// &recentOrders(x) : JSON — a JSON array of order objects
+// recentOrders(x) : JSON — a JSON array of order objects
 ```
 
 A function whose tail is a plain `Expression` (not a `Query`) is unaffected by this rule — it's scalar-valued exactly as declared, same as always. Because the result is `JSON`, consuming it further needs the ordinary `is`/`isnot` shape-testing rules (§5.6) — e.g. `is array` — the same as any other `JSON` value; there's no separate "query-result" type the checker treats specially beyond this.
@@ -743,7 +746,7 @@ Each branch is still a full **block** (§9.2/§8.2's `Block`: `let`s, assignment
 ```
 if .total > 1000 {
     total = total + 100;
-    let notified: BOOLEAN = &notifyManager(.customer_id);
+    let notified: BOOLEAN = notifyManager(.customer_id);
     "flagged"
 } else {
     "ok"
@@ -754,7 +757,7 @@ If a branch's only purpose is its side effects and it has no value worth naming,
 
 ```
 if shouldProcess {
-    result = &processOrder(orderId);
+    result = processOrder(orderId);
     null
 }
 ```
@@ -1316,7 +1319,6 @@ Primary infers Expression:
     | FieldValue
     | ParentRecord
     | NamedScope
-    | FunctionCall
     | CastExpr
     | GroupKeyRef
     | IndexRef
@@ -1339,9 +1341,6 @@ ParentRecord infers Expression:
 
 NamedScope infers Expression:
     {infer NamedScope} '#' name=ID;
-
-FunctionCall infers Expression:
-    {infer FunctionCall} '&' name=ID '(' (args+=Expression (',' args+=Expression)*)? ')';
 
 CastExpr infers Expression:
     {infer CastExpr} 'CAST' '(' value=Expression 'AS' targetType=TypeRef ')';
@@ -1458,8 +1457,8 @@ The language as specified in §§1–11 is stable: everything the grammar accept
    - **Still open:** should a second `let` for the same name be a redeclaration error, or an allowed rebinding?
 9. **Function scoping and recursion.**
    - ~~Recursion, closures, and body shape~~ Resolved: recursion (including mutual recursion between two functions, regardless of declaration order) is allowed. There's no `return` keyword — a function body is any number of `let`/`BodyStatement` forms followed by exactly one trailing tail `Expression`/`Query` (no `;`), the same convention used at the top level (§6.3); the grammar's rule shape (`BodyStatement*` then an optional trailing tail) already rules out anything coming after the tail. What it doesn't enforce is that the tail is actually present — it's grammatically optional even though the declared return type is mandatory — so requiring a tail whenever a return type is declared is a semantic check, not a parse-time one. A function body can read `let`s from any enclosing scope (top-level, or an outer function), i.e. it closes over outer bindings; a same-named parameter or local `let` shadows the outer one.
-   - **Retired, not resolved:** an earlier iteration of this item asked what `&name(...)` should produce when a function both `yield`s and has a tail. That question is moot now — `yield`/`YieldStatement` have been removed from the grammar entirely (§8.2), rather than answered, since Minab has no iterator/generator protocol for a caller to consume a yielded sequence against in the first place. If something like `yield` returns, it needs its own design pass once iterators exist, not a reinstatement of this same keyword with the same open question attached.
-10. ~~**`&` enforcement is semantic, not grammatical.**~~ **Resolved (§5.3, §5.3.1):** the grammar's own `CallExpression`/`FunctionCall` split (bare vs. `&`-prefixed) stays exactly as it parses today — the layering is confirmed, not changed. What's now pinned down is the semantic side: bare `Name(...)` is legal only for the eight built-in names (§5.3.1's signature table); any other bare name is a semantic error pointing at `&name(...)`. `&name(...)` always resolves against a user-declared `fn`. The two conventions are kept from ever colliding by reserving the eight built-in names — declaring a `fn` with one of them is itself a semantic error.
+   - **Retired, not resolved:** an earlier iteration of this item asked what a call `name(...)` should produce when a function both `yield`s and has a tail. That question is moot now — `yield`/`YieldStatement` have been removed from the grammar entirely (§8.2), rather than answered, since Minab has no iterator/generator protocol for a caller to consume a yielded sequence against in the first place. If something like `yield` returns, it needs its own design pass once iterators exist, not a reinstatement of this same keyword with the same open question attached.
+10. ~~**`&` enforcement is semantic, not grammatical.**~~ **Resolved, then revised 2026-09-24 (§5.3, §5.3.1):** the first answer kept a grammar split between bare calls `Name(...)` (built-ins only) and `&name(...)` calls (user functions only), and reserved the eight built-in names. That is revised: `&` is removed from the language before any release. A user function is called `name(...)`, like a built-in (decisions D10, D11). The type checker looks the name up as a built-in first, then as a declared `fn`. Built-in names are ALL UPPERCASE and a `fn` name needs a lowercase letter, so a future built-in cannot collide with existing code; a `let` or parameter may not reuse a function's name, and a `fn` may not reuse a table name.
 11. ~~**What does a scalar return type mean for a `Query`-tailed function?**~~ **Resolved (§8.6):** a `Query`-tailed function's result is `JSON` — a JSON array of whatever its `SELECT` produces (an array of objects for `SELECT *`, an array of that column's value type for a single-column `SELECT`). Its declared return type must therefore be `JSON`, checked once at the `FunctionDecl`, not per call site. A plain-`Expression`-tailed function is unaffected, scalar-valued exactly as declared.
 12. ~~Should `if`/`else` branches accept a block, the way `switch` arms do?~~ **Resolved (§9.1):** `if`/`else` branches are now both `Block` (statements plus a tail), matching `switch` arms. No remaining asymmetry between the two.
 13. **No constants.** `let` is mutable by default (§9.3) — Minab currently has no way to declare a binding that can't be reassigned. Worth deciding later whether a `const`-style immutable declaration is wanted, and if so, whether it's a modifier on `let` or a separate keyword.

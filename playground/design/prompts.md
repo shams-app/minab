@@ -13,7 +13,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 
 > I'm designing the website for **Minab**, a small programming language I created, as a **showcase for my portfolio** and the language's public playground. Please read this context carefully; every later request builds on it.
 >
-> **What Minab is:** one small language for two jobs. You query relational data (`FROM Order WHERE .status == "shipped" SELECT .id`), and you validate records before they're saved (`.end_date > .start_date`). One expression syntax serves both. Sigils make scope visible: `.` is the current record, `$` is the value under validation, `^` is one scope up, `#Table` opens a table inline, `KEY` is the group after GROUPBY, and `&fn()` calls a user function. It has strict types with no implicit coercion. It compiles to PostgreSQL. Rules run with a *hybrid* strategy: what can be answered from the record is evaluated in memory, and only the smallest table-touching pieces are pushed down to the database as SQL.
+> **What Minab is:** one small language for two jobs. You query relational data (`FROM Order WHERE .status == "shipped" SELECT .id`), and you validate records before they're saved (`.end_date > .start_date`). One expression syntax serves both. Sigils make scope visible: `.` is the current record, `$` is the value under validation, `^` is one scope up, `#Table` opens a table inline, `KEY` is the group after GROUPBY, and a lowercase name such as `discounted()` calls a user function. It has strict types with no implicit coercion. It compiles to PostgreSQL. Rules run with a *hybrid* strategy: what can be answered from the record is evaluated in memory, and only the smallest table-touching pieces are pushed down to the database as SQL.
 >
 > **What the site is:** a working playground. Everything runs in the visitor's browser: the Minab toolchain in a Web Worker, a real PostgreSQL compiled to WebAssembly, and a Monaco editor. Pages:
 > - Landing (`/`)
@@ -51,7 +51,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >
 > 1. **Wordmark:** `.minab` in lowercase. The leading dot is Minab's current-record sigil, so it gets `--syntax-sigil-record` color. Show 3 variations of the wordmark and a square app icon built from the dot.
 > 2. **Color:** define every token listed in the primer for **light and dark**. Show them as swatches with names and hex values.
-> 3. **Syntax palette:** this is the brand's signature. Give each sigil (`.` `$` `^` `#` `KEY` `&`) a distinct, memorable hue. Pipeline keywords (`FROM`/`WHERE`/`SELECT`) should read as structure (bold, calm); control keywords (`let`, `if`, `switch`) as a different family. Include a contrast table: every syntax token against `--editor-bg`, in both themes, all ≥ 4.5:1.
+> 3. **Syntax palette:** this is the brand's signature. Give each sigil (`.` `$` `^` `#` `KEY`) a distinct, memorable hue. Pipeline keywords (`FROM`/`WHERE`/`SELECT`) should read as structure (bold, calm); control keywords (`let`, `if`, `switch`) as a different family. Include a contrast table: every syntax token against `--editor-bg`, in both themes, all ≥ 4.5:1.
 > 4. **Type:** a UI sans, an optional display face, and a monospace that renders `. $ ^ # & != <= =>` beautifully. Set a scale for `--text-xs` … `--text-4xl`, plus weights and leading.
 > 5. **Space, radius, elevation, motion:** 4 px grid (`--space-1…16`), radius sm/md/lg/xl/full, shadows sm/md/lg/overlay, and durations fast/normal/slow with standard and emphasized easing.
 > 6. **Core components**, each in all states:
@@ -123,7 +123,7 @@ Paste these into Claude Design in order: **one prompt per message**, iterating u
 >    - Two cards, **Query** and **Validate**, each with code and "Run it →".
 > 4. **SigilGrid:**
 >    - Title: "Every character pulls its weight"
->    - 6 cards: `.` current record `.customer.name` · `$` value under validation `$ <= .credit_limit` · `^` one scope up `.room_id == ^.room_id` · `#` a table, inline `#Booking[.id != ^.id]` · `KEY` the group `KEY.name` · `&` your functions `&discounted(200, 15)`
+>    - 5 cards: `.` current record `.customer.name` · `$` value under validation `$ <= .credit_limit` · `^` one scope up `.room_id == ^.room_id` · `#` a table, inline `#Booking[.id != ^.id]` · `KEY` the group `KEY.name`
 >    - Make the sigils big and colorful. This is the brand moment.
 > 5. **HowItRuns:** 4 steps.
 >    - **Parse:** a Langium grammar.

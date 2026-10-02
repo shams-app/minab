@@ -83,8 +83,8 @@ export const cheatsheet: CheatSection[] = [
             {
                 id: 'function-call',
                 title: 'User function call',
-                syntax: '&discounted(200, 15)',
-                description: 'User functions are called with `&`, so their names can never collide with the built-ins.',
+                syntax: 'discounted(200, 15)',
+                description: 'User functions are called by name. A function name needs a lowercase letter; built-ins are ALL CAPS, so the two never collide.',
                 specRef: '§8.4',
                 exampleId: 'discounted-total'
             },
@@ -284,7 +284,7 @@ export const cheatsheet: CheatSection[] = [
     {
         id: 'builtins',
         title: 'Built-in functions',
-        intro: 'Called without `&`. Each takes one collection.',
+        intro: 'Called by name, in ALL CAPS. Each takes one collection.',
         entries: [
             {
                 id: 'count',

@@ -18,7 +18,6 @@ import {
     isCallExpression,
     isCurrentRecord,
     isFieldValue,
-    isFunctionCall,
     isFunctionDecl,
     isMemberAccess,
     isNamedScope,
@@ -156,15 +155,16 @@ export class EditorIntel {
         if (isFieldValue(node)) {
             return typed('$', 'the value of the field under validation (a field-level rule, spec §6.2)', this.typeOf(node));
         }
-        if (isFunctionCall(node)) {
-            const decl = document.parseResult.value.declarations.find(d => isFunctionDecl(d) && d.name === node.name);
-            const signature = decl?.$cstNode?.text.split('{')[0].trim();
-            return `${signature ? '```minab\n' + signature + '\n```\n\n' : ''}${code('&' + node.name)} — a user function call (spec §8)${this.typeSuffix(node)}`;
-        }
         if (isNameRef(node)) {
             const builtin = BUILTIN_DOCS[node.name];
-            if (builtin && node.$container && isCallExpression(node.$container)) {
+            const isCallee = node.$container && isCallExpression(node.$container) && node.$container.callee === node;
+            if (builtin && isCallee) {
                 return `${code(builtin.signature)}\n\n${builtin.doc}`;
+            }
+            const decl = isCallee ? document.parseResult.value.declarations.find(d => isFunctionDecl(d) && d.name === node.name) : undefined;
+            if (decl) {
+                const signature = decl.$cstNode?.text.split('{')[0].trim() ?? node.name;
+                return `\`\`\`minab\n${signature}\n\`\`\`\n\n${code(node.name)} — a user function (spec §8)`;
             }
             return typed(node.name, 'a name — a variable, parameter or alias', this.typeOf(node));
         }
@@ -227,20 +227,6 @@ export class EditorIntel {
             return {
                 replace,
                 entries: [...tables(0), ...[...new Set(aliases)].map(a => ({ label: a, kind: 'variable' as const, detail: 'alias', rank: 1 }))]
-            };
-        }
-        // `&fn…` — user functions.
-        if (prefix.endsWith('&')) {
-            const document = await this.language.parse(withPlaceholder, 'probe');
-            return {
-                replace,
-                entries: document.parseResult.value.declarations.filter(isFunctionDecl).map(f => ({
-                    label: f.name,
-                    kind: 'function',
-                    detail: f.$cstNode?.text.split('{')[0].trim(),
-                    insertText: `${f.name}(${f.params.map((p, i) => `\${${i + 1}:${p.name}}`).join(', ')})`,
-                    rank: 0
-                }))
             };
         }
         // `FROM Tab…`, `JOIN Tab…` — table names.
@@ -318,6 +304,15 @@ export class EditorIntel {
         const fn = at ? AstUtils.getContainerOfType(at.astNode, isFunctionDecl) : undefined;
         for (const param of fn?.params ?? []) {
             push({ label: param.name, kind: 'variable', detail: `parameter · ${param.type?.$cstNode?.text ?? ''}`, rank: 0 });
+        }
+        for (const f of model.declarations.filter(isFunctionDecl)) {
+            push({
+                label: f.name,
+                kind: 'function',
+                detail: f.$cstNode?.text.split('{')[0].trim(),
+                insertText: `${f.name}(${f.params.map((p, i) => `\${${i + 1}:${p.name}}`).join(', ')})`,
+                rank: 1
+            });
         }
         for (const name of builtinNames()) {
             const doc = BUILTIN_DOCS[name];

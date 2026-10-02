@@ -8,7 +8,7 @@
  *
  * The categories follow the language's own design: SQL-style pipeline
  * keywords are uppercase, control flow is lowercase (README "Working
- * conventions"), and the sigils — `.` `$` `^` `#` `&` `KEY` — each get a
+ * conventions"), and the sigils — `.` `$` `^` `#` `KEY` — each get a
  * color of their own, because they are what makes Minab read like Minab.
  */
 
@@ -20,11 +20,11 @@ export type TokenType =
     | 'type'
     | 'constant'
     | 'builtin'
+    | 'function'
     | 'sigil.record'
     | 'sigil.field'
     | 'sigil.parent'
     | 'sigil.alias'
-    | 'sigil.call'
     | 'sigil.key'
     | 'sigil.index'
     | 'member'
@@ -82,7 +82,7 @@ export const TYPE_KEYWORDS = [
 
 export const CONSTANT_KEYWORDS = ['true', 'false', 'null', 'NULL'] as const;
 
-/** Reserved names called without `&` (`minab-builtins.ts`). Not grammar keywords — plain identifiers the checker knows. */
+/** Built-in names, ALL CAPS (`minab-builtins.ts`). Not grammar keywords — plain identifiers the checker knows. */
 export const BUILTINS = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'EXISTS', 'ALL', 'ANY'] as const;
 
 const WORD_TYPES = new Map<string, TokenType>();
@@ -229,11 +229,11 @@ export function tokenizeLine(line: string, state: LineState): { tokens: Token[];
             i += 7;
             continue;
         }
-        if (ch === '#' || ch === '&') {
+        if (ch === '#') {
             IDENT.lastIndex = i + 1;
             const m = IDENT.exec(line);
             const end = m ? i + 1 + m[0].length : i + 1;
-            push(ch === '#' ? 'sigil.alias' : 'sigil.call', i, end);
+            push('sigil.alias', i, end);
             i = end;
             continue;
         }
@@ -283,7 +283,9 @@ export function tokenizeLine(line: string, state: LineState): { tokens: Token[];
                 text = 'if!';
                 end++;
             }
-            push(WORD_TYPES.get(text) ?? 'identifier', i, end);
+            // A name before `(` that is not a built-in is a user function (spec §5.3).
+            const calls = /^\s*\(/.test(line.slice(end));
+            push(WORD_TYPES.get(text) ?? (calls ? 'function' : 'identifier'), i, end);
             i = end;
             continue;
         }

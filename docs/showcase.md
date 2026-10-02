@@ -261,10 +261,10 @@ fn discountedTotal(orderId: UUID, rate: DECIMAL): DECIMAL {
 }
 ```
 
-**Calling it, with `&`:**
+**Calling it, by name:**
 ```
 FROM Customer
-SELECT .id, &discountedTotal(.id, .discount_rate) AS discounted
+SELECT .id, discountedTotal(.id, .discount_rate) AS discounted
 ```
 
 **A function whose tail is a `Query` always returns `JSON` — a JSON array of the selected shape (§8.6):**
@@ -274,16 +274,16 @@ fn cancelledOrdersFor(customerId: UUID): JSON {
     WHERE .customer.id == customerId AND .status == "cancelled"
     SELECT .id
 }
-// &cancelledOrdersFor(x) : JSON — an array of UUIDs, one per cancelled order
+// cancelledOrdersFor(x) : JSON — an array of UUIDs, one per cancelled order
 ```
 
-**Built-ins are bare, user functions need `&` — the two never collide (§5.3):**
+**Built-ins are ALL UPPERCASE, user function names need a lowercase letter — the two never collide (§5.3):**
 ```
-COUNT(.orders) > 0              // built-in, bare
-&discountedTotal(.id, 0.1)      // user-defined, & required
+COUNT(.orders) > 0              // built-in
+discountedTotal(.id, 0.1)      // user-defined
 ```
 ```
-fn SUM(x: INTEGER[]): INTEGER { 0 }   // ✗ semantic error — SUM is a reserved built-in name
+fn SUM(x: INTEGER[]): INTEGER { 0 }   // ✗ semantic error — a function name needs a lowercase letter (built-in names are ALL UPPERCASE)
 ```
 
 **Tuple return type, multiple `let`s in a body:**
@@ -322,7 +322,7 @@ let discount: DECIMAL = if .tier == "gold" { 0.20 };    // semantic error — th
 **`if!` — pure control flow, no value at all, mid-block or anywhere else a statement goes:**
 ```
 if! .status == "flagged" {
-    let notified: BOOLEAN = &notifyManager(.customer_id);
+    let notified: BOOLEAN = notifyManager(.customer_id);
 }
 
 .total > 0
@@ -343,7 +343,7 @@ let priority: INTEGER = switch .status {
 ```
 if .total > 1000 {
     total = total + 100;
-    let notified: BOOLEAN = &notifyManager(.customer_id);
+    let notified: BOOLEAN = notifyManager(.customer_id);
     "flagged"
 } else {
     "ok"
@@ -546,7 +546,7 @@ fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
     let flaggedCount: INTEGER = 0;
 
     loop customer in #Customers where .balance > cutoff {
-        let daysLate: INTEGER = &daysSincePayment(.id);
+        let daysLate: INTEGER = daysSincePayment(.id);
 
         let newStatus: TEXT = if daysLate > 90 {
             let notes: JSON = .metadata;
@@ -580,7 +580,7 @@ fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
 
 Note the mix of bare `.field` and the named `customer.field`: entering the loop pushes `.` to mean the current customer, so `.balance`, `.id`, `.metadata` all work directly — but inside `#Customers[.id == customer.id]`, the `[...]` filter re-pushes `.` again (to mean each candidate row being filtered), so reaching back to the *loop's* customer needs either `customer.id` (the named alias) or `^.id` (one level up) — bare `.id` there would mean the wrong thing.
 
-This one example alone touches: functions with typed params/return, `let`, `for-in` over an ad-hoc `#Table` with a `where` guard, a nested function call via `&`, an `if`/`else if`/`else` **expression** chain whose branches are full blocks (one with its own `let`/nested `if`), `if!` **statements** for pure control flow, `JSON` shape-testing with `is`, string comparison via `!=`, assignment, `UPDATE` with a plain and a compound `SET` field, a conditional `INSERT`, and the function's final tail as its return value.
+This one example alone touches: functions with typed params/return, `let`, `for-in` over an ad-hoc `#Table` with a `where` guard, a nested function call by name, an `if`/`else if`/`else` **expression** chain whose branches are full blocks (one with its own `let`/nested `if`), `if!` **statements** for pure control flow, `JSON` shape-testing with `is`, string comparison via `!=`, assignment, `UPDATE` with a plain and a compound `SET` field, a conditional `INSERT`, and the function's final tail as its return value.
 
 Two things worth calling out about *why* it's written this way, not just what it does:
 - **No `switch` here, deliberately.** `switch` case values must be literals (§9.2) — they can't be computed conditions like `daysLate > 90`. An `if`/`else if`/`else` chain is the correct tool whenever the branches depend on a computed comparison rather than matching a value against a fixed set.

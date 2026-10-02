@@ -41,7 +41,6 @@ import {
     isCurrentRecord,
     isFieldValue,
     isFilterAccess,
-    isFunctionCall,
     isFunctionDecl,
     isGroupKeyRef,
     isIfExpr,
@@ -267,7 +266,6 @@ export class MinabInterpreter {
             return object;
         }
         if (isCallExpression(expr)) return await this.builtin(expr, state);
-        if (isFunctionCall(expr)) return await this.callFunction(expr.name, expr.args, state);
         if (isIfExpr(expr)) {
             if (this.truthy(await this.expression(expr.condition, state))) {
                 return await this.expression(expr.thenBranch, state);
@@ -325,9 +323,9 @@ export class MinabInterpreter {
 
     private async callFunction(name: string, args: Expression[], state: State): Promise<MinabValue> {
         const declaration = state.functions.get(name);
-        if (!declaration) fail(`unknown function "&${name}"`);
+        if (!declaration) fail(`unknown function "${name}"`);
         if (declaration.params.length !== args.length) {
-            fail(`&${name} takes ${declaration.params.length} argument(s), got ${args.length}`);
+            fail(`${name} takes ${declaration.params.length} argument(s), got ${args.length}`);
         }
         const variables = new Map<string, MinabValue>();
         for (let i = 0; i < args.length; i++) {
@@ -340,7 +338,7 @@ export class MinabInterpreter {
             }
             variables.set(statement.name, statement.value ? await this.expression(statement.value, inner) : null);
         }
-        if (!declaration.tail) fail(`&${name} has no tail expression to return`);
+        if (!declaration.tail) fail(`${name} has no tail expression to return`);
         return await this.mainStatement(declaration.tail, inner);
     }
 
@@ -350,7 +348,7 @@ export class MinabInterpreter {
         const callee = expr.callee;
         if (!isNameRef(callee)) fail('only a named function can be called');
         if (!isBuiltinName(callee.name)) {
-            fail(`"${callee.name}" is not a built-in — user functions are called as &${callee.name}(...) (spec §5.3.1)`);
+            return await this.callFunction(callee.name, expr.args, state);
         }
         const values = await this.expression(expr.args[0], state);
         const items = Array.isArray(values) ? values : values === null ? [] : [values];

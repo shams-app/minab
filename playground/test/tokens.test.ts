@@ -45,8 +45,14 @@ describe('sigils', () => {
 
     test('named scopes, calls, $ and .$index', () => {
         expect(types('#Booking[.id != $]')).toEqual(['sigil.alias:#Booking', 'delimiter:[', 'sigil.record:.id', 'operator:!=', 'sigil.field:$', 'delimiter:]']);
-        expect(types('&discounted(1)')).toEqual(['sigil.call:&discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
         expect(types('.$index')).toEqual(['sigil.index:.$index']);
+    });
+
+    test('a name before `(` is a function, a built-in stays a built-in, and `&` is not part of any token', () => {
+        expect(types('discounted(1)')).toEqual(['function:discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
+        expect(types('COUNT(.orders)')).toEqual(['builtin:COUNT', 'delimiter:(', 'sigil.record:.orders', 'delimiter:)']);
+        expect(types('discounted')).toEqual(['identifier:discounted']);
+        expect(types('&discounted(1)')).toEqual(['invalid:&', 'function:discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
     });
 
     test('if! is one keyword', () => {

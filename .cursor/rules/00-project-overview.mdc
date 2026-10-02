@@ -18,7 +18,7 @@ Sigils and keywords, current as of the v2 spec (2026-09-13) — don't reach for 
 - `.` current record, `$` field value (field-level rules only), `^` parent record (one level up), `#alias` a named scope (opens any table inline, or disambiguates a join alias), `KEY` the group key.
 - `GROUPBY`, `ORDERBY`, `LEFTJOIN`, `CROSSJOIN` are each one token — no space, no separate `GROUP`/`BY`/`LEFT`/`CROSS` keywords floating around to collide with identifiers elsewhere.
 - `if` is an expression (every branch a full block, `else` optional and makes the type nullable); `if!` is a separate statement keyword for pure control flow — the two are different tokens, not the same keyword used two ways.
-- `&name(...)` calls a user-defined function; a bare `name(...)` (no `&`) is a built-in (`COUNT`, `SUM`, `EXISTS`, ...).
+- `name(...)` calls a function. Built-ins have ALL-UPPERCASE names (`COUNT`, `SUM`, `EXISTS`, ...); a user `fn` name must contain a lowercase letter (D10), so the two never collide.
 
 Hard constraints, all the time:
 - No implicit type coercion, anywhere in the language — cross-type comparisons need an explicit `CAST`.

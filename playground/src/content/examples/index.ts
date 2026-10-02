@@ -174,8 +174,8 @@ export const examples: Example[] = [
     {
         id: 'discounted-total',
         title: 'A user function',
-        summary: 'Typed parameters, a typed return, called with `&`.',
-        notes: 'The body’s last expression is the result — there is no `return`. User functions are called with `&`, which keeps bare names free for the built-ins (`COUNT`, `SUM`, …). Nothing here touches a table, so nothing reaches the database.',
+        summary: 'Typed parameters, a typed return, called by name.',
+        notes: 'The body’s last expression is the result — there is no `return`. A user function is called by its name, like a built-in. Its name needs a lowercase letter, which keeps ALL-CAPS names free for the built-ins (`COUNT`, `SUM`, …). Nothing here touches a table, so nothing reaches the database.',
         source: discountedTotal,
         tags: ['functions'],
         level: 'beginner',
@@ -389,9 +389,9 @@ export const examples: Example[] = [
     {
         id: 'with-tax',
         title: 'A function inside a rule',
-        summary: 'Declare a `fn`, call it on the record with `&`.',
-        notes: 'Functions run in the interpreter, next to the record — `&withTax(.total, 21)` never becomes SQL.',
-        source: 'fn withTax(amount: DECIMAL, rate: DECIMAL): DECIMAL {\n    amount + amount * rate / 100\n}\n\n// Orders over 1500 including VAT need approval.\n&withTax(.total, 21) <= 1500\n',
+        summary: 'Declare a `fn`, call it on the record by name.',
+        notes: 'Functions run in the interpreter, next to the record — `withTax(.total, 21)` never becomes SQL.',
+        source: 'fn withTax(amount: DECIMAL, rate: DECIMAL): DECIMAL {\n    amount + amount * rate / 100\n}\n\n// Orders over 1500 including VAT need approval.\nwithTax(.total, 21) <= 1500\n',
         tags: ['record-rule', 'functions'],
         level: 'intermediate',
         specRef: '§8',

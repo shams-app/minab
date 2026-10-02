@@ -185,7 +185,6 @@ Primary infers Expression:
     | FieldValue
     | ParentRecord
     | NamedScope
-    | FunctionCall
     | CastExpr
     | GroupKeyRef
     | IndexRef
@@ -208,9 +207,6 @@ ParentRecord infers Expression:
 
 NamedScope infers Expression:
     {infer NamedScope} '#' name=ID;
-
-FunctionCall infers Expression:
-    {infer FunctionCall} '&' name=ID '(' (args+=Expression (',' args+=Expression)*)? ')';
 
 CastExpr infers Expression:
     {infer CastExpr} 'CAST' '(' value=Expression 'AS' targetType=TypeRef ')';

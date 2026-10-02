@@ -232,8 +232,17 @@ describe('null-safe equality (spec §7.7)', () => {
 
 describe('what the compiler refuses, so the interpreter takes it (ADR 0001)', () => {
     test('a user function has no SQL form', async () => {
-        const reason = await compileError(`FROM Order WHERE &isBlocked(.id) SELECT .id`);
+        const reason = await compileError(`FROM Order WHERE isBlocked(.id) SELECT .id`);
         expect(reason).toMatch(/interpreted layer/);
+        expect(reason).toMatch(/"isBlocked" is a user function/);
+    });
+
+    test('a user function never becomes a database function call', async () => {
+        const reason = await compileError(
+            `fn discounted(t: DECIMAL, r: DECIMAL): DECIMAL { t - t * r / 100 }\nFROM Order WHERE discounted(.total, 10) > 5 SELECT .id AS id`
+        );
+        expect(reason).toMatch(/user function/);
+        expect(reason).not.toContain('discounted(');
     });
 
     test('an if expression has no SQL form', async () => {

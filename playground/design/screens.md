@@ -34,7 +34,7 @@ Every screen, its regions, and every state each region can be in. Component name
 | Hero | `Hero` | Eyebrow, H1 "Say what you mean about your data.", subhead, two CTAs, a "runs in your browser" note | — |
 | Hero demo | `HeroDemo` | Tabs Query / Rule / Types; caption; the program (static highlight); output; "Open in the playground →" | loading ("Starting PostgreSQL in your browser…"), rows + compiled SQL, verdict + statement, diagnostics |
 | Two layers | `LayerCards` | Query card and Validate card, each with code and "Run it →" | — |
-| Sigils | `SigilGrid` | 6 cards: `.`, `$`, `^`, `#`, `KEY`, `&`. Big glyph in its syntax color, name, tiny example | — |
+| Sigils | `SigilGrid` | 5 cards: `.`, `$`, `^`, `#`, `KEY`. Big glyph in its syntax color, name, tiny example | — |
 | How it runs | `HowItRuns` | 4 numbered steps: Parse → Resolve & check → Compile → Run (hybrid) | — |
 | Comparison | `Comparison` | Minab (left) → PostgreSQL (right), compiled live | SQL loading ("Compiling…") |
 | Features | `FeatureGrid` | 6 features with icons | — |
@@ -94,7 +94,7 @@ Things Monaco draws, all colored by tokens:
 - **Check-only shading** (`--check-only-soft`) on loops, writes and the like, each with a hover message.
 - **Transient highlight** (`--highlight-soft`, or `--pushdown-soft` with an outline) while hovering a trace entry or AST node.
 - Hover cards: types, columns, `#Table` summaries, built-in signatures, keyword docs from the cheat sheet.
-- Completion list: columns after `.`, tables after `#` and `FROM`, functions after `&`, keywords from the grammar, snippets.
+- Completion list: columns after `.`, tables after `#` and `FROM`, functions by name, keywords from the grammar, snippets.
 - **Loading fallback:** until Monaco arrives, the program is shown as highlighted static code (`mb-editor-fallback`).
 
 ### EditorStatusBar
