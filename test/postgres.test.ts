@@ -17,14 +17,22 @@ import { EXIT_OK, runCli, type CliIo } from '../src/cli/main.js';
  *   MINAB_TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/scratch npm test
  *
  * It drops and recreates its three tables, so point it at a throwaway
- * database. Without the variable the whole file skips, and CI stays green
- * on a machine with no Postgres.
+ * database. Without the variable the whole file skips, and a machine with
+ * no Postgres stays green. CI sets `MINAB_REQUIRE_DATABASE=1`: then a
+ * missing URL fails the run, so the job can never pass by skipping.
  *
  * It drives the Phase 6 CLI rather than the services directly, so what it
  * proves is the same path a user takes: `minab run --database <url>`.
  */
 
 const connectionString = process.env.MINAB_TEST_DATABASE_URL;
+
+if (process.env.MINAB_REQUIRE_DATABASE === '1' && !connectionString) {
+    throw new Error(
+        'MINAB_REQUIRE_DATABASE=1 is set, but MINAB_TEST_DATABASE_URL is not. ' +
+            'Set it to a throwaway Postgres URL, for example postgresql://user:pass@localhost:5432/scratch.'
+    );
+}
 
 const SCHEMA = {
     tables: [

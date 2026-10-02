@@ -1,0 +1,18 @@
+# Keeps bun.lock and playground/bun.lock in sync with package.json.
+# npm is the main package manager; the bun lockfiles must not drift (D07).
+name: Bun lockfiles
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  bun-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: playground

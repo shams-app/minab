@@ -7,3 +7,4 @@ package-lock.json
 bun.lock
 .gitignore
 **/*.ts
+scripts/**
