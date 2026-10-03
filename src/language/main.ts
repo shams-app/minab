@@ -15,19 +15,10 @@
  * server restart — is out of scope here; `src/cli/config.ts`'s
  * `discoverConfig`/`loadConfigFile` already do the file-finding and
  * parsing, so this just reuses them instead of a config file per document.
+ *
+ * The code is in `server.ts` so the package can export it (`./lsp`).
  */
 
-import { createConnection, ProposedFeatures } from 'vscode-languageserver/node';
-import { NodeFileSystem } from 'langium/node';
-import { startLanguageServer } from 'langium/lsp';
-import { discoverConfig, emptyConfig, loadConfigFile } from '../cli/config.js';
-import { createMinabServices } from './minab-module.js';
+import { startMinabServer } from './server.js';
 
-const connection = createConnection(ProposedFeatures.all);
-
-const configPath = discoverConfig(process.cwd());
-const config = configPath ? loadConfigFile(configPath) : emptyConfig();
-
-const { shared } = createMinabServices({ connection, ...NodeFileSystem }, config.schema, config.ruleContext);
-
-startLanguageServer(shared);
+startMinabServer();
