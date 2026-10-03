@@ -11,7 +11,7 @@ This file is written by phase W1, one section per approved round. Phases W2 and 
 | 1 · Design system | 0, 1 | Approved 2026-10-03 |
 | 2 · The app | 2–5 | Approved 2026-10-03 |
 | 3 · The other pages | 6–13 | Approved 2026-10-03 |
-| 4 · Check and hand off | 14 | — |
+| 4 · Check and hand off | 14 | Approved 2026-10-03 |
 
 ---
 
@@ -53,7 +53,7 @@ Canvas page "Round 1 · Design system", boards 00–05 and 01b.
 
 ### Color tokens (board 02)
 
-Dark value / light value. Every existing name stays. All UI text pairs pass AA (see the board).
+Dark value / light value. Every existing name stays. All UI text pairs pass AA (see the board). The values below already include the round 4 contrast fixes.
 
 | Token | Dark | Light |
 |---|---|---|
@@ -66,7 +66,7 @@ Dark value / light value. Every existing name stays. All UI text pairs pass AA (
 | `--surface-selected` | `#1C2633` | `#E2ECF8` |
 | `--text-primary` | `#E6E9EF` | `#12151B` |
 | `--text-secondary` | `#A9B1BE` | `#444C5A` |
-| `--text-muted` | `#7D8695` | `#636C7B` |
+| `--text-muted` | `#8790A0` | `#5E6675` |
 | `--text-inverse` | `#0B0D10` | `#FFFFFF` |
 | `--text-link` | `#6CCBFF` | `#0063AD` |
 | `--border-subtle` | `#1E232B` | `#E3E6EB` |
@@ -83,12 +83,12 @@ Dark value / light value. Every existing name stays. All UI text pairs pass AA (
 | `--info` / `-soft` | `#49C2FF` / `#0F2A3B` | `#0A6CC2` / `#E1EEFA` |
 | `--verdict-pass` / `-soft` | `#5BD38A` / `#10291B` | `#16794A` / `#E2F3EA` |
 | `--verdict-fail` / `-soft` | `#FF7A85` / `#3A1519` | `#B42318` / `#FCEBEA` |
-| `--pushdown` / `-soft` | `#C6F36B` / `#1F2A12` | `#4C7A00` / `#EEF6DB` |
+| `--pushdown` / `-soft` | `#C6F36B` / `#1F2A12` | `#487400` / `#EEF6DB` |
 | `--check-only` / `-soft` | `#F5B84B` / `#33280F` | `#8A5A00` / `#FFF3D6` |
-| `--highlight-soft` | `#3A3415` | `#FFF2B3` |
+| `--highlight-soft` | `#27240F` | `#FFF2B3` |
 | `--editor-bg` | `#0D1015` | `#FBFCFD` |
 | `--editor-fg` | `#E6E9EF` | `#12151B` |
-| `--editor-gutter-fg` | `#5B6472` | `#9AA2AF` |
+| `--editor-gutter-fg` | `#78818F` | `#666E7C` |
 | `--editor-gutter-fg-active` | `#A9B1BE` | `#444C5A` |
 | `--editor-line-highlight` | `#131821` | `#F2F4F7` |
 | `--editor-selection` | `#1F3A52` | `#CFE3F7` |
@@ -244,7 +244,7 @@ Canvas page "Round 2 · The app", boards 06–11. Every board shows dark and lig
 - **Layout:** the left column is 784 px (55%) and the output 45%. The separators are 9 px hit areas with a 1 px line and a 5×28 px `--border-strong` grip. Editor/host is 62/38.
 - **Editor:** the gutter is 30 px, and the current line uses `--editor-line-highlight`.
   - Pushdown spans are underlined.
-  - **While a TraceItem is hovered, its span gets `--pushdown-soft` behind it, plus a 1 px `--pushdown` ring and a soft lime glow in dark (`--glow-pd`).** This is the showcase effect.
+  - **While a TraceItem is hovered, its span gets `--pushdown-soft` behind it, plus a 1 px `--pushdown` ring and a soft lime glow in dark (`--pushdown-ring`, see round 4).** This is the showcase effect.
 - **EditorStatusBar** (28 px, `--surface-sunken`): "Record rule → BOOLEAN" (the type in `--syntax-type`) on the left; the "✓ No problems" button in `--success` on the right.
 - **HostPanel:** tabs with a sigil badge on Record (`.`) and on Field (`$`), and a collapse IconButton on the right.
   - Record tab: a "Rule table" select (mono), a Form/JSON segmented control, PresetChips (pills, ✓/✕ marks in the pass/fail colors, active = `--accent-soft` with an `--accent` border and `aria-pressed`), the preset's note in muted text, then a 2-column form with mono labels (110 px) and mono inputs on `--editor-bg`.
@@ -426,3 +426,59 @@ Canvas page "Round 3 · The other pages", boards 12–19.
 - If a trace span is off screen, the editor scrolls it into view.
 - The verdict is announced through `role="status"`.
 - **Reduced motion:** every duration is 0; no pulsing, rising or drawing; only colors change.
+
+---
+
+## Round 4 · Check and hand off (approved 2026-10-03)
+
+Canvas page "Round 4 · Check and hand off", board 20.
+
+### Audit results
+
+| Check | Result |
+|---|---|
+| 1. Every primer token is defined for light and dark; no one-off colors | Pass. The only colors outside tokens are the mock blog page around the embed (board 15), which belongs to the host page. |
+| 2. Component names match the contract | Pass. One new component, `ConsoleView` (built by L7). One new variant: below 760 px, `OutputPanel` shows its tabs as chips that scroll sideways. One new copy word: the field-rule verdict says "Rejected". |
+| 3. Every state from briefs 3–5 exists | Pass (boards 09–11; the collapsed host bar is on board 12). |
+| 4. All text and syntax colors pass AA in both themes | **7 pairs failed and are fixed** (below). The syntax palette passed against `--editor-bg` in round 1. |
+| 5. Mobile screens for landing, workbench, tour, gallery and reference | Pass (boards 07 and 16). |
+
+### Contrast fixes (already applied in the round 1 tables above and on every board)
+
+| Token or rule | Theme | Failed on | Before | After |
+|---|---|---|---|---|
+| `--text-muted` | dark | `--surface-selected` (4.16) | `#7D8695` | `#8790A0` (4.75; 5.74 on surface) |
+| `--text-muted` | light | `--surface-selected` (4.44) | `#636C7B` | `#5E6675` (4.84; 5.78 on surface) |
+| `--editor-gutter-fg` | dark | `--editor-bg` (3.19) | `#5B6472` | `#78818F` (4.84; 4.52 on the line highlight) |
+| `--editor-gutter-fg` | light | `--editor-bg` (2.51) | `#9AA2AF` | `#666E7C` (5.00; 4.66 on the line highlight) |
+| `--pushdown` | light | `--surface-hover` (4.499) | `#4C7A00` | `#487400` (4.88; 4.99 on its soft fill) |
+| `--highlight-soft` | dark | muted text on it (3.40) | `#3A3415` | `#27240F` (muted 4.85) |
+| Code on captions | light | comment (4.12) and `$` (4.47) on `--surface-sunken` | SQL blocks on `--surface-sunken` | **Rule: code is always on `--editor-bg`, with a `--border-subtle` line.** |
+
+### All new tokens (none renamed)
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--glow-record` | `0 0 24px rgb(73 194 255 / .45)` | `none` | The wordmark dot, the mark, big sigils |
+| `--glow-pushdown` | `0 0 10px rgb(198 243 107 / .35)` | `none` | Under pushed-down spans |
+| `--pushdown-ring` | `0 0 0 1px #C6F36B, 0 0 18px rgb(198 243 107 / .25)` | `0 0 0 1px #487400` | The hovered TraceItem and its editor span |
+| `--overlay-blur` | `16px` | `16px` | The backdrop blur of the palette, drawer, toasts, hover cards |
+| `--scrim` | `rgb(5 6 10 / .6)` | `rgb(18 21 27 / .35)` | Behind the palette and the drawer |
+| `--grid-line` | `rgb(73 194 255 / .05)` | `rgb(10 108 194 / .05)` | The hero and CtaBand texture |
+| `--theme-color` | `#0B0D10` | `#F4F5F8` | `<meta name="theme-color">` |
+
+### Rationale
+
+1. **Terminal Noir, dark first.** The audience lives in code editors. Light uses the same tokens and the same contrast rules.
+2. **The sigils are the brand.** They are the only saturated colors in code. They differ in hue, lightness and weight, so they stay apart with color-blindness.
+3. **One signature effect: the execution map.** Lime marks only what reached Postgres, everywhere: the editor underline, trace items, badges and the landing diagram. Nothing else is lime.
+4. **The mark carries meaning.** M for Minab, a shield for validation and a check for "passes", drawn as a tulip, the Persian flower of remembrance, for the children and teachers of Minab. The name line on the landing page is plain text.
+5. **Honest states.** Check-only is dashed, so it is never shown by color alone. Verdicts carry an icon and a word. Exact decimals keep their trailing zeros. Error codes are shown, so people can search and translate them.
+6. **Quiet motion.** Motion explains cause and effect, and it stops entirely under reduced motion.
+
+### For W2 and W3
+
+- Follow brief 15 in [`design-briefs.md`](design-briefs.md). Map the tokens above into `src/styles/tokens.css`, with **dark on `:root`** (see round 1, "Direction").
+- Work in this order: global styles, components (round 1, board 05), pages (rounds 2–3), icons and the OG image (board 18), motion (board 19).
+- `ConsoleView` comes from L7. Restyle it from board 10.
+- Check every state in [`screens.md`](screens.md) in both themes at 1440 and 375 px.
