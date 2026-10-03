@@ -141,7 +141,7 @@ export interface EvalContext {
     recordTable?: string;
     fieldValue?: MinabValue;
     /**
-     * Kept until R8 moves the playground to `events`. Same moment as the
+     * Nothing uses it since R8 moved the playground to `events`. R7 removes it with `evaluate`. Same moment as the
      * `statement` event, but it hands over the AST node instead of the range.
      *
      * Called just before each statement goes to the executor, with the AST
@@ -194,10 +194,10 @@ export class MinabInterpreter {
     ) {}
 
     /**
-     * The old entry, kept until R7 and R8 move the CLI and the playground to `PreparedProgram.run`.
+     * The old entry, kept until R7 moves the CLI to `PreparedProgram.run` (the playground moved in R8).
      * It turns the structured result of `run` into the old shape. A port failure is thrown again, as before.
      *
-     * @deprecated Use `run` (or `PreparedProgram.run`). Remove it in R8, or in whichever of R7 and R8 merges last.
+     * @deprecated Use `run` (or `PreparedProgram.run`). R7 is the last user: remove it there.
      */
     async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
         const result = await this.run(model, context);

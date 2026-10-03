@@ -1,24 +1,26 @@
 /**
  * The Minab engine: check, compile and run a program against a host.
  *
- * This is the whole toolchain the CLI drives — Langium's parser, the
- * validator and type checker, the SQL compiler, and the hybrid interpreter
- * — pointed at an in-browser Postgres instead of a file system and a
- * connection string. It has no DOM and no React: `worker.ts` exposes it to
+ * It drives the runtime API (`src/runtime/`): one `Minab` for each host,
+ * `prepare` to check, `compile()` for the SQL tab, and `run` with a data
+ * port that points at an in-browser Postgres (or at the config's canned
+ * answers) instead of a connection string. The runtime's event stream fills
+ * the Execution tab. It has no DOM and no React: `worker.ts` exposes it to
  * the UI thread, and the tests drive it directly in Node.
  *
- * Work goes through two queues. Everything Langium does (parsing, checking,
- * hovers, completion) runs on the language queue; everything that touches
- * Postgres runs on the database queue. A run does its analysis on the first
- * and its execution on the second, so the editor stays responsive while
+ * Work goes through two queues. Everything the language does (parsing,
+ * checking, hovers, completion) runs on the language queue; everything that
+ * touches Postgres runs on the database queue. A run does its analysis on the
+ * first and its execution on the second, so the editor stays responsive while
  * Postgres boots or a query runs — and a rule that never reaches the
  * database never waits for it.
  */
 
-import type { AstNode, LangiumDocument } from 'langium';
-import { isQuery, type Model } from '../../../src/language/generated/ast.js';
-import type { QueryExecutor, SqlQuery } from '../../../src/language/minab-executor.js';
+import type { LangiumDocument } from 'langium';
+import type { Model } from '../../../src/language/generated/ast.js';
+import type { SqlQuery } from '../../../src/language/minab-executor.js';
 import type { MinabRuleContext, MinabSchema } from '../../../src/language/schema.js';
+import type { DataPort, EventSink, Minab, MinabDiagnostic, PreparedProgram, SourceRange } from '../../../src/runtime/index.js';
 import { ConfigError, parseConfig, type HostConfig } from '../../../src/host/config.js';
 import { DataSourceError, FixtureExecutor } from '../../../src/host/fixture-executor.js';
 import { formatSql } from '../../../src/host/format.js';
@@ -26,13 +28,14 @@ import { Database, type DatabaseContents, type DatabaseState } from './database.
 import { databaseScript } from './ddl.js';
 import { EditorIntel } from './intel.js';
 import { LanguageHosts, type LanguageHost } from './language.js';
-import { describeProgram, explainRefusal, rangeOf } from './program.js';
+import { describeProgram, explainRefusal, nodeAt } from './program.js';
 import type {
     AnalyzeReport,
     AstNodeView,
     CompiledSql,
     CompletionReport,
     EngineApi,
+    EngineDiagnostic,
     EngineStatus,
     HostSettings,
     HoverInfo,
@@ -41,6 +44,7 @@ import type {
     Row,
     RunReport,
     RunResult,
+    Severity,
     SqlConsoleResult,
     TablePreview,
     TraceEntry
@@ -56,6 +60,9 @@ interface ActiveHost {
     settings: HostSettings;
     config?: HostConfig;
     configError?: string;
+    /** The runtime for this host's schema and rule context. */
+    minab: Minab;
+    /** Only for the syntax tree: check-only constructs, symbols, statement origins, editor intelligence. */
     language: LanguageHost;
     contents: DatabaseContents;
 }
@@ -130,59 +137,85 @@ function explainNoSql(reason: string, kind: ProgramKind): CompiledSql {
     return { ok: false, reason, pushesDown: false };
 }
 
+const SEVERITIES: Record<MinabDiagnostic['severity'], Severity> = { error: 1, warning: 2, info: 3, hint: 4 };
+
+function toEngineDiagnostic(d: MinabDiagnostic): EngineDiagnostic {
+    return {
+        severity: SEVERITIES[d.severity],
+        message: d.message,
+        range: d.range,
+        source: d.code === 'syntax.lexer' || d.code === 'syntax.parser' ? 'syntax' : 'minab',
+        code: d.code
+    };
+}
+
+function sameRange(a: SourceRange, b: SourceRange): boolean {
+    return a.start.line === b.start.line && a.start.character === b.start.character && a.end.line === b.end.line && a.end.character === b.end.character;
+}
+
 /**
- * Wraps the real executor to time each statement and remember the source
- * node the interpreter said it came from (`EvalContext.onStatement`, which
- * fires immediately before `execute`).
+ * Builds the Execution tab from a run. The runtime's `statement` event says
+ * what is about to be sent and which part of the source it came from; the data
+ * port then runs it and fills in the rows, the time and any error. The runtime
+ * sends one statement at a time, so a statement's range waits in a queue until
+ * its port call starts.
  */
-class TracingExecutor implements QueryExecutor {
+class Tracer {
     readonly entries: TraceEntry[] = [];
     lastColumns: string[] = [];
-    private pendingOrigin?: AstNode;
+    private readonly pending: (SourceRange | undefined)[] = [];
 
-    constructor(private readonly send: (query: SqlQuery) => Promise<{ rows: Row[]; columns: string[] }>) {}
+    constructor(
+        private readonly document: LangiumDocument<Model>,
+        private readonly send: (query: SqlQuery) => Promise<{ rows: Row[]; columns: string[] }>
+    ) {}
 
-    noteOrigin(origin: AstNode): void {
-        this.pendingOrigin = origin;
-    }
-
-    async execute(query: SqlQuery): Promise<Row[]> {
-        const origin = this.pendingOrigin;
-        this.pendingOrigin = undefined;
-        const range = rangeOf(origin);
-        const entry: TraceEntry = {
-            index: this.entries.length + 1,
-            text: query.text,
-            params: query.params,
-            formatted: formatSql(query),
-            rowCount: 0,
-            preview: [],
-            columns: [],
-            durationMs: 0,
-            origin: origin && range ? { range, type: origin.$type, text: origin.$cstNode?.text ?? '' } : undefined
-        };
-        this.entries.push(entry);
-        const started = now();
-        try {
-            const { rows, columns } = await this.send(query);
-            entry.rowCount = rows.length;
-            entry.preview = rows.slice(0, PREVIEW_ROWS);
-            entry.columns = columns;
-            this.lastColumns = columns;
-            return rows;
-        } catch (e) {
-            entry.error = (e as Error).message;
-            throw e;
-        } finally {
-            entry.durationMs = now() - started;
+    readonly events: EventSink = {
+        emit: event => {
+            if (event.kind === 'statement') this.pending.push(event.range);
         }
-    }
+    };
+
+    readonly port: DataPort = {
+        execute: async query => {
+            const range = this.pending.shift();
+            const node = range && nodeAt(this.document, range);
+            const entry: TraceEntry = {
+                index: this.entries.length + 1,
+                text: query.text,
+                params: query.params,
+                formatted: formatSql(query),
+                rowCount: 0,
+                preview: [],
+                columns: [],
+                durationMs: 0,
+                origin: range && node && sameRange(range, node.$cstNode!.range) ? { range, type: node.$type, text: node.$cstNode!.text } : undefined
+            };
+            this.entries.push(entry);
+            const started = now();
+            try {
+                const { rows, columns } = await this.send(query);
+                entry.rowCount = rows.length;
+                entry.preview = rows.slice(0, PREVIEW_ROWS);
+                entry.columns = columns;
+                this.lastColumns = columns;
+                return rows;
+            } catch (e) {
+                entry.error = (e as Error).message;
+                throw e;
+            } finally {
+                entry.durationMs = now() - started;
+            }
+        }
+    };
 }
 
 /** A program analysed and ready to execute, pinned to the host it was checked against. */
 interface Prepared {
     host: ActiveHost;
     analysis: AnalyzeReport;
+    program: PreparedProgram;
+    /** The syntax tree, to name the node a statement came from. */
     document: LangiumDocument<Model>;
 }
 
@@ -226,7 +259,7 @@ export class Engine implements EngineApi {
                 host: {
                     settings,
                     config,
-                    language: this.hosts.get(config.schema, config.ruleContext),
+                    ...this.hosts.get(config.schema, config.ruleContext),
                     contents: { schema: config.schema, seed, script }
                 },
                 result: { ok: true, tables: config.schema.tables.map(t => t.name) }
@@ -234,7 +267,7 @@ export class Engine implements EngineApi {
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
             return {
-                host: { settings, configError: message, language: this.hosts.get(EMPTY_SCHEMA, DEFAULT_RULE), contents: EMPTY_CONTENTS },
+                host: { settings, configError: message, ...this.hosts.get(EMPTY_SCHEMA, DEFAULT_RULE), contents: EMPTY_CONTENTS },
                 result: { ok: false, error: message }
             };
         }
@@ -251,37 +284,40 @@ export class Engine implements EngineApi {
     // ---- analysis -------------------------------------------------------
 
     private async analyzeWith(host: ActiveHost, source: string, channel: 'analyze' | 'run'): Promise<Prepared> {
-        const language = host.language;
         const started = now();
-        const document = await language.parse(source, channel);
-        const parsed = now();
-        const diagnostics = await language.validate(document);
-        const program = describeProgram(document, language.services);
+        // The runtime parses and checks in one call.
+        const program = await host.minab.prepare(source);
         const checked = now();
+        const document = await host.language.parse(source, channel);
+        const info = describeProgram(document, program);
+        const parsed = now();
 
         let compiled: CompiledSql;
-        const tail = document.parseResult.value.tail;
-        if (diagnostics.some(d => d.severity === 1)) {
+        const result = program.compile();
+        if (result.ok) {
+            compiled = { ok: true, text: result.sql.text, params: result.sql.params, formatted: formatSql(result.sql) };
+        } else if (result.error.code === 'compile.programHasErrors') {
             compiled = { ok: false, reason: 'The program has errors — fix them to see its SQL.', pushesDown: false };
-        } else if (!tail) {
+        } else if (result.error.code === 'compile.nothingToCompile') {
             compiled = { ok: false, reason: 'The program has no final expression or query, so there is nothing to compile.', pushesDown: false };
+        } else if (result.error.code === 'compile.notSql') {
+            compiled = explainNoSql(String(result.error.params.reason), program.kind);
         } else {
-            const result = isQuery(tail) ? language.services.sqlCompiler.compileQuery(tail) : language.services.sqlCompiler.compileValue(tail);
-            compiled = result.ok
-                ? { ok: true, text: result.query.text, params: result.query.params, formatted: formatSql(result.query) }
-                : explainNoSql(result.reason, program.kind);
+            compiled = { ok: false, reason: result.error.message, pushesDown: false };
         }
         const compiledAt = now();
 
         return {
             host,
             document,
+            program,
             analysis: {
-                diagnostics,
-                program,
+                diagnostics: program.diagnostics.map(toEngineDiagnostic),
+                program: info,
                 compiled,
                 configError: host.configError,
-                timings: { parseMs: parsed - started, checkMs: checked - parsed, compileMs: compiledAt - checked }
+                // `prepare` does both, so `checkMs` is the whole call. `parseMs` is this engine's own parse for the syntax tree.
+                timings: { parseMs: parsed - checked, checkMs: checked - started, compileMs: compiledAt - parsed }
             }
         };
     }
@@ -308,7 +344,7 @@ export class Engine implements EngineApi {
     private async runOn(pickHost: () => ActiveHost, source: string, runId: number): Promise<RunReport> {
         const started = now();
         const prepared = await this.languageQueue.run(() => this.analyzeWith(pickHost(), source, 'run'));
-        const { host, analysis, document } = prepared;
+        const { host, analysis } = prepared;
         const base: RunReport = {
             ...analysis,
             runId,
@@ -326,60 +362,65 @@ export class Engine implements EngineApi {
         if (host.configError || !host.config) {
             return finish({ ...base, stage: 'config', error: { kind: 'config', message: host.configError ?? 'invalid host config' } });
         }
-        if (document.parseResult.lexerErrors.length > 0 || document.parseResult.parserErrors.length > 0) {
+        if (analysis.diagnostics.some(d => d.severity === 1 && d.source === 'syntax')) {
             return finish({ ...base, stage: 'parse' });
         }
-        if (analysis.diagnostics.some(d => d.severity === 1)) {
+        if (!prepared.program.ok) {
             return finish({ ...base, stage: 'check' });
         }
         return this.databaseQueue.run(async () => finish(await this.execute(prepared, base)));
     }
 
-    private async execute({ host, analysis, document }: Prepared, base: RunReport): Promise<RunReport> {
+    private async execute({ host, analysis, program, document }: Prepared, base: RunReport): Promise<RunReport> {
         const config = host.config!;
-        const tracer = new TracingExecutor(async query => {
-            if (host.settings.dataSource === 'fixtures') {
-                const rows = await new FixtureExecutor(config.responses).execute(query);
+        const fixtures = host.settings.dataSource === 'fixtures' ? new FixtureExecutor(config.responses) : undefined;
+        const tracer = new Tracer(document, async query => {
+            if (fixtures) {
+                const rows = await fixtures.execute(query);
                 return { rows, columns: rows[0] ? Object.keys(rows[0]) : [] };
             }
             try {
                 return await this.database.query(host.contents, query.text, query.params);
             } catch (e) {
                 if (e instanceof DataSourceError) throw e;
-                throw new DataSourceError(`Postgres rejected this statement: ${(e as Error).message}`);
+                // Keep the driver's error as it is: the runtime reads its SQLSTATE. The tab shows this text.
+                const failure = e as Error;
+                failure.message = `Postgres rejected this statement: ${failure.message}`;
+                throw failure;
             }
         });
 
+        // Boot the database before the clock starts, so the limits count the program and not the boot.
+        // A failure to boot comes back through the first statement, as it always did.
+        if (!fixtures && program.analysis.needsData) await this.database.load(host.contents).catch(() => undefined);
+
         const started = now();
         try {
-            const outcome = await host.language.services.interpreter.evaluate(document.parseResult.value, {
-                executor: tracer,
-                record: config.record,
-                recordTable: config.ruleContext.recordTable,
-                fieldValue: config.fieldValue,
-                onStatement: (_query, origin) => tracer.noteOrigin(origin)
-            });
+            const outcome = await program.run(
+                { record: config.record, fieldValue: config.fieldValue },
+                { data: tracer.port, events: tracer.events }
+            );
             base.runMs = now() - started;
             base.trace = tracer.entries;
             if (!outcome.ok) {
-                const refusal = explainRefusal(outcome.reason);
+                const { error } = outcome;
+                const failed = tracer.entries.find(entry => entry.error);
+                if (failed) return { ...base, stage: 'run', error: { kind: 'datasource', message: failed.error!, sql: failed.formatted } };
+                const reason = error.code === 'eval.failed' ? String(error.params.reason) : undefined;
+                const refusal = reason === undefined ? undefined : explainRefusal(reason);
                 return refusal
-                    ? { ...base, stage: 'run', refusal: { ...refusal, reason: outcome.reason } }
-                    : { ...base, stage: 'run', error: { kind: 'evaluation', message: outcome.reason } };
+                    ? { ...base, stage: 'run', refusal: { ...refusal, reason: reason! } }
+                    : { ...base, stage: 'run', error: { kind: 'evaluation', message: error.message } };
             }
             return { ...base, stage: 'done', result: this.shapeResult(outcome.value, analysis, tracer) };
         } catch (e) {
             base.runMs = now() - started;
             base.trace = tracer.entries;
-            const failed = tracer.entries.find(entry => entry.error);
-            if (e instanceof DataSourceError) {
-                return { ...base, stage: 'run', error: { kind: 'datasource', message: e.message, sql: failed?.formatted } };
-            }
             return { ...base, stage: 'run', error: { kind: 'internal', message: (e as Error).message ?? String(e) } };
         }
     }
 
-    private shapeResult(value: unknown, analysis: AnalyzeReport, tracer: TracingExecutor): RunResult {
+    private shapeResult(value: unknown, analysis: AnalyzeReport, tracer: Tracer): RunResult {
         const kind = analysis.program.kind;
         if (kind === 'query' && Array.isArray(value)) {
             const rows = value as Row[];
