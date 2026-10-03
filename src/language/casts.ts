@@ -15,7 +15,7 @@
  *  - `DATETIME`: `2026-10-02 08:30:00` (no time zone)
  */
 
-import { DateError, dateOf, parseInstant, timeOf } from './dates.js';
+import { DateError, dateOf, formatInstant, instantFromLocal, parseInstant, timeOf } from './dates.js';
 import { coded } from './diagnostics/codes.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import { Big, NumberError, checkInteger, decimalText, toBig } from './values.js';
@@ -106,6 +106,40 @@ function parseDateTime(text: string): [string, string] | undefined {
 /** A host `Date` is read as the UTC date and time it holds. */
 function dateText(value: unknown): unknown {
     return value instanceof Date ? value.toISOString() : value;
+}
+
+const HAS_ZONE = /\d:\d{2}(?::\d{2}(?:\.\d+)?)?\s*(?:Z|[+-]\d{2}(?::?\d{2})?)$/i;
+
+const failWith = (fail: () => Error): never => {
+    throw fail();
+};
+
+/**
+ * A `DATETIME` from text or from a `DATE` (D21): an instant, as ISO 8601 UTC text. A zone in the text
+ * is used. Without one, the text is a wall-clock time in the run's time zone, and a date alone is
+ * midnight there. A `DATETIME` is already an instant.
+ */
+function toInstant(text: string, from: Kind, zone: string): string | undefined {
+    if (from === 'DATETIME') return normalizedInstant(text);
+    const parts = parseDateTime(text);
+    if (!parts) return undefined;
+    if (from === 'TEXT' && HAS_ZONE.test(text)) return normalizedInstant(text);
+    const wall = parseInstant(`${parts[0]}T${parts[1]}Z`); // the wall-clock reading, as if UTC
+    try {
+        return formatInstant(instantFromLocal(wall, zone));
+    } catch (e) {
+        if (e instanceof DateError) return undefined;
+        throw e;
+    }
+}
+
+function normalizedInstant(text: string): string | undefined {
+    try {
+        return formatInstant(parseInstant(text));
+    } catch (e) {
+        if (e instanceof DateError) return undefined;
+        throw e;
+    }
 }
 
 /** The date or the time of a `DATETIME` text, read in the run's time zone (D21). `undefined` when the text is not a date time. */
@@ -200,9 +234,7 @@ function castOne(value: unknown, from: Kind, to: Kind, zone: string): unknown {
         }
         case 'DATETIME': {
             if (text === undefined || (from !== 'TEXT' && from !== 'DATE' && from !== 'DATETIME')) throw fail();
-            const parts = parseDateTime(text.trim());
-            if (!parts) throw fail();
-            return parts.join(' ');
+            return toInstant(text.trim(), from, zone) ?? failWith(fail);
         }
         case 'JSON': {
             if (from === 'JSON') return value;

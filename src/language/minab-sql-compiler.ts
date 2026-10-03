@@ -478,6 +478,16 @@ export class MinabSqlCompiler {
             if (!target.array && (target.base === 'DATE' || target.base === 'TIME') && this.baseOf(expr.value) === 'DATETIME') {
                 return `CAST((CAST(${operand} AS timestamptz) AT TIME ZONE ${ctx.sqlClock.zone()}) AS ${this.sqlType(target)})`;
             }
+            if (!target.array && target.base === 'DATETIME') {
+                const from = this.baseOf(expr.value);
+                // A `DATETIME` is an instant. Text without a zone, and a `DATE`, are read in the run's time zone (D21).
+                if (from === 'DATETIME') return operand;
+                if (from === 'DATE') return `(CAST(${operand} AS timestamp) AT TIME ZONE ${ctx.sqlClock.zone()})`;
+                if (from === 'TEXT' || from === 'CITEXT') {
+                    const zoned = `CAST(${operand} AS text) ~* '\\d:\\d{2}(:\\d{2}(\\.\\d+)?)?\\s*(Z|[+-]\\d{2}(:?\\d{2})?)$'`;
+                    return `(CASE WHEN ${zoned} THEN CAST(${operand} AS timestamptz) ELSE CAST(${operand} AS timestamp) AT TIME ZONE ${ctx.sqlClock.zone()} END)`;
+                }
+            }
             return `CAST(${trimmed} AS ${this.sqlType(target)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;

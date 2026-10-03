@@ -425,9 +425,9 @@ The interpreter and the compiled SQL give the same answer for every cast below (
 | `TEXT`/`CITEXT` | `UUID` | Must be the form 8-4-4-4-12 of hex digits, in any case. The result is in lower case. Any other text fails. |
 | `TEXT`/`CITEXT` | `DATE` | ISO 8601 date only: `"2026-10-02"`. A date that does not exist (`"2026-02-30"`) fails. |
 | `TEXT`/`CITEXT` | `TIME` | ISO 8601 time, with up to six fraction digits: `"08:30"`, `"08:30:00"`, `"08:30:00.5"`. |
-| `TEXT`/`CITEXT` | `DATETIME` | ISO 8601: `"2026-10-02T08:30:00"` or `"2026-10-02 08:30:00"`. A date alone means midnight. A zone (`Z`, `+02:00`) is read and ignored: the text is taken as UTC (known difference from §7.2, where a `DATETIME` is an instant; a host passes instants as values, not as text to cast). |
+| `TEXT`/`CITEXT` | `DATETIME` | ISO 8601: `"2026-10-02T08:30:00"` or `"2026-10-02 08:30:00"`. A date alone means midnight. The result is an instant (§7.2). A zone in the text (`Z`, `+02:00`) is used. Without one, the text is a wall-clock time **in the run's time zone**: in `Asia/Tehran`, `"2026-10-02 08:30:00"` is `2026-10-02T05:00:00.000Z`. A time that does not exist (clocks go forward) is read as standard time, like Postgres. |
 | `DATETIME` | `DATE` or `TIME` | The date part or the time part, **in the run's time zone** (§7.2). |
-| `DATE` | `DATETIME` | The date at `00:00:00`. |
+| `DATE` | `DATETIME` | Midnight of that date in the run's time zone. |
 | `DATE`, `TIME`, `DATETIME`, `UUID` | `TEXT`/`CITEXT` | The value as text (a `DATETIME` is `2026-10-02 08:30:00`). |
 | `TEXT`/`CITEXT` | `JSON` | The text is parsed as JSON: `"{\"a\": 1}"` → an object. Text that is not JSON fails. |
 | `JSON` | `JSON` | Unchanged. |

@@ -299,6 +299,42 @@ const castCases: DifferentialCase[] = [
     make('the cast date can be compared with TODAY', { ts: '2026-03-20T21:00:00Z' }, 'CAST(.ts AS DATE) == TODAY()', true, TEHRAN)
 ];
 
+// ---- CAST(text AS DATETIME) and CAST(date AS DATETIME) are instants ---------
+
+const textSchema = { tables: [{ name: 'Item', primaryKey: 'id', columns: { id: 'INTEGER', s: 'TEXT', d: 'DATE' } }] };
+
+function castCase(name: string, record: Record<string, unknown>, expr: string, expect: unknown, clock: TestClock = UTC): DifferentialCase {
+    return { name, schema: textSchema, record: { id: 1, ...record }, expr, expect, clock };
+}
+
+const instantCastCases: DifferentialCase[] = [
+    castCase('text without a zone is a wall-clock time in UTC', { s: '2026-10-02T08:30:00' }, 'CAST(.s AS DATETIME)', '2026-10-02T08:30:00.000Z', UTC),
+    castCase('text without a zone is a wall-clock time in Tehran', { s: '2026-10-02 08:30:00' }, 'CAST(.s AS DATETIME)', '2026-10-02T05:00:00.000Z', TEHRAN),
+    castCase('text without a zone in New York (summer time)', { s: '2026-07-01 08:30:00' }, 'CAST(.s AS DATETIME)', '2026-07-01T12:30:00.000Z', NEW_YORK),
+    castCase('text without a zone in New York (winter time)', { s: '2026-12-01 08:30:00' }, 'CAST(.s AS DATETIME)', '2026-12-01T13:30:00.000Z', NEW_YORK),
+    castCase('text with Z ignores the run zone', { s: '2026-10-02T08:30:00Z' }, 'CAST(.s AS DATETIME)', '2026-10-02T08:30:00.000Z', TEHRAN),
+    castCase('text with an offset is that instant', { s: '2026-10-02T08:30:00+02:00' }, 'CAST(.s AS DATETIME)', '2026-10-02T06:30:00.000Z', NEW_YORK),
+    castCase('text with a short offset', { s: '2026-10-02 08:30:00-05' }, 'CAST(.s AS DATETIME)', '2026-10-02T13:30:00.000Z', TEHRAN),
+    castCase('a date alone is midnight in the run zone', { s: '2026-10-02' }, 'CAST(.s AS DATETIME)', '2026-10-01T20:30:00.000Z', TEHRAN),
+    castCase(
+        'a time that does not exist in Berlin is read as standard time',
+        { s: '2026-03-29 02:30:00' },
+        'CAST(.s AS DATETIME)',
+        '2026-03-29T01:30:00.000Z',
+        BERLIN
+    ),
+    castCase(
+        'a DATE is midnight in the run zone',
+        { d: '2026-10-02' },
+        'CAST(.d AS DATETIME)',
+        '2026-10-01T22:00:00.000Z',
+        at('2026-03-20T21:00:00Z', 'Europe/Berlin')
+    ),
+    castCase('a DATE round trip keeps the date', { d: '2026-10-02' }, 'CAST(CAST(.d AS DATETIME) AS DATE)', '2026-10-02', TEHRAN),
+    castCase('text that is not a date time fails', { s: '2026-10-02 later' }, 'CAST(.s AS DATETIME)', { error: 'cast-failed' }),
+    castCase('a day that does not exist fails', { s: '2026-02-30 10:00:00' }, 'CAST(.s AS DATETIME)', { error: 'cast-failed' })
+];
+
 export const cases: DifferentialCase[] = [
     ...clockCases,
     ...partCases,
@@ -306,5 +342,6 @@ export const cases: DifferentialCase[] = [
     ...diffDateCases,
     ...addDateTimeCases,
     ...diffDateTimeCases,
-    ...castCases
+    ...castCases,
+    ...instantCastCases
 ];
