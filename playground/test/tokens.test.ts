@@ -78,3 +78,31 @@ test('prettySql breaks only top-level clauses', () => {
     const sql = 'SELECT (SELECT "a" FROM "B" WHERE x = 1) AS "v" FROM "T" WHERE "s" = \'a FROM b\' ORDER BY "v" DESC';
     expect(prettySql(sql)).toBe('SELECT (SELECT "a" FROM "B" WHERE x = 1) AS "v"\nFROM "T"\nWHERE "s" = \'a FROM b\'\nORDER BY "v" DESC');
 });
+
+describe('names in any language', () => {
+    test('a Persian name is one token, with or without a leading dot', () => {
+        expect(types('.وضعیت == x')).toEqual(['sigil.record:.وضعیت', 'operator:==', 'identifier:x']);
+        expect(types('FROM سفارش')).toEqual(['keyword.pipeline:FROM', 'identifier:سفارش']);
+        expect(types('.مشتری.نام')).toEqual(['sigil.record:.مشتری', 'delimiter:.', 'member:نام']);
+    });
+
+    test('Turkish letters and a zero-width non-joiner inside a name', () => {
+        expect(types('.İl == .ılçe')).toEqual(['sigil.record:.İl', 'operator:==', 'sigil.record:.ılçe']);
+        expect(types('x.می‌خواهم')).toEqual(['identifier:x', 'delimiter:.', 'member:می‌خواهم']);
+    });
+
+    test('a backtick name is one token', () => {
+        expect(types('.`Order date` <= .`Ship date`')).toEqual(['sigil.record:.`Order date`', 'operator:<=', 'sigil.record:.`Ship date`']);
+        expect(types('x.`a b`')).toEqual(['identifier:x', 'delimiter:.', 'member:`a b`']);
+        expect(types('#`Line items`')).toEqual(['sigil.alias:#`Line items`']);
+    });
+
+    test('a keyword in backticks is a name, and an escaped backtick stays inside it', () => {
+        expect(types('.`FROM`')).toEqual(['sigil.record:.`FROM`']);
+        expect(types('AS `a\\`b`')).toEqual(['keyword.pipeline:AS', 'identifier:`a\\`b`']);
+    });
+
+    test('a name that only starts like a keyword is a name', () => {
+        expect(types('FROMا')).toEqual(['identifier:FROMا']);
+    });
+});

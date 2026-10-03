@@ -9,6 +9,8 @@ import { MinabInterpreter } from './minab-interpreter.js';
 import { MinabDocumentValidator } from './diagnostics/minab-document-validator.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
 import { MinabSqlCompiler } from './minab-sql-compiler.js';
+import { MinabTokenBuilder } from './minab-token-builder.js';
+import { MinabValueConverter } from './minab-value-converter.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
 import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
@@ -110,6 +112,10 @@ function createMinabModule(
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),
         interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler),
+        parser: {
+            TokenBuilder: () => new MinabTokenBuilder(),
+            ValueConverter: () => new MinabValueConverter()
+        },
         validation: {
             DocumentValidator: services => new MinabDocumentValidator(services)
         },

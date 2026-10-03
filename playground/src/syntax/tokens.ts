@@ -151,7 +151,12 @@ const OPERATORS = [
     '|'
 ];
 
-const IDENT = /[A-Za-z_][A-Za-z0-9_]*/y;
+/**
+ * A name: a plain name (any Unicode letter or `_` first, then letters,
+ * digits, `_`, and U+200C / U+200D after the first character) or a backtick
+ * name. Same rules as `terminal ID` and `terminal QUOTED_NAME` in the grammar.
+ */
+const IDENT = /[\p{L}_][\p{L}\p{N}_\u200C\u200D]*|`(?:[^`\\]|\\[\s\S])*`/uy;
 const NUMBER = /[0-9]+(\.[0-9]+)?/y;
 
 /** Whether a `.` here starts a new current-record reference (`.status`) rather than continuing a member chain (`x.status`). */
@@ -278,14 +283,15 @@ export function tokenizeLine(line: string, state: LineState): { tokens: Token[];
         const word = IDENT.exec(line);
         if (word) {
             let text = word[0];
+            const quoted = text.startsWith('`');
             let end = i + text.length;
-            if (text === 'if' && line[end] === '!') {
+            if (!quoted && text === 'if' && line[end] === '!') {
                 text = 'if!';
                 end++;
             }
             // A name before `(` that is not a built-in is a user function (spec §5.3).
             const calls = /^\s*\(/.test(line.slice(end));
-            push(WORD_TYPES.get(text) ?? (calls ? 'function' : 'identifier'), i, end);
+            push((quoted ? undefined : WORD_TYPES.get(text)) ?? (calls ? 'function' : 'identifier'), i, end);
             i = end;
             continue;
         }

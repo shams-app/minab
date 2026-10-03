@@ -254,10 +254,11 @@ export class MinabSqlCompiler {
     }
 
     private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
-        const source = scope.alias === scope.table ? ` FROM ${quoteIdent(scope.table)}` : ` FROM ${quoteIdent(scope.table)} AS ${quoteIdent(scope.alias)}`;
+        const physical = this.sqlTable(scope.table);
+        const source = scope.alias === physical ? ` FROM ${quoteIdent(physical)}` : ` FROM ${quoteIdent(physical)} AS ${quoteIdent(scope.alias)}`;
         const joins = query.joins.map(join => {
             const keyword = join.cross ? 'CROSS JOIN' : join.left ? 'LEFT JOIN' : 'JOIN';
-            const target = `${quoteIdent(this.table(join.source).name)} AS ${quoteIdent(join.alias)}`;
+            const target = `${quoteIdent(this.sqlTable(join.source))} AS ${quoteIdent(join.alias)}`;
             if (join.cross) return ` ${keyword} ${target}`;
             if (!join.condition) fail(`"${join.alias}" is joined without an ON condition`);
             return ` ${keyword} ${target} ON ${this.expression(join.condition, ctx, scopes)}`;
@@ -268,13 +269,47 @@ export class MinabSqlCompiler {
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
         const clause = query.selectClause;
         if (!clause || clause.all || clause.items.length === 0) {
-            return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}*`;
+            return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}${this.star(scopes[0])}`;
         }
         const items = clause.items.map(item => {
             const sql = this.expression(item.expression, ctx, scopes);
-            return item.alias ? `${sql} AS ${quoteIdent(item.alias)}` : sql;
+            const alias = item.alias ?? this.renamedField(item.expression, ctx, scopes);
+            return alias ? `${sql} AS ${quoteIdent(alias)}` : sql;
         });
         return `SELECT ${clause.distinct ? 'DISTINCT ' : ''}${items.join(', ')}`;
+    }
+
+    /**
+     * The Minab name of a bare field in a `SELECT` item without `AS`, when
+     * the column's `sqlName` is different. Without this alias the row would
+     * come back keyed by the physical name.
+     */
+    private renamedField(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
+        if (!field) return undefined;
+        const table = isCurrentRecord(expr) ? this.currentTable(ctx, scopes) : this.staticTable(expr, ctx, scopes);
+        const column = table ? this.schema.getColumn(table, field) : undefined;
+        return column?.type.kind === 'scalar' && column.sqlName !== undefined && column.sqlName !== column.name ? column.name : undefined;
+    }
+
+    /**
+     * `*`. A row must keep Minab names as keys, so when a column has a
+     * `sqlName` the columns are listed with `AS <Minab name>`. Otherwise
+     * plain `*` is the same and shorter.
+     */
+    private star(scope: SqlScope): string {
+        const entries = [...scope.named.values()];
+        const renamed = entries.some(e => this.table(e.table).columns.some(c => c.type.kind === 'scalar' && c.sqlName !== undefined && c.sqlName !== c.name));
+        if (!renamed) return '*';
+        return entries
+            .flatMap(e =>
+                this.table(e.table).columns.flatMap(c => {
+                    if (c.type.kind === 'collection') return [];
+                    if (c.type.kind === 'ref') return c.type.foreignKey ? [`${quoteIdent(e.alias)}.${quoteIdent(c.type.foreignKey)}`] : [];
+                    return [`${quoteIdent(e.alias)}.${quoteIdent(c.sqlName ?? c.name)} AS ${quoteIdent(c.name)}`];
+                })
+            )
+            .join(', ');
     }
 
     // ---- expressions ---------------------------------------------------
@@ -411,7 +446,7 @@ export class MinabSqlCompiler {
         if (schema.type.kind === 'collection') {
             fail(`"${field}" is a collection — use it inside an aggregate, EXISTS, or a filter (spec §3.4)`);
         }
-        const name = schema.type.kind === 'ref' ? this.refForeignKey(table, schema) : field;
+        const name = schema.type.kind === 'ref' ? this.refForeignKey(table, schema) : (schema.sqlName ?? schema.name);
         if (row.kind === 'scope') {
             return `${quoteIdent(row.alias)}.${quoteIdent(name)}`;
         }
@@ -438,7 +473,7 @@ export class MinabSqlCompiler {
     private refSubquery(row: { table: string; keyExpr: string }, column: string, ctx: Ctx): string {
         const alias = ctx.freshAlias();
         const pk = this.primaryKey(row.table);
-        return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(row.table)} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
+        return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(this.sqlTable(row.table))} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
     }
 
     private binary(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
@@ -545,7 +580,7 @@ export class MinabSqlCompiler {
     }
 
     private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined): string {
-        const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
+        const from = ` FROM ${quoteIdent(this.sqlTable(source.table))} AS ${quoteIdent(source.alias)}`;
         const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
         if (name === 'EXISTS') {
             return `EXISTS (SELECT 1${from}${where})`;
@@ -681,10 +716,19 @@ export class MinabSqlCompiler {
         return column;
     }
 
+    /** The table's name in the database. */
+    private sqlTable(name: string): string {
+        const table = this.table(name);
+        return table.sqlName ?? table.name;
+    }
+
+    /** The physical name of the column that identifies a row (`primaryKey` is a schema column name, so it goes through `sqlName`). */
     private primaryKey(table: string): string {
-        const key = this.table(table).primaryKey;
+        const schema = this.table(table);
+        const key = schema.primaryKey;
         if (!key) fail(`the schema does not say which column identifies a row of "${table}" (set primaryKey)`);
-        return key;
+        const column = schema.columns.find(c => c.name === key);
+        return column?.sqlName ?? key;
     }
 
     private refForeignKey(table: string, column: MinabColumnSchema): string {

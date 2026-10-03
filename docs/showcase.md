@@ -595,6 +595,29 @@ Two things worth calling out about *why* it's written this way, not just what it
 
 ---
 
+## 15. Names in any language, and quoted names
+
+Names are not limited to ASCII (spec §2.3). A Persian field name is a plain name:
+
+```
+FROM سفارش
+WHERE .وضعیت == "ارسال‌شده" AND .مبلغ > 100
+SELECT .مبلغ AS مبلغ_کل
+ORDERBY .مبلغ DESC
+```
+
+A name with spaces or symbols goes in backticks. A backtick also lets a keyword be a field name:
+
+```
+FROM Order
+WHERE .`Order date` <= .`Ship date`
+SELECT .id, .`FROM` AS source
+```
+
+Turkish letters work too: `.İl == "İzmir"`.
+
+---
+
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.

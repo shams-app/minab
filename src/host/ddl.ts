@@ -21,7 +21,10 @@ import type { ScalarType } from '../language/minab-types.js';
 import type { MinabSchema, MinabTableSchema } from '../language/schema.js';
 
 export interface PhysicalColumn {
+    /** The column's name in the database (its `sqlName`, else its Minab name). */
     name: string;
+    /** The Minab name, as a seed row writes it. Same as `name` for a foreign-key column. */
+    minabName: string;
     /** The Postgres type, e.g. `numeric`, `text[]`. */
     sqlType: string;
     /** The Minab type as written in a config, e.g. `DECIMAL?`. */
@@ -33,7 +36,10 @@ export interface PhysicalColumn {
 }
 
 export interface PhysicalTable {
+    /** The table's name in the database (its `sqlName`, else its Minab name). */
     name: string;
+    /** The Minab name, as a seed names the table. */
+    minabName: string;
     columns: PhysicalColumn[];
 }
 
@@ -80,7 +86,7 @@ function primaryKeyType(table: MinabTableSchema | undefined): ScalarType | undef
 export function physicalTables(schema: MinabSchema): PhysicalTable[] {
     const byName = new Map(schema.tables.map(t => [t.name, t]));
     const tables = new Map<string, PhysicalTable>();
-    for (const table of schema.tables) tables.set(table.name, { name: table.name, columns: [] });
+    for (const table of schema.tables) tables.set(table.name, { name: table.sqlName ?? table.name, minabName: table.name, columns: [] });
 
     const add = (tableName: string, column: PhysicalColumn) => {
         const table = tables.get(tableName);
@@ -92,7 +98,8 @@ export function physicalTables(schema: MinabSchema): PhysicalTable[] {
         for (const column of table.columns) {
             if (column.type.kind === 'scalar') {
                 add(table.name, {
-                    name: column.name,
+                    name: column.sqlName ?? column.name,
+                    minabName: column.name,
                     sqlType: scalarSql(column.type.type),
                     minabType: scalarMinab(column.type.type),
                     nullable: columnNullable(column.type.type),
@@ -108,6 +115,7 @@ export function physicalTables(schema: MinabSchema): PhysicalTable[] {
                 const keyType = primaryKeyType(byName.get(type.table));
                 add(table.name, {
                     name: type.foreignKey,
+                    minabName: type.foreignKey,
                     sqlType: keyType ? scalarSql(keyType) : 'text',
                     minabType: keyType ? scalarMinab({ ...keyType, nullable: type.nullable }) : 'UUID',
                     nullable: type.nullable,
@@ -118,6 +126,7 @@ export function physicalTables(schema: MinabSchema): PhysicalTable[] {
                 const keyType = primaryKeyType(table);
                 add(type.table, {
                     name: type.foreignKey,
+                    minabName: type.foreignKey,
                     sqlType: keyType ? scalarSql(keyType) : 'text',
                     minabType: keyType ? scalarMinab({ ...keyType, nullable: true }) : 'UUID?',
                     nullable: true,
@@ -178,18 +187,18 @@ export function insertSql(table: PhysicalTable, rows: Row[]): string | undefined
     const unknown = new Set<string>();
     for (const row of rows)
         for (const key of Object.keys(row)) {
-            if (!columns.some(c => c.name === key)) unknown.add(key);
+            if (!columns.some(c => c.minabName === key)) unknown.add(key);
         }
     if (unknown.size > 0) {
         throw new Error(
-            `seed.${table.name}: ${[...unknown].map(k => `"${k}"`).join(', ')} ${unknown.size === 1 ? 'is not a column' : 'are not columns'} of ${table.name}`
+            `seed.${table.minabName}: ${[...unknown].map(k => `"${k}"`).join(', ')} ${unknown.size === 1 ? 'is not a column' : 'are not columns'} of ${table.minabName}`
         );
     }
     const values = rows.map((row, index) => {
         try {
-            return `  (${columns.map(c => sqlLiteral(row[c.name], c.sqlType)).join(', ')})`;
+            return `  (${columns.map(c => sqlLiteral(row[c.minabName], c.sqlType)).join(', ')})`;
         } catch (e) {
-            throw new Error(`seed.${table.name}[${index}]: ${(e as Error).message}`);
+            throw new Error(`seed.${table.minabName}[${index}]: ${(e as Error).message}`);
         }
     });
     return `INSERT INTO ${quoteIdent(table.name)} (${columns.map(c => quoteIdent(c.name)).join(', ')}) VALUES\n${values.join(',\n')};`;
@@ -199,7 +208,7 @@ export function insertSql(table: PhysicalTable, rows: Row[]): string | undefined
 export function databaseScript(schema: MinabSchema, seed: Record<string, Row[]> = {}): string {
     const tables = physicalTables(schema);
     for (const name of Object.keys(seed)) {
-        if (!tables.some(t => t.name === name)) throw new Error(`seed: "${name}" is not a table in the schema`);
+        if (!tables.some(t => t.minabName === name)) throw new Error(`seed: "${name}" is not a table in the schema`);
     }
     const parts: string[] = [];
     if (tables.some(t => t.columns.some(c => c.sqlType.startsWith('citext')))) {
@@ -207,7 +216,7 @@ export function databaseScript(schema: MinabSchema, seed: Record<string, Row[]> 
     }
     for (const table of tables) parts.push(createTableSql(table));
     for (const table of tables) {
-        const insert = insertSql(table, seed[table.name] ?? []);
+        const insert = insertSql(table, seed[table.minabName] ?? []);
         if (insert) parts.push(insert);
     }
     return parts.join('\n\n') + '\n';
