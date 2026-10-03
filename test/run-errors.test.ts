@@ -277,8 +277,11 @@ describe('a real database (PGlite, or Postgres when MINAB_TEST_DATABASE_URL is s
     });
 
     test('a failure that has no special code is data.error with its SQLSTATE, and no SQL in the text', async () => {
-        const program = await createMinab({ schema: orderSchema() }).prepare('FROM Order SELECT .id');
-        // The table does not exist in this schema.
+        // No database has a table of this name (a shared Postgres may hold `Order` from another suite).
+        const schema = orderSchema();
+        const missing = { ...schema, tables: [{ ...schema.tables.find(t => t.name === 'Customer')!, name: 'NoSuchTableR4' }] };
+        const program = await createMinab({ schema: missing }).prepare('FROM NoSuchTableR4 SELECT .id');
+        expect(program.diagnostics).toEqual([]);
         const result = await database.isolated('SELECT 1', () => program.run({}, { data: port() }));
         expect(result).toMatchObject({ ok: false, error: { code: 'data.error', params: { sqlstate: '42P01' } } });
         expect(JSON.stringify(result)).not.toContain('SELECT');
