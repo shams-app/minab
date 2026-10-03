@@ -71,7 +71,7 @@ import {
     type SwitchExpr,
     type Type
 } from './generated/ast.js';
-import { isBuiltinName } from './minab-builtins.js';
+import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinSignature } from './minab-builtins.js';
 import type { AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
@@ -527,28 +527,41 @@ export class MinabInterpreter {
             }
             return await this.callFunction(callee.name, expr.args, state);
         }
-        const values = await this.expression(expr.args[0], state);
-        const items = Array.isArray(values) ? values : values === null ? [] : [values];
-        switch (callee.name) {
-            case 'COUNT':
-                return items.length;
-            case 'EXISTS':
-                return items.length > 0;
-            case 'ALL':
-                return items.every(i => this.truthy(i));
-            case 'ANY':
-                return items.some(i => this.truthy(i));
-            case 'SUM':
-                return this.sum(items);
-            case 'AVG':
-                return items.length === 0 ? null : arithmetic('/', this.sum(items), items.length);
-            case 'MIN':
-                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) < 0 ? b : a));
-            case 'MAX':
-                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) > 0 ? b : a));
-            default:
-                fail(`built-in "${callee.name}" is not evaluated yet`);
+        const builtin = getBuiltin(callee.name)!;
+        if (builtin.kind !== 'scalar') {
+            if (expr.args.length !== 1) fail(`${builtin.name} takes one argument`);
+            const values = await this.expression(expr.args[0], state);
+            const items = Array.isArray(values) ? values : values === null ? [] : [values];
+            return this.runBuiltin(builtin, [items], []);
         }
+        const values: MinabValue[] = [];
+        for (const arg of expr.args) values.push(await this.expression(arg, state));
+        // A function without `nullPropagates: false` gives `null` for a `null` argument (spec §7.7).
+        if (builtin.nullPropagates !== false && values.some(v => v === null || v === undefined)) return null;
+        const info = expr.args.map(arg => ({ citext: this.isCitextArg(arg, state) }));
+        return this.runBuiltin(builtin, values, info);
+    }
+
+    private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[]): MinabValue {
+        try {
+            return builtin.evaluate(args, info);
+        } catch (e) {
+            if (e instanceof BuiltinError) fail(e.message);
+            throw e;
+        }
+    }
+
+    /** True when the argument is `CITEXT`: by its inferred type, or (without a checker) when it is a `CITEXT` column. */
+    private isCitextArg(expr: Expression, state: State): boolean {
+        if (this.typeChecker) {
+            try {
+                const inferred = this.typeChecker.inferType(expr);
+                if (inferred.ok) return inferred.type.kind === 'scalar' && !inferred.type.array && inferred.type.base === 'CITEXT';
+            } catch {
+                // fall through to the column check
+            }
+        }
+        return this.isCitext(expr, state);
     }
 
     // ---- operators ------------------------------------------------------
@@ -697,15 +710,6 @@ export class MinabInterpreter {
         const numeric = toNumeric(value);
         if (numeric === undefined) fail('expected a number');
         return numeric;
-    }
-
-    private compareNumbers(a: Numeric, b: Numeric): number {
-        return decimalCompare(a, b) ?? (a as number) - (b as number);
-    }
-
-    /** `SUM` is exact: `INTEGER` items give an `INTEGER`, any `DECIMAL` item gives a `DECIMAL`. */
-    private sum(items: MinabValue[]): Numeric {
-        return items.reduce((total: Numeric, i) => arithmetic('+', total, this.number(i)), 0);
     }
 
     /** A number literal reads its own text, so `0.30` and 20-digit numbers are not rounded by JavaScript. */

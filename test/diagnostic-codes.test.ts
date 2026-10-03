@@ -92,6 +92,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.functionNameCase': { via: 'validator', program: 'fn TAX(a: INTEGER): INTEGER { a }' },
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
+    'call.wrongArgumentCount': { via: 'validator', program: 'ROUND()' },
 
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 

@@ -656,6 +656,36 @@ Turkish letters work too: `.İl == "İzmir"`.
 
 ---
 
+## 17. Text, null and number functions
+
+*Spec §5.3.1.* Built-ins can take several arguments, and some arguments are optional. A `null` argument gives `null`, except in `COALESCE`, `GREATEST` and `LEAST`.
+
+```
+// Text
+LENGTH(TRIM(.tracking_code)) >= 5
+STARTS_WITH(.tracking_code, "BR-") OR ENDS_WITH(.tracking_code, "-X")
+CONTAINS(.status, "%")               // a plain character: no wildcard
+SUBSTRING(.tracking_code, 1, 3)
+REPLACE(LOWER(.status), " ", "")
+```
+
+```
+// Null
+COALESCE(.customer.country, .customer.city)   // same type as .customer.city; not null
+GREATEST(.total, 10)
+LEAST(.total, 10, 100)
+```
+
+```
+// Numbers
+ROUND(.total * 1.09, 2)              // half away from zero, exact decimals
+ABS(.total - 100)
+FLOOR(.total)
+CEIL(.total)
+```
+
+---
+
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.

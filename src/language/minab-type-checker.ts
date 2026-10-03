@@ -78,7 +78,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
-import { getBuiltin } from './minab-builtins.js';
+import { checkBuiltin, getBuiltin } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
@@ -423,16 +423,18 @@ export class MinabTypeChecker {
             const host = this.schema.getHostFunction(name);
             return host ? this.inferHostCall(node, host) : this.inferUserCall(node, name);
         }
-        if (node.args.length !== 1) {
-            return err('call.builtinArity', { name, actual: node.args.length });
+        const argTypes: MinabType[] = [];
+        for (const arg of node.args) {
+            const argType = this.inferType(arg);
+            if (!argType.ok) return argType;
+            argTypes.push(argType.type);
         }
-        const argType = this.inferType(node.args[0]);
-        if (!argType.ok) return argType;
-        const result = builtin.check(argType.type);
+        const result = checkBuiltin(builtin, argTypes);
         if (result.ok) return ok(result.type);
-        const promoted = this.promoteForGroupedAggregate(node, argType.type);
+        // In a grouped query an aggregate reads the group: `SUM(.total)` has one value per row.
+        const promoted = builtin.kind === 'scalar' || argTypes.length !== 1 ? undefined : this.promoteForGroupedAggregate(node, argTypes[0]);
         if (promoted) {
-            const retried = builtin.check(promoted);
+            const retried = checkBuiltin(builtin, [promoted]);
             if (retried.ok) return ok(retried.type);
         }
         return failWith(result);
