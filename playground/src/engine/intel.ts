@@ -69,7 +69,10 @@ export const BUILTIN_DOCS: Record<string, { signature: string; doc: string }> = 
     CEIL: { signature: 'CEIL(n: N) → INTEGER', doc: 'Rounds up to a whole number.' },
     GREATEST: { signature: 'GREATEST(a: T, b: T, …) → T', doc: 'The largest value. `null` arguments are ignored; the answer is `null` only when all are.' },
     LEAST: { signature: 'LEAST(a: T, b: T, …) → T', doc: 'The smallest value. `null` arguments are ignored; the answer is `null` only when all are.' },
-    NOW: { signature: 'NOW() → DATETIME', doc: 'The instant the run started. Every `NOW()` in one run is the same. In SQL it is a parameter, not the database clock.' },
+    NOW: {
+        signature: 'NOW() → DATETIME',
+        doc: 'The instant the run started. Every `NOW()` in one run is the same. In SQL it is a parameter, not the database clock.'
+    },
     TODAY: { signature: 'TODAY() → DATE', doc: 'The date of `NOW()` in the time zone of the run.' },
     YEAR: { signature: 'YEAR(d: DATE | DATETIME) → INTEGER', doc: 'The year. A `DATETIME` is read in the time zone of the run.' },
     MONTH: { signature: 'MONTH(d: DATE | DATETIME) → INTEGER', doc: 'The month, 1 to 12. A `DATETIME` is read in the time zone of the run.' },

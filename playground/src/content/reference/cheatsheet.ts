@@ -381,7 +381,8 @@ export const cheatsheet: CheatSection[] = [
                 id: 'date-math',
                 title: 'DATE_ADD · DATE_DIFF',
                 syntax: 'DATE_ADD(.start_date, 1, "month")  →  DATE\nDATE_DIFF(TODAY(), .paid_on, "day") > 30  →  BOOLEAN',
-                description: 'Units: `"year"`, `"month"`, `"week"`, `"day"`, and for a `DATETIME` also `"hour"`, `"minute"`, `"second"`. The unit is a text literal. Month ends clamp: Jan 31 + 1 month is Feb 28. `DATE_DIFF` truncates toward zero.',
+                description:
+                    'Units: `"year"`, `"month"`, `"week"`, `"day"`, and for a `DATETIME` also `"hour"`, `"minute"`, `"second"`. The unit is a text literal. Month ends clamp: Jan 31 + 1 month is Feb 28. `DATE_DIFF` truncates toward zero.',
                 specRef: '§5.3.1',
                 keywords: ['DATE_ADD', 'DATE_DIFF']
             }
