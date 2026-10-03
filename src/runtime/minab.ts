@@ -13,6 +13,7 @@ import type { CacheStats, Minab, MinabOptions, PrepareOptions, PreparedProgram }
 export function createMinab(options: MinabOptions): Minab {
     const cache = new ServiceCache(options.serviceCacheSize ?? DEFAULT_SERVICE_CACHE_SIZE, options.mode ?? 'production');
     const defaultContext = options.ruleContext ?? DEFAULT_RULE_CONTEXT;
+    const localHostFunctions = new Set(options.localHostFunctions ?? []);
     let disposed = false;
     let counter = 0;
 
@@ -24,7 +25,7 @@ export function createMinab(options: MinabOptions): Minab {
             const set = cache.get(options.schema, ruleContext);
             // One URI for each call: calls may overlap, and a shared URI would make them fight.
             const uri = `minab:///prepared/${counter++}.minab`;
-            return prepareProgram(set, uri, source, prepareOptions.expect, ruleContext.recordTable);
+            return prepareProgram(set, uri, source, prepareOptions.expect, ruleContext.recordTable, localHostFunctions);
         },
         cacheStats(): CacheStats {
             return { size: cache.size, created: cache.created, hits: cache.hits, openDocuments: cache.openDocuments() };
