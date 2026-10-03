@@ -134,6 +134,14 @@ function parseColumnType(spec: unknown, at: string): ColumnType {
     throw new ConfigError(`${at}: expected "type", "ref" or "collection"`);
 }
 
+/** `sqlName` (the physical database name), when the entry has one. Must be a non-empty string. */
+function optionalSqlName(entry: Record<string, unknown>, at: string): { sqlName?: string } {
+    if (entry.sqlName === undefined) return {};
+    const sqlName = requireString(entry.sqlName, `${at}.sqlName`);
+    if (sqlName === '') throw new ConfigError(`${at}.sqlName: expected a non-empty string`);
+    return { sqlName };
+}
+
 /** Columns as either `{"id": "UUID"}` or `[{"name": "id", "type": "UUID"}]` — the map reads better, the array preserves the internal shape. */
 function parseColumns(spec: unknown, at: string): MinabColumnSchema[] {
     if (Array.isArray(spec)) {
@@ -142,15 +150,17 @@ function parseColumns(spec: unknown, at: string): MinabColumnSchema[] {
             if (!isRecordValue(entry)) throw new ConfigError(`${entryAt}: expected an object`);
             return {
                 name: requireString(entry.name, `${entryAt}.name`),
+                ...optionalSqlName(entry, entryAt),
                 type: parseColumnType(entry.type, `${entryAt}.type`)
             };
         });
     }
     if (isRecordValue(spec)) {
-        return Object.entries(spec).map(([name, type]) => ({
-            name,
-            type: parseColumnType(type, `${at}.${name}`)
-        }));
+        return Object.entries(spec).map(([name, type]) => {
+            // `{"type": ..., "sqlName": ...}` is the long form of one column.
+            const sqlName = isRecordValue(type) ? optionalSqlName(type, `${at}.${name}`) : {};
+            return { name, ...sqlName, type: parseColumnType(type, `${at}.${name}`) };
+        });
     }
     throw new ConfigError(`${at}: expected an object of column names or an array of columns, got ${describe(spec)}`);
 }
@@ -162,6 +172,7 @@ function parseTables(spec: unknown, at: string): MinabTableSchema[] {
         if (!isRecordValue(entry)) throw new ConfigError(`${entryAt}: expected an object`);
         return {
             name: requireString(entry.name, `${entryAt}.name`),
+            ...optionalSqlName(entry, entryAt),
             primaryKey: entry.primaryKey === undefined ? undefined : requireString(entry.primaryKey, `${entryAt}.primaryKey`),
             columns: parseColumns(entry.columns ?? {}, `${entryAt}.columns`)
         };

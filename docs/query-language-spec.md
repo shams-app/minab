@@ -53,6 +53,38 @@ Sigils resolve against a **scope stack**, pushed by:
 
 ---
 
+### 2.3 Names
+
+A name is the name of a table, a field, an alias, a variable, a function, a parameter, a loop variable, a label or a JSON key. Names are case-sensitive and are compared exactly (no case folding, no locale rules). Two ways to write a name:
+
+- **Plain name.** A Unicode letter or `_` first. Then letters, digits (`\p{N}`), `_`, and (not first) the zero-width non-joiner U+200C and the zero-width joiner U+200D, which Persian words use inside a word. So Persian, Arabic, Turkish, Cyrillic, Greek, Hebrew, Devanagari, CJK and Hangul names all work.
+- **Backtick name.** Any text between backticks: `` `Order date` ``. Inside, `` \` `` is a backtick and `\\` is a backslash. A backtick name may hold spaces, symbols, digits first, and a keyword (`` .`FROM` `` is a field named `FROM`).
+
+Keywords are ASCII only and case-sensitive. A name that only starts like a keyword is a name: `FROMا` is one name, because the longer match wins.
+
+The name is the text without backticks and escapes. `` `a b` `` and a field `a b` in the schema are the same name. In diagnostics the name is shown without backticks.
+
+```
+// schema: table سفارش with columns مبلغ (DECIMAL) and وضعیت (TEXT)
+FROM سفارش
+WHERE .وضعیت == "ارسال‌شده" AND .مبلغ > 100
+SELECT .مبلغ AS مبلغ_کل
+```
+
+Names with spaces or symbols use backticks:
+
+```
+.`Order date` <= .`Ship date`
+```
+
+Turkish letters work too:
+
+```
+.İl == "İzmir"
+```
+
+**Physical names.** The host schema may give a table or a column a `sqlName`: its name in the database, when it differs from the Minab name. The compiled SQL uses `sqlName ?? name`. Result rows and `SELECT` aliases always use Minab names. `primaryKey` names a schema column (and is mapped through its `sqlName`); `foreignKey` is already a physical column name.
+
 ## 3. Relational Fields & Traversal
 
 Fields in the schema can be:
@@ -443,7 +475,7 @@ Minab supports simple named variable bindings — a lightweight way to name a co
 'let' name ':' Type ('=' Expression)? ';'
 ```
 
-- `name` is any identifier.
+- `name` is any name (§2.3): a plain name in any language, or a backtick name.
 - `Type` is one of the logical types listed in §7.2 — a domain-level vocabulary, not tied to any particular storage backend.
 - The initializer is optional at declaration time, but if present may be **any expression** — a literal ("hard-coded"), a sigil-based expression (`.field`, `#Table[...]`), an aggregate/function call, or a full subquery. There's no separate syntax for "hard-coded" vs. "computed" values — both are just `Expression`; the difference is only in what the expression happens to be.
 - Like every other statement (§6.3), a `let` ends in `;`.
@@ -1166,7 +1198,7 @@ MainStatement:
     Query | Expression;
 
 Query:
-    'FROM' source=FromSource ('AS' alias=ID)?
+    'FROM' source=FromSource ('AS' alias=Name)?
     joins+=JoinClause*
     (whereClause=WhereClause)?
     (groupByClause=GroupByClause)?
@@ -1182,7 +1214,7 @@ TableRef infers Expression:
     {infer TableRef} name=QualifiedName;
 
 JoinClause:
-    (left?='LEFTJOIN' | cross?='CROSSJOIN' | 'JOIN') source=QualifiedName 'AS' alias=ID
+    (left?='LEFTJOIN' | cross?='CROSSJOIN' | 'JOIN') source=QualifiedName 'AS' alias=Name
     ('ON' condition=Expression)?;
 
 WhereClause:
@@ -1198,7 +1230,7 @@ SelectClause:
     'SELECT' distinct?='DISTINCT'? (all?='*' | items+=SelectItem (',' items+=SelectItem)*);
 
 SelectItem:
-    expression=Expression ('AS' alias=ID)?;
+    expression=Expression ('AS' alias=Name)?;
 
 OrderByClause:
     'ORDERBY' items+=OrderItem (',' items+=OrderItem)*;
@@ -1210,7 +1242,7 @@ LimitClause:
     'LIMIT' limit=NUMBER ('OFFSET' offset=NUMBER)?;
 
 VariableDecl:
-    'let' name=ID ':' type=Type ('=' value=Expression)? ';';
+    'let' name=Name ':' type=Type ('=' value=Expression)? ';';
 
 Type:
     TypeRef | TupleType;
@@ -1227,11 +1259,11 @@ TypeRef:
     (array?='[]' arrayNullable?='?'?)?;
 
 FunctionDecl:
-    'fn' name=ID '(' (params+=Param (',' params+=Param)*)? ')' ':' returnType=Type
+    'fn' name=Name '(' (params+=Param (',' params+=Param)*)? ')' ':' returnType=Type
     '{' (body+=BodyStatement)* (tail=MainStatement)? '}';
 
 Param:
-    name=ID ':' type=Type;
+    name=Name ':' type=Type;
 
 BodyStatement:
     VariableDecl | AssignmentStatement | LoopStatement | BreakStatement | ContinueStatement
@@ -1260,17 +1292,17 @@ SetClause:
     'SET' '{' (assignments+=SetAssignment (',' assignments+=SetAssignment)*)? '}';
 
 SetAssignment:
-    key=(ID | STRING) operator=('+:' | '-:' | '*:' | '/:' | ':|' | ':') value=Expression;
+    key=(Name | STRING) operator=('+:' | '-:' | '*:' | '/:' | ':|' | ':') value=Expression;
 
 AssignmentStatement:
     target=Expression operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression ';';
 
 LoopStatement:
-    (label=ID ':')?
+    (label=Name ':')?
     'loop'
-    ( (variable=ID 'from' lowerBound=Expression 'to' upperBound=Expression
+    ( (variable=Name 'from' lowerBound=Expression 'to' upperBound=Expression
         (stepClause=StepClause | whereClause=WhereGuard)?)
-    | (variable=ID 'in' iterable=Expression (whereClause=WhereGuard)?)
+    | (variable=Name 'in' iterable=Expression (whereClause=WhereGuard)?)
     | condition=Expression
     )
     '{' (statements+=BodyStatement)* (tail=MainStatement)? '}';
@@ -1282,13 +1314,19 @@ WhereGuard:
     'where' condition=Expression;
 
 BreakStatement:
-    'break' (label=ID)? ';';
+    'break' (label=Name)? ';';
 
 ContinueStatement:
-    'continue' (label=ID)? ';';
+    'continue' (label=Name)? ';';
+
+// A name as the user writes it: a plain name (ID) or a backtick name
+// (QUOTED_NAME). Everything user-facing uses this rule. The value converter
+// (`minab-value-converter.ts`) removes the backticks and the escapes.
+Name returns string:
+    ID | QUOTED_NAME;
 
 QualifiedName returns string:
-    ID ('.' ID)*;
+    Name ('.' Name)*;
 
 Expression:
     Or;
@@ -1325,7 +1363,7 @@ Unary infers Expression:
 
 Postfix infers Expression:
     Primary (
-        {infer MemberAccess.receiver=current} '.' member=ID vivify?='!'?
+        {infer MemberAccess.receiver=current} '.' member=Name vivify?='!'?
       | {infer TupleAccess.receiver=current} '[' index=NUMBER ']'
       | {infer FilterAccess.receiver=current} '[' filter=Expression ']'
       | {infer CallExpression.callee=current} '(' (args+=Expression (',' args+=Expression)*)? ')'
@@ -1352,7 +1390,7 @@ Primary infers Expression:
     | NameRef;
 
 CurrentRecord infers Expression:
-    {infer CurrentRecord} '.' (field=ID vivify?='!'?)?;
+    {infer CurrentRecord} '.' (field=Name vivify?='!'?)?;
 
 FieldValue infers Expression:
     {infer FieldValue} '$';
@@ -1361,7 +1399,7 @@ ParentRecord infers Expression:
     {infer ParentRecord} '^';
 
 NamedScope infers Expression:
-    {infer NamedScope} '#' name=ID;
+    {infer NamedScope} '#' name=Name;
 
 CastExpr infers Expression:
     {infer CastExpr} 'CAST' '(' value=Expression 'AS' targetType=TypeRef ')';
@@ -1391,7 +1429,7 @@ IndexRef infers Expression:
     {infer IndexRef} '.$index';
 
 NameRef infers Expression:
-    {infer NameRef} name=ID;
+    {infer NameRef} name=Name;
 
 StringLiteral infers Expression:
     {infer StringLiteral} value=STRING;
@@ -1412,7 +1450,7 @@ JsonObjectLiteral infers Expression:
     {infer JsonObjectLiteral} '{' (properties+=JsonProperty (',' properties+=JsonProperty)*)? '}';
 
 JsonProperty:
-    (key=ID (':' value=Expression)?) | (key=STRING ':' value=Expression);
+    (key=Name (':' value=Expression)?) | (key=STRING ':' value=Expression);
 
 Subquery infers Expression:
     {infer Subquery} '(' query=Query ')';
@@ -1451,7 +1489,14 @@ SwitchResult:
 Block infers Expression:
     {infer Block} '{' (statements+=BodyStatement)* (tail=MainStatement)? '}';
 
-terminal ID: /[a-zA-Z_][a-zA-Z0-9_]*/;
+// Plain names: any Unicode letter or "_" first; then letters, digits, "_",
+// and (not first) U+200C and U+200D (zero-width non-joiner and joiner, used
+// inside Persian words). Written with Unicode property escapes (\p{L}, \p{N}
+// and the "u" flag). Keywords stay ASCII; a longer name wins over a keyword
+// ("FROMا" is a name).
+terminal ID: /[\p{L}_][\p{L}\p{N}_\u200C\u200D]*/u;
+// Backtick names: any text between backticks. "\`" is a backtick, "\\" a backslash.
+terminal QUOTED_NAME: /`([^`\\]|\\[\s\S])*`/;
 terminal NUMBER returns number: /[0-9]+(\.[0-9]+)?/;
 terminal STRING: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/;
 

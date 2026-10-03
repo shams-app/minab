@@ -468,6 +468,19 @@ export const examples: Example[] = [
         expect: { kind: 'rows', count: 6, first: { id: 'ord-190', items: 3 } }
     },
     {
+        id: 'persian-names',
+        title: 'Names in Persian',
+        summary: 'Tables and fields with Persian names, and a backtick name when a name needs spaces.',
+        notes: 'Plain names can use any language: here the table `سفارش` and its fields are Persian, and `AS خریدار` names a result column. A name with spaces or symbols goes in backticks, like `.`Order date``. The row keys of the result are the Minab names.',
+        source: '// سفارش‌های ارسال‌شده، از گران به ارزان\nFROM سفارش\nWHERE .وضعیت == "ارسال‌شده"\nSELECT .شناسه, .مشتری.نام AS خریدار, .مبلغ AS مبلغ_کل\nORDERBY .مبلغ DESC\n',
+        tags: ['query'],
+        level: 'beginner',
+        specRef: '§2.3',
+        host: { dataset: 'persian' },
+        focus: 'result',
+        expect: { kind: 'rows', count: 3, first: { شناسه: 102, خریدار: 'علی رضایی', مبلغ_کل: 1250 } }
+    },
+    {
         id: 'email-lookup',
         title: 'Case-insensitive lookup',
         summary: 'A `CITEXT` column and an explicit `CAST` — no implicit coercion.',
