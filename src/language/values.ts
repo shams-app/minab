@@ -11,6 +11,7 @@
 
 import Big from 'big.js';
 import { coded } from './diagnostics/codes.js';
+import type { SourceRange } from '../runtime/types.js';
 import type { LogicalTypeBase } from './minab-types.js';
 
 export { Big };
@@ -18,6 +19,8 @@ export { Big };
 /** A number problem. `code` is the stable code, when the problem has one. */
 export class NumberError extends Error {
     readonly params: Record<string, string | number> = {};
+    /** Set by the interpreter: the node that failed. */
+    range?: SourceRange;
 
     constructor(
         message: string,
@@ -30,6 +33,11 @@ export class NumberError extends Error {
 export const MAX_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export type Numeric = number | Big;
+
+export function divisionByZero(): NumberError {
+    const { code, reason } = coded('eval.divisionByZero');
+    return new NumberError(reason, code);
+}
 
 export function integerOutOfRange(): NumberError {
     const { code, reason } = coded('eval.integerOutOfRange');
@@ -122,9 +130,12 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
                 return checkInteger(a - b);
             case '*':
                 return checkInteger(a * b);
+            // By zero is an error in both runtimes (D14). C4 owns the rest of `/` and `%`.
             case '/':
+                if (b === 0) throw divisionByZero();
                 return a / b;
             case '%':
+                if (b === 0) throw divisionByZero();
                 return a % b;
         }
     }
@@ -138,10 +149,10 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
         case '*':
             return x.times(y);
         case '/':
-            if (y.eq(0)) throw new NumberError('division by zero');
+            if (y.eq(0)) throw divisionByZero();
             return x.div(y);
         case '%':
-            if (y.eq(0)) throw new NumberError('division by zero');
+            if (y.eq(0)) throw divisionByZero();
             return x.mod(y);
     }
 }

@@ -19,7 +19,7 @@ export const cases: DifferentialCase[] = [
         schema,
         record: { ...record, b: 0 },
         expr: '.a % .b',
-        knownGap: { card: 'C4', note: 'JS gives NaN, Postgres raises division by zero' }
+        expect: { error: 'division-by-zero' }
     },
     {
         name: 'CITEXT column compared with a TEXT column',

@@ -13,6 +13,9 @@ database driver. A test checks the imports.
   throws a `HostDeclarationError`.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
   (interface only), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
+- `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
+  which counts what one run uses and stops it at a limit or an abort.
+- `errors.ts`: builds run errors from the registry, and maps a data port failure to a code.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
   `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `run()`. Also the `expect` check.
 - `analyze.ts`: program analysis (R5). `analyzeProgram` builds `PreparedProgram.analysis`
@@ -57,6 +60,71 @@ record. It does not look at other tables: a rule that reads data may change when
 - A test runs every spec, showcase and example program that is called `local` with a data port
   that fails when it is called.
 
+## Results and errors
+
+`run` never throws for a failed program.
+
+```ts
+// run
+{ ok: true, value, logs: string[], stats: { statements, rows, durationMs } }
+{ ok: false, error: { code, message, range?, params } }
+
+// compile
+{ ok: true, sql: { text, params } }
+{ ok: false, error: { code, message, range?, params } }
+```
+
+- `code` is stable and is in the registry (`docs/reference/diagnostics.md`). A host maps by code and
+  never parses `message`. The message is English (D35). A host translates by `code` and `params`.
+- `range` is the part of the source that failed (0-based, like the language server). The innermost
+  failing expression sets it: for `1 + CAST("12a" AS INTEGER)` it is the `CAST`.
+- `params` are JSON-safe values: `{ limit: 100 }`, `{ name: 'currentUser' }`, `{ sqlstate: '22012' }`.
+- `logs` is empty until L7.
+- **The SQL text is never in an error.** A host that wants it reads the `statement` event.
+- A failure of the data port is `data.error`. `params.sqlstate` is set when the driver error has a
+  five-character `code`. The driver's own message is not copied. SQLSTATE `22012` is
+  `eval.divisionByZero`, and `22P02` and `22003` are `eval.castFailed`, so both runtimes give the same code.
+- A host function that throws is `eval.hostFunctionFailed`. Its message is not copied either.
+- A failure with no special code is `eval.failed` (`params.reason` has the text). A refusal of the
+  compiler with no special code is `compile.notSql`.
+
+| Area | Codes | Meaning |
+|---|---|---|
+| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `programInvalid`, `failed` | The program failed while it ran |
+| `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
+| `limit.*` | see below | A limit stopped the program |
+| `data.*` | `error`, `noPort` | The data port failed or is missing |
+| `cancelled` | | The host aborted the run |
+
+## Limits
+
+Limits are always on (D01). `createMinab({ limits })` sets them. A run can only be tighter:
+`run(…, { limits })` takes the smaller of its value and the host's. A limit must be a number above zero.
+
+| Limit | Default | Checked | Code |
+|---|---|---|---|
+| `sourceLength` | 64 KB (UTF-8 bytes) | `prepare`, before parsing | `limit.sourceTooLong` (a diagnostic) |
+| `nestingDepth` | 200 | `prepare`: a bracket scan before parsing, then the depth of the expressions | `limit.tooDeep` (a diagnostic) |
+| `wallTimeMs` | 1,000 | `run`: between steps, and around every port call | `limit.timeout` |
+| `statements` | 100 | before each data call | `limit.tooManyStatements` |
+| `rowsPerStatement` | 10,000 | after each data call | `limit.tooManyRows` |
+| `loopIterations` | 100,000 | each loop step, over all loops (X4 calls `RunBudget.countIteration`) | `limit.tooManyIterations` |
+| `callDepth` | 64 | each user `fn` call | `limit.callDepth` |
+| `logEntries` | 100 | when an entry is made (L7) | extra entries are dropped and counted |
+| `batchRuns` | 100 | the run endpoint (H2) | |
+
+A program that a prepare-time limit stops has one error diagnostic and no analysis. `run` and
+`compile` refuse it.
+
+## Cancellation
+
+`run(…, { signal })`. A signal that is already aborted ends the run with `cancelled` before any port is
+called. Otherwise every port call gets **one** signal that joins the host's signal and the wall-time
+timer, and the interpreter checks it between steps. The run also stops *waiting* for a port call when
+the signal aborts, so a host function that ignores the signal cannot hold the run past its wall time.
+A statement that is already running in the database stops only if the data port passes the signal on
+to its driver. The timer is cleared when the run ends.
+
 ## Rules
 
 - `prepare` never throws for a bad program. It returns diagnostics. It rejects only for
@@ -79,9 +147,6 @@ record. It does not look at other tables: a rule that reads data may change when
 - The clock is read once for each run. The default is the system clock in UTC.
 - Host functions run in the interpreter only. `compile()` refuses them with
   `compile.hostFunctionInSql`.
-- Run error codes so far: `eval.programInvalid`, `eval.failed`, `eval.missingInput`,
-  `eval.hostFunctionMissing`, `eval.writesNotSupported`, `data.noPort`. R4 builds the
-  structured errors.
 - `expect` is optional. Without it nothing is checked and the program may return any type;
   `resultType` still reports the type.
 
@@ -89,7 +154,7 @@ record. It does not look at other tables: a rule that reads data may change when
 
 - A `QueryExecutor` (one argument) still fits the data port. R7 and R8 move the CLI and the
   playground to `DataPort`.
-- `AbortSignal` is passed to the ports, but nothing checks it yet. R4 does.
 - The write port is an interface. No statement uses it until X5.
-- `limits` are stored, not enforced. R4 enforces them.
+- `MinabInterpreter.evaluate` is the old entry (CLI and playground). It is `@deprecated`, has no
+  limits, and throws a data port failure again. Remove it in R8, or in whichever of R7 and R8 merges last.
 - The wire format (R6) comes later.
