@@ -290,6 +290,17 @@ primary      (literals, sigils, ( ), [ ])
 
 Notes:
 
+- **What `+`, `/` and `%` do** (the interpreter and the compiled SQL give the same answer):
+
+  | Operator | Operands | Result |
+  |---|---|---|
+  | `+` | two numbers | a number (`DECIMAL` if one side is) |
+  | `+` | two texts (`TEXT` or `CITEXT`) | `TEXT`: the texts joined, `"a" + "b"` is `"ab"` (SQL `\|\|`). A `null` side gives `null` |
+  | `+` | a text and a number | a type error. Use `CAST`, for example `"Order " + CAST(.number AS TEXT)` |
+  | `/` | two numbers | always a `DECIMAL`, with 16 digits after the point, rounded half away from zero. `7 / 2` is `3.5`, `1 / 3` is `0.3333333333333333`, `2 / 3` is `0.6666666666666667` |
+  | `%` | two numbers | the remainder, with the sign of the left side: `-7 % 3` is `-1`, `7.5 % 2` is `1.5` |
+
+  `/` and `%` by zero are the evaluation error `eval.divisionByZero` (Postgres `22012`).
 - `NOT` binds tighter than `AND`/`OR` but looser than comparison, and is right-recursive into itself: `NOT NOT x` is valid; `NOT x == y` parses as `NOT (x == y)`.
 - `IN` and `LIKE` are **non-chaining** comparison operators — `a < b < c` is not valid, matching standard convention. `IN` expects a `ListLiteral` or collection expression on the right, and is defined as repeated `==` under the hood — which is why `null` is a fine element to include in that list (§7.7), even though `null` isn't a valid operand for `LIKE` itself.
 - `is`/`isnot` are also non-chaining, same tier — see §5.6.

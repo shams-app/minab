@@ -32,7 +32,7 @@ describe('the differential harness', () => {
     });
 
     test('a knownGap case that really differs passes', async () => {
-        await checkCase(db, { name: 'gap', schema, record: { a: 7, b: 2 }, expr: '.a / .b', knownGap: { card: 'C4', note: 'integer division' } });
+        await checkCase(db, { name: 'gap', schema, record: { ci: 'Hello', s: 'hello' }, expr: '.ci == .s', knownGap: { card: 'C5', note: 'CITEXT compare' } });
     });
 
     test('two errors of the same meaning agree, two of different meaning do not', () => {

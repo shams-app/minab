@@ -29,20 +29,6 @@ export const cases: DifferentialCase[] = [
         knownGap: { card: 'C3', note: 'the interpreter does not run CAST' }
     },
     {
-        name: 'integer division',
-        schema,
-        record: { ...record, a: 7, b: 2 },
-        expr: '.a / .b',
-        knownGap: { card: 'C4', note: 'JS divides to 3.5, Postgres divides integers to 3' }
-    },
-    {
-        name: 'remainder by zero',
-        schema,
-        record: { ...record, b: 0 },
-        expr: '.a % .b',
-        knownGap: { card: 'C4', note: 'JS gives NaN, Postgres raises division by zero' }
-    },
-    {
         name: 'CITEXT column compared with a TEXT column',
         schema,
         record: { ...record, s: 'hello' },

@@ -316,3 +316,29 @@ describe('one mistake, one diagnostic (roadmap Phase 7)', () => {
         expect(matching, ds.map(messageText).join('\n')).toHaveLength(1);
     });
 });
+
+describe('text `+` and division (D13, D14)', () => {
+    test('`+` joins two texts', async () => {
+        await expectClean(`let s: TEXT = "a" + "b"; s == "ab"`);
+        await expectClean(`let s: TEXT? = "a" + null; 1`);
+    });
+
+    test('the result of a text `+` is not nullable unless a side is', async () => {
+        await expectError(`let s: INTEGER = "a" + "b"; 1`, /can't initialize/);
+        await expectError(`let s: TEXT = "a" + null; 1`, /can't initialize/);
+    });
+
+    test('text with a number is an error that names CAST', async () => {
+        await expectError(`"a" + 1`, /CAST/);
+        await expectError(`1 + "a"`, /CAST/);
+    });
+
+    test('`/` of two INTEGERs is a DECIMAL', async () => {
+        await expectClean(`let d: DECIMAL = 7 / 2; d > 3`);
+        await expectError(`let s: TEXT = 7 / 2; 1`, /can't initialize/);
+    });
+
+    test('`%` keeps the INTEGER type', async () => {
+        await expectClean(`let n: INTEGER = 7 % 2; n > 0`);
+    });
+});

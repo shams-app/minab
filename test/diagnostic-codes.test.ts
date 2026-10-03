@@ -96,6 +96,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },

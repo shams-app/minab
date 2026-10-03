@@ -97,6 +97,11 @@ export const DIAGNOSTICS = {
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
         doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
     }),
+    'eval.divisionByZero': entry({
+        severity: error,
+        message: () => 'division by zero',
+        doc: '"/" and "%" fail when the right side is zero. Check the divisor first, for example with "if".'
+    }),
     'eval.integerOutOfRange': entry({
         severity: error,
         message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
@@ -250,8 +255,9 @@ export const DIAGNOSTICS = {
 
     'type.arithmeticNeedsNumeric': entry<{ operator: string; left: string; right: string }>({
         severity: error,
-        message: p => `"${p.operator}" requires numeric operands, got ${p.left} and ${p.right}`,
-        doc: 'Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands.'
+        message: p =>
+            `"${p.operator}" requires numeric operands${p.operator === '+' ? ' (or two texts)' : ''}, got ${p.left} and ${p.right}; use CAST to convert one side`,
+        doc: 'Arithmetic works on INTEGER and DECIMAL. "+" also joins two texts. Use numbers, or CAST the operands (for example CAST(.n AS TEXT)).'
     }),
     'type.assignMismatch': entry<{ actual: string; expected: string }>({
         severity: error,

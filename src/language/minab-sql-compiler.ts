@@ -76,6 +76,7 @@ import { isBuiltinName } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
 import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
+import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
 /** A refusal has an English `reason`. When the refusal has a stable code (see the registry), `code` and `params` come with it. */
@@ -209,12 +210,39 @@ const ARITHMETIC: Record<string, string> = {
     '%': '%'
 };
 
+/**
+ * `/` gives a `DECIMAL` with 16 digits after the point, rounded half away from zero (D14).
+ * Postgres's own `numeric` division keeps only about 16 significant digits, so a large
+ * quotient would lose decimals, and `round` after it could round twice. This form is exact:
+ * `div` cuts an exact integer, and a product (never a division) puts the point back.
+ * It reads `N = floor(2 * |a| * 10^16 / |b|)`, then `floor((N + 1) / 2)` is the rounded
+ * value times 10^16. A zero divisor raises `22012` (division by zero).
+ */
+function divisionSql(a: string, b: string): string {
+    const [x, y] = [`(${a})::numeric`, `(${b})::numeric`];
+    return `(sign(${x}) * sign(${y}) * div(div(abs(${x}) * 20000000000000000, abs(${y})) + 1, 2) * 0.0000000000000001)`;
+}
+
 function quoteIdent(name: string): string {
     return `"${name.replace(/"/g, '""')}"`;
 }
 
 export class MinabSqlCompiler {
-    constructor(private readonly schema: SchemaProvider) {}
+    constructor(
+        private readonly schema: SchemaProvider,
+        private readonly typeChecker?: MinabTypeChecker
+    ) {}
+
+    /** `+` joins texts (D13): it is `||` in SQL. The static type tells text from numbers. */
+    private isTextSum(expr: BinaryExpression): boolean {
+        if (isStringLiteral(expr.left) || isStringLiteral(expr.right)) return true;
+        try {
+            const inferred = this.typeChecker?.inferType(expr);
+            return !!inferred?.ok && inferred.type.kind === 'scalar' && inferred.type.base === 'TEXT';
+        } catch {
+            return false;
+        }
+    }
 
     /** Compile a pipeline `Query` (spec §4) to a full `SELECT`. */
     compileQuery(query: Query, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
@@ -685,9 +713,16 @@ export class MinabSqlCompiler {
         if (comparison) {
             return `${this.expression(expr.left, ctx, scopes)} ${comparison} ${this.expression(expr.right, ctx, scopes)}`;
         }
+        const left = () => this.expression(expr.left, ctx, scopes);
+        const right = () => this.expression(expr.right, ctx, scopes);
+        if (op === '/') {
+            const [a, b] = [left(), right()];
+            return divisionSql(a, b);
+        }
+        if (op === '+' && this.isTextSum(expr)) return `(${left()} || ${right()})`;
         const arithmetic = ARITHMETIC[op];
         if (arithmetic) {
-            return `(${this.expression(expr.left, ctx, scopes)} ${arithmetic} ${this.expression(expr.right, ctx, scopes)})`;
+            return `(${left()} ${arithmetic} ${right()})`;
         }
         fail(`operator "${op}" has no SQL form`);
     }
