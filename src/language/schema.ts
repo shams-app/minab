@@ -68,6 +68,12 @@ export interface MinabFunctionSchema {
 }
 
 export interface MinabSchema {
+    /**
+     * Names this schema for caches (runtime D29). Two schemas with the same
+     * version must be the same schema. Shamsine: a hash of the datasets'
+     * fields. When it is missing, the runtime hashes the whole schema.
+     */
+    version?: string;
     tables: MinabTableSchema[];
     functions: MinabFunctionSchema[];
 }

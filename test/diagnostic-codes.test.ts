@@ -14,6 +14,8 @@
  * A compile refusal is tested at the SQL compiler (`via: 'compiler'`).
  * Two entries are guards that the current grammar cannot reach; they are
  * tested with a hand-made node (`via: 'guard'`).
+ * `type.unexpectedResultType` is made by the runtime's `expect` option, not by
+ * the checker; `test/runtime.test.ts` tests it (`via: 'runtime'`).
  */
 
 import { AstUtils, EmptyFileSystem, type AstNode } from 'langium';
@@ -73,6 +75,7 @@ type Case =
     | { via: 'checker'; program: string; target: Pick; setting?: Setting }
     | { via: 'resolver'; program: string; target: Pick }
     | { via: 'compiler'; program: string }
+    | { via: 'runtime' }
     | { via: 'guard' };
 
 /** One program per code. Keep it in the same order as the registry. */
@@ -159,6 +162,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.switchArmsDiffer': { via: 'validator', program: 'switch .status { "a" => 1, _ => "x" }' },
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
+    'type.unexpectedResultType': { via: 'runtime' },
     'type.unsupportedOperator': { via: 'guard' }
 };
 
@@ -246,6 +250,8 @@ describe('every code is reported by a program', () => {
                 }
                 break;
             }
+            case 'runtime':
+                break; // tested in test/runtime.test.ts
             case 'guard':
                 break; // tested below, with a hand-made node
         }

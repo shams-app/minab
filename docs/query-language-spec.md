@@ -172,7 +172,7 @@ Semantics per clause, in evaluation order:
 4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key.
 5. **HAVING** — filters the *grouped* stream, evaluated after aggregation, so aggregate calls are valid here.
 6. **SELECT** — projects final columns. Each item may be aliased with `AS`. `SELECT *` selects every column of the row instead of listing them; omitting `SELECT` entirely is also still valid (§4.1 shows it as optional) — the two are different things, not the same "no explicit projection" case. An optional `DISTINCT` immediately after `SELECT` deduplicates the projected rows — deduplication is by the full projected tuple (every selected column together), not any single column, matching standard SQL `SELECT DISTINCT` semantics.
-7. **ORDERBY** — sorts the (post-SELECT) result. `ASC` is the default.
+7. **ORDERBY** — sorts the result. `ASC` is the default. Each sort key is either a `SELECT` alias (`ORDERBY total DESC`) or any expression over the source row (`ORDERBY .created_at DESC`), even a column that `SELECT` does not list. An alias name wins over a source column with the same name.
 8. **LIMIT / OFFSET** — truncates and pages the result.
 
 ### 4.2 Scope aliasing convention
@@ -384,7 +384,7 @@ Here `#Booking` opens every row of `Booking` as a scope; `.` inside `[...]` is e
 Use `$` for the value of whichever field the rule is validating. `.` is still available and still refers to the enclosing record, so a field-level rule can reference sibling fields:
 
 ```
-$ IN ("pending", "shipped", "cancelled")
+$ IN ["pending", "shipped", "cancelled"]
 ```
 
 ```
@@ -706,9 +706,9 @@ fn cancelledOrdersFor(customerId: UUID): JSON {
 fn recentOrders(customerId: UUID): JSON {
     FROM Order
     WHERE .customer.id == customerId
+    SELECT *
     ORDERBY .placed_at DESC
     LIMIT 10
-    SELECT *
 }
 // recentOrders(x) : JSON — a JSON array of order objects
 ```
@@ -893,7 +893,7 @@ If a step marked `!` genuinely can't be created (some other required field has n
 // same effect as:
 UPDATE .doctor.patients
 WHERE .city == 'istanbul'
-SET { activate: true }
+SET { activate: true };
 ```
 
 The `[filter]` is optional — `.doctor.patients.activate = true;` (no filter at all) sets `.activate` across *every* patient, the unfiltered case of the same mechanism.
