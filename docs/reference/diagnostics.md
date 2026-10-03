@@ -111,6 +111,7 @@ A function call is wrong.
 | `call.functionNameCase` | error | "{name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins | `name` | Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it. |
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
+| `call.wrongArgumentCount` | error | {name} expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments. |
 
 ## compile
 

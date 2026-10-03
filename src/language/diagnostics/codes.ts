@@ -87,6 +87,12 @@ export const DIAGNOSTICS = {
         doc: 'A user function needs one argument for each declared parameter. Add or remove arguments.'
     }),
 
+    'call.wrongArgumentCount': entry<{ name: string; expected: string; actual: number }>({
+        severity: error,
+        message: p => `${p.name} expects ${p.expected} argument(s), got ${p.actual}`,
+        doc: 'A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments.'
+    }),
+
     'compile.blockInQuery': entry({
         severity: error,
         message: () => 'a block with statements cannot run inside a query (a statement cannot become SQL)',

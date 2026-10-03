@@ -72,7 +72,8 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
-import { isBuiltinName } from './minab-builtins.js';
+import { getBuiltin, isBuiltinName, type BuiltinSignature, type SqlArg } from './minab-builtins.js';
+import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { SqlQuery } from './minab-executor.js';
 import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
@@ -214,7 +215,10 @@ function quoteIdent(name: string): string {
 }
 
 export class MinabSqlCompiler {
-    constructor(private readonly schema: SchemaProvider) {}
+    constructor(
+        private readonly schema: SchemaProvider,
+        private readonly typeChecker?: MinabTypeChecker
+    ) {}
 
     /** Compile a pipeline `Query` (spec §4) to a full `SELECT`. */
     compileQuery(query: Query, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
@@ -694,6 +698,11 @@ export class MinabSqlCompiler {
     }
 
     private unary(expr: UnaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        // `-5` binds as one number: Postgres cannot apply `-` to an untyped parameter (`-$1`).
+        if (!expr.negated && expr.operator === '-' && isNumberLiteral(expr.operand)) {
+            const value = this.numberLiteralValue(expr.operand);
+            return ctx.bind(typeof value === 'string' ? `-${value}` : -value);
+        }
         const operand = this.expression(expr.operand, ctx, scopes);
         if (expr.negated) return `(NOT ${operand})`;
         return `(${expr.operator}${operand})`;
@@ -715,13 +724,15 @@ export class MinabSqlCompiler {
                     : 'only the built-in aggregate/predicate functions have a SQL form'
             );
         }
-        const name = callee.name;
+        const builtin = getBuiltin(callee.name)!;
+        if (builtin.kind === 'scalar') return this.scalarCall(builtin, expr, ctx, scopes);
+        const name = builtin.name;
         const arg = expr.args[0];
-        if (!arg) fail(`${name} takes one argument`);
+        if (!arg || expr.args.length !== 1) fail(`${name} takes one argument`);
 
         const source = this.tryCollectionSource(arg, ctx, scopes);
         if (source) {
-            return this.aggregateOverSource(name, source, undefined);
+            return this.aggregateOverSource(builtin, source, undefined);
         }
         // A broadcast traversal — `SUM(.orders.total)`: the collection is
         // the receiver, the aggregated value a column on its element.
@@ -730,10 +741,10 @@ export class MinabSqlCompiler {
             if (receiverSource) {
                 const inner = { alias: receiverSource.alias, table: receiverSource.table };
                 const column = this.column({ kind: 'scope', ...inner }, arg.member, ctx);
-                return this.aggregateOverSource(name, receiverSource, column);
+                return this.aggregateOverSource(builtin, receiverSource, column);
             }
         }
-        if (name === 'EXISTS' || name === 'ALL' || name === 'ANY') {
+        if (builtin.sqlAggregate?.shape === 'exists' || builtin.sqlAggregate?.shape === 'none') {
             fail(`${name} needs a collection — a table, a relation field, or a filtered one`);
         }
         // An ordinary grouped aggregate over the current query scope.
@@ -741,20 +752,39 @@ export class MinabSqlCompiler {
         return `${name}(${inner})`;
     }
 
-    private aggregateOverSource(name: string, source: CollectionSource, column: string | undefined): string {
+    /** A scalar built-in (D20): its SQL form is in the table. Each argument also says whether it is `CITEXT`. */
+    private scalarCall(builtin: BuiltinSignature, expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (!builtin.sql) fail(`${builtin.name} has no SQL form`);
+        const args: SqlArg[] = expr.args.map(arg => ({ sql: this.expression(arg, ctx, scopes), citext: this.isCitextArg(arg) }));
+        return builtin.sql(args);
+    }
+
+    /** True when the argument has type `CITEXT` (needs the type checker, which the language services supply). */
+    private isCitextArg(expr: Expression): boolean {
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && !inferred.type.array && inferred.type.base === 'CITEXT';
+        } catch {
+            return false;
+        }
+    }
+
+    private aggregateOverSource(builtin: BuiltinSignature, source: CollectionSource, column: string | undefined): string {
         const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
         const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
-        if (name === 'EXISTS') {
+        const form = builtin.sqlAggregate;
+        if (form?.shape === 'exists') {
             return `EXISTS (SELECT 1${from}${where})`;
         }
-        if (name === 'COUNT') {
+        if (form?.shape === 'count') {
             return `(SELECT COUNT(${column ?? '*'})${from}${where})`;
         }
-        if (name === 'SUM' || name === 'AVG' || name === 'MIN' || name === 'MAX') {
-            if (!column) fail(`${name} needs a value to aggregate, e.g. ${name}(.orders.total)`);
-            return `(SELECT ${name}(${column})${from}${where})`;
+        if (form?.shape === 'column') {
+            if (!column) fail(`${builtin.name} needs a value to aggregate, e.g. ${builtin.name}(.orders.total)`);
+            return `(SELECT ${form.fn}(${column})${from}${where})`;
         }
-        fail(`${name} has no SQL form yet`);
+        fail(`${builtin.name} has no SQL form yet`);
     }
 
     /**
