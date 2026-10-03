@@ -92,11 +92,20 @@ import {
     type Arithmetic,
     type Numeric
 } from './values.js';
+import { castValue } from './casts.js';
+import type { LogicalTypeBase } from './minab-types.js';
 
 export type MinabValue = unknown;
 
 /** `code` and `params` are set when the failure has a stable code (for example `eval.missingInput`). */
-export type EvalResult = { ok: true; value: MinabValue } | { ok: false; reason: string; code?: string; params?: Record<string, string | number> };
+export type EvalResult =
+    | { ok: true; value: MinabValue }
+    | {
+          ok: false;
+          reason: string;
+          code?: string;
+          params?: Record<string, string | number>;
+      };
 
 /** Lets a data call that was never given a signal still pass one. It never aborts. */
 const NEVER_ABORTED = new AbortController().signal;
@@ -165,7 +174,11 @@ export class MinabInterpreter {
     async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
         const state = new State(context, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
-            state.frames.push({ record: this.normalizeRecord(context.record, context.recordTable), table: context.recordTable, variables: new Map() });
+            state.frames.push({
+                record: this.normalizeRecord(context.record, context.recordTable),
+                table: context.recordTable,
+                variables: new Map()
+            });
             for (const declaration of model.declarations) {
                 if (isVariableDecl(declaration)) {
                     const value = declaration.value ? this.coerce(declaration.type, await this.expression(declaration.value, state)) : null;
@@ -175,7 +188,10 @@ export class MinabInterpreter {
                 }
             }
             if (!model.tail) return { ok: true, value: null };
-            return { ok: true, value: externalize(await this.mainStatement(model.tail, state)) };
+            return {
+                ok: true,
+                value: externalize(await this.mainStatement(model.tail, state))
+            };
         } catch (e) {
             if (e instanceof EvalError || e instanceof NumberError) return { ok: false, reason: e.message, code: e.code, params: e.params };
             throw e;
@@ -229,12 +245,23 @@ export class MinabInterpreter {
     private async runStatement(query: SqlQuery, origin: AstNode, state: State): Promise<Row[]> {
         const { context } = state;
         context.onStatement?.(query, origin);
-        context.events?.emit({ kind: 'statement', sql: query.text, params: query.params, range: origin.$cstNode?.range });
+        context.events?.emit({
+            kind: 'statement',
+            sql: query.text,
+            params: query.params,
+            range: origin.$cstNode?.range
+        });
         const started = performance.now();
         try {
-            return await context.executor.execute(query, { signal: context.signal ?? NEVER_ABORTED });
+            return await context.executor.execute(query, {
+                signal: context.signal ?? NEVER_ABORTED
+            });
         } finally {
-            context.events?.emit({ kind: 'timing', phase: 'data', durationMs: performance.now() - started });
+            context.events?.emit({
+                kind: 'timing',
+                phase: 'data',
+                durationMs: performance.now() - started
+            });
         }
     }
 
@@ -257,7 +284,21 @@ export class MinabInterpreter {
         const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
         if (!compiled.ok) return { pushed: false };
         const rows = await this.runStatement(compiled.query, expr, state);
-        return { pushed: true, value: this.readPushed(expr, rows.length > 0 ? rows[0].value : null) };
+        return {
+            pushed: true,
+            value: this.readPushed(expr, rows.length > 0 ? rows[0].value : null)
+        };
+    }
+
+    /** The static scalar type of an expression, when the checker knows it. */
+    private staticScalar(expr: Expression): { base: LogicalTypeBase; array: boolean } | undefined {
+        if (!this.typeChecker) return undefined;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' ? { base: inferred.type.base, array: inferred.type.array } : undefined;
+        } catch {
+            return undefined;
+        }
     }
 
     /** A value that SQL computed: read by the static type of the expression, so a `numeric` (text from the driver) becomes an exact decimal. */
@@ -386,7 +427,19 @@ export class MinabInterpreter {
             const matches = this.jsonKindMatches(value, expr.test);
             return expr.operator === 'is' ? matches : !matches;
         }
-        if (isCastExpr(expr)) return await this.expression(expr.value, state);
+        if (isCastExpr(expr)) {
+            const value = await this.expression(expr.value, state);
+            const operand = this.staticScalar(expr.value);
+            return castValue(
+                value,
+                {
+                    base: expr.targetType.base as LogicalTypeBase,
+                    array: !!expr.targetType.array
+                },
+                operand?.base,
+                operand?.array
+            );
+        }
         if (isTupleAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
             if (!Array.isArray(receiver)) fail('a positional index needs an array (spec §3.5)');
@@ -405,7 +458,11 @@ export class MinabInterpreter {
     private async filterArray(rows: MinabValue[], filter: Expression, state: State): Promise<MinabValue[]> {
         const kept: MinabValue[] = [];
         for (const row of rows) {
-            const frame: Frame = { record: row as Row, table: undefined, variables: new Map() };
+            const frame: Frame = {
+                record: row as Row,
+                table: undefined,
+                variables: new Map()
+            };
             if (this.truthy(await this.expression(filter, state.push(frame)))) kept.push(row);
         }
         return kept;
@@ -433,7 +490,11 @@ export class MinabInterpreter {
         for (let i = 0; i < args.length; i++) {
             variables.set(declaration.params[i].name, this.coerce(declaration.params[i].type, await this.expression(args[i], state)));
         }
-        const inner = state.push({ record: state.currentRecord(), table: state.currentTable(), variables });
+        const inner = state.push({
+            record: state.currentRecord(),
+            table: state.currentTable(),
+            variables
+        });
         for (const statement of declaration.body) {
             if (!isVariableDecl(statement)) {
                 fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
@@ -450,7 +511,9 @@ export class MinabInterpreter {
         if (!hostFunctions) fail(`the host function "${name}" was called, and the host gave no implementation`, 'eval.hostFunctionMissing', { name });
         const values: MinabValue[] = [];
         for (const arg of args) values.push(await this.expression(arg, state));
-        return await hostFunctions.call(name, values, { signal: signal ?? NEVER_ABORTED });
+        return await hostFunctions.call(name, values, {
+            signal: signal ?? NEVER_ABORTED
+        });
     }
 
     // ---- built-ins over in-memory collections ---------------------------
@@ -675,7 +738,10 @@ export class MinabInterpreter {
         if (!frame.table) fail('the host did not say which table the record under validation belongs to');
         const primaryKey = this.schema.getTable(frame.table)?.primaryKey;
         if (!primaryKey) fail(`the schema does not say which column identifies a row of "${frame.table}" (set primaryKey)`);
-        return { table: frame.table, key: this.readField(frame.record, primaryKey) };
+        return {
+            table: frame.table,
+            key: this.readField(frame.record, primaryKey)
+        };
     }
 
     /**
