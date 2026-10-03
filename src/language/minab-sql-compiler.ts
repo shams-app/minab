@@ -723,7 +723,7 @@ export class MinabSqlCompiler {
             return `(${this.expression(expr.left, ctx, scopes)} ${op} ${this.expression(expr.right, ctx, scopes)})`;
         }
         if (op === 'IN') {
-            return `${this.expression(expr.left, ctx, scopes)} IN ${this.inList(expr.right, ctx, scopes)}`;
+            return this.inComparison(expr, ctx, scopes);
         }
         if (op === '==' || op === '!=') {
             const identity = this.identityComparison(expr, ctx, scopes);
@@ -731,7 +731,8 @@ export class MinabSqlCompiler {
         }
         const comparison = COMPARISONS[op];
         if (comparison) {
-            return `${this.expression(expr.left, ctx, scopes)} ${comparison} ${this.expression(expr.right, ctx, scopes)}`;
+            const [l, r] = this.textFamilySides(expr.left, expr.right, ctx, scopes);
+            return `${l} ${comparison} ${r}`;
         }
         const left = () => this.expression(expr.left, ctx, scopes);
         const right = () => this.expression(expr.right, ctx, scopes);
@@ -745,6 +746,44 @@ export class MinabSqlCompiler {
             return `(${left()} ${arithmetic} ${right()})`;
         }
         fail(`operator "${op}" has no SQL form`);
+    }
+
+    /**
+     * The two sides of a comparison. When one side is `CITEXT` and the other is
+     * `TEXT`, the text side is cast to `citext`: Postgres would compare
+     * `citext = text` as plain text otherwise (D15).
+     */
+    private textFamilySides(left: Expression, right: Expression, ctx: Ctx, scopes: SqlScope[]): [string, string] {
+        const l = this.expression(left, ctx, scopes);
+        const r = this.expression(right, ctx, scopes);
+        const [lc, rc] = [this.isCitextArg(left), this.isCitextArg(right)];
+        if (lc === rc) return [l, r];
+        const cast = (sql: string, isText: boolean) => (isText ? `CAST(${sql} AS citext)` : sql);
+        return [cast(l, this.isTextArg(left) && !lc), cast(r, this.isTextArg(right) && !rc)];
+    }
+
+    /** `IN`: with a `CITEXT` side, the `TEXT` side (value or list items) is cast to `citext`. */
+    private inComparison(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const value = this.expression(expr.left, ctx, scopes);
+        const valueCitext = this.isCitextArg(expr.left);
+        if (!isListLiteral(expr.right)) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
+        const items = expr.right.items;
+        const anyCitext = valueCitext || items.some(i => this.isCitextArg(i));
+        if (!anyCitext) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
+        const cast = (sql: string, arg: Expression) => (this.isTextArg(arg) && !this.isCitextArg(arg) ? `CAST(${sql} AS citext)` : sql);
+        const list = items.map(i => cast(this.expression(i, ctx, scopes), i)).join(', ');
+        return `${cast(value, expr.left)} IN (${list})`;
+    }
+
+    /** True when the argument has type `TEXT` or `CITEXT`. */
+    private isTextArg(expr: Expression): boolean {
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && !inferred.type.array && (inferred.type.base === 'TEXT' || inferred.type.base === 'CITEXT');
+        } catch {
+            return false;
+        }
     }
 
     /**

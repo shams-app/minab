@@ -129,6 +129,17 @@ export function baseTypesEqual(a: MinabType, b: MinabType): boolean {
 }
 
 /**
+ * Whether two operands may be compared (`==`, `!=`, `<`…, `IN`): the same
+ * types, or one numeric family (`INTEGER`/`DECIMAL`), or one text family
+ * (`TEXT`/`CITEXT`, D15). Other places (`IF` branches, call arguments) keep
+ * the stricter `baseTypesEqual`.
+ */
+export function comparableTypes(a: MinabType, b: MinabType): boolean {
+    if (baseTypesEqual(a, b)) return true;
+    return a.kind === 'scalar' && b.kind === 'scalar' && a.array === b.array && TEXT_BASES.has(a.base) && TEXT_BASES.has(b.base);
+}
+
+/**
  * Whether a value of type `value` may be assigned into a binding declared
  * as `target` — stricter than `baseTypesEqual` (used for operator
  * compatibility): a `null` value is only assignable into a *nullable*
