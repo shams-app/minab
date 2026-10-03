@@ -198,13 +198,13 @@ FROM <source> [AS alias]
 
 Semantics per clause, in evaluation order:
 
-1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
+1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`), optionally narrowed by an inline filter (`FROM .orders[.status == "paid"]`, same meaning as §3.2) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
 2. **JOIN** — adds another scope. `ON` is an ordinary boolean expression comparing fields from any active scope. `LEFTJOIN` preserves unmatched left-side rows with nulls on the right; `CROSSJOIN` takes no `ON` and produces the full cross-product.
 3. **WHERE** — filters the joined row stream.
 4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key.
 5. **HAVING** — filters the *grouped* stream, evaluated after aggregation, so aggregate calls are valid here.
 6. **SELECT** — projects final columns. Each item may be aliased with `AS`. `SELECT *` selects every column of the row instead of listing them; omitting `SELECT` entirely is also still valid (§4.1 shows it as optional) — the two are different things, not the same "no explicit projection" case. An optional `DISTINCT` immediately after `SELECT` deduplicates the projected rows — deduplication is by the full projected tuple (every selected column together), not any single column, matching standard SQL `SELECT DISTINCT` semantics.
-7. **ORDERBY** — sorts the (post-SELECT) result. `ASC` is the default.
+7. **ORDERBY** — sorts the result. `ASC` is the default. Each sort key is either a `SELECT` alias (`ORDERBY total DESC`) or any expression over the source row (`ORDERBY .created_at DESC`), even a column that `SELECT` does not list. An alias name wins over a source column with the same name.
 8. **LIMIT / OFFSET** — truncates and pages the result.
 
 ### 4.2 Scope aliasing convention
@@ -513,6 +513,10 @@ Minab's scalar types are a small, storage-agnostic vocabulary — behavioral cat
 
 Any type may be suffixed with `[]` to form an array — `INTEGER[]`, `UUID[]` — since function parameters (§8) need arrays of arbitrary element types.
 
+**Exact numbers.** A `DECIMAL` is exact, as Postgres `numeric` is: `0.1 + 0.2 == 0.3` is `true`, in the interpreter and in the compiled SQL. A number literal with a fractional part (`0.30`) is a `DECIMAL`; one without (`30`) is an `INTEGER`. `INTEGER` with `INTEGER` stays `INTEGER`; a mix is `DECIMAL`. An `INTEGER` is a whole number from -9,007,199,254,740,991 to 9,007,199,254,740,991. A result outside that range is an evaluation error, `eval.integerOutOfRange`, never a silently wrong value. Use `DECIMAL` for larger numbers.
+
+A `DECIMAL` result leaves Minab as a **string** in its shortest exact form, with no exponent and no trailing zeros: `"0.3"`, `"170"`. This holds for run results, `--json` output and parameters bound to SQL. An `INTEGER` stays a number. Numbers inside a `JSON` value stay JSON numbers. A host that reads a `DECIMAL` result should parse the string with a decimal library, not with `parseFloat`.
+
 **Nullable types.** A trailing `?` marks a type as nullable — it can hold `null` in addition to its ordinary values. `?` can appear in **two independent positions**: right after the base type (before any `[]`), and right after the `[]` suffix (if present) — because "can this element be null" and "can the whole column be null" are two separate questions once arrays are involved:
 
 | Type | Meaning |
@@ -746,6 +750,23 @@ fn recentOrders(customerId: UUID): JSON {
 ```
 
 A function whose tail is a plain `Expression` (not a `Query`) is unaffected by this rule — it's scalar-valued exactly as declared, same as always. Because the result is `JSON`, consuming it further needs the ordinary `is`/`isnot` shape-testing rules (§5.6) — e.g. `is array` — the same as any other `JSON` value; there's no separate "query-result" type the checker treats specially beyond this.
+
+### 8.7 Host functions and host inputs
+
+A program can use names that **the host** gives it. The host declares them once, with types, when it creates the runtime (`createMinab`). Minab source never declares them.
+
+- **A host input** is a typed, read-only name, such as `currentUser` or `url`. Its type is a scalar, an array, or a record of typed fields (no relations). A program reads it by its bare name, and the host gives the value for each run. A declared input with no value is a run error (`eval.missingInput`).
+- **A host function** is a typed function that the host implements, such as `fxRate(from: TEXT, to: TEXT): DECIMAL`. A program calls it like any other function: `fxRate("EUR", .currency)`. It runs in the interpreter only. The SQL compiler never turns a call to it into SQL (`compile.hostFunctionInSql`). The host may mark a function `local` when it is safe to run in a browser. A program that uses a function that is not `local` needs the server.
+
+```
+.owner_id == currentUser.id OR "admin" IN currentUser.roles OR .total * fxRate("EUR", .currency) > 1000
+```
+
+**Names.** A host function name needs at least one lowercase letter, like a user `fn` (§5.3, decision D10). The same rule holds for a host input name. The runtime checks this when the host declares them, and the host developer gets a clear error. A `fn`, a `let` or a parameter may not reuse a host input name or a host function name (`scope.nameIsHostName`, decision D11). A host input is read-only: assigning to it, or to a field of it, is an error (`scope.assignToInput`).
+
+```
+let currentUser: TEXT = "x";      // error: "currentUser" is a host input
+```
 
 ---
 
@@ -1186,8 +1207,8 @@ Query:
     (orderByClause=OrderByClause)?
     (limitClause=LimitClause)?;
 
-FromSource:
-    TableRef | NamedScope | CurrentRecord;
+FromSource infers Expression:
+    TableRef | NamedScope | CurrentRecord ({infer FilterAccess.receiver=current} '[' filter=Expression ']')?;
 
 TableRef infers Expression:
     {infer TableRef} name=QualifiedName;

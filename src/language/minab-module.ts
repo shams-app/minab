@@ -13,13 +13,14 @@ import { MinabTokenBuilder } from './minab-token-builder.js';
 import { MinabValueConverter } from './minab-value-converter.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
+import type { ResolvedHost } from './host-declarations.js';
 import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
 
 /**
  * Declaration of custom services for the Minab language.
  *
- *  - `schema`: the host-supplied table/column/function contract (see
- *    `schema.ts`) — Minab has no in-file table declarations, so this is
+ *  - `schema`: the host-supplied table/column contract and the
+ *    host's declared inputs and functions (see `schema.ts`, `host-declarations.ts`) — Minab has no in-file table declarations, so this is
  *    the only source of truth for what `#alias`/bare table names mean.
  *  - `scopeResolver`: resolves the scope-stack sigils (`.`/`^`/`#alias`/
  *    `KEY`, spec §2.2) plus bare `NameRef` lookups. Not a Langium
@@ -87,6 +88,8 @@ export type MinabServices = LangiumServices & MinabAddedServices;
  */
 export interface MinabServiceOptions {
     mode?: 'development' | 'production';
+    /** The host's declared inputs and functions (D27), resolved by `resolveHostDeclarations`. */
+    host?: ResolvedHost;
 }
 
 /**
@@ -106,12 +109,12 @@ function createMinabModule(
 ): Module<MinabServices, PartialLangiumServices & MinabAddedServices> {
     return {
         ...(options.mode === 'production' ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) } : {}),
-        schema: () => new SchemaProvider(schema),
-        scopeResolver: services => new MinabScopeResolver(services.schema),
+        schema: () => new SchemaProvider(schema, options.host),
+        scopeResolver: services => new MinabScopeResolver(services.schema, services.ruleContext.recordTable),
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),
-        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler),
+        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler, services.typeChecker),
         parser: {
             TokenBuilder: () => new MinabTokenBuilder(),
             ValueConverter: () => new MinabValueConverter()

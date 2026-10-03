@@ -24,8 +24,12 @@ export function formatValue(value: unknown): string {
         return formatTable(value as Record<string, unknown>[]);
     }
     if (Array.isArray(value) && value.length === 0) return '(no rows)';
+    // A `DECIMAL` result is a string such as "24.9" (D17). Print it as the number it is.
+    if (typeof value === 'string' && DECIMAL_TEXT.test(value)) return value;
     return JSON.stringify(value ?? null, null, 2);
 }
+
+const DECIMAL_TEXT = /^-?\d+(\.\d+)?$/;
 
 function isPlainRow(value: unknown): boolean {
     return typeof value === 'object' && value !== null && !Array.isArray(value);

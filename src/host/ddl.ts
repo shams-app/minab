@@ -161,8 +161,10 @@ export function sqlLiteral(value: unknown, sqlType: string): string {
         case 'boolean':
             if (typeof value !== 'boolean') throw new Error(`expected true or false, got ${JSON.stringify(value)}`);
             return value ? 'TRUE' : 'FALSE';
-        case 'bigint':
         case 'numeric':
+        case 'bigint':
+            // Exact decimals come as text (D17): a JSON number cannot hold 20 digits.
+            if (sqlType === 'numeric' && typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)) return value;
             if (typeof value !== 'number' || !Number.isFinite(value)) {
                 throw new Error(`expected a number, got ${JSON.stringify(value)}`);
             }

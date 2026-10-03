@@ -183,7 +183,7 @@ export const examples: Example[] = [
         repoPath: repo('discounted-total'),
         host: { dataset: 'demo' },
         focus: 'result',
-        expect: { kind: 'value', value: 170, statements: 0 }
+        expect: { kind: 'value', value: '170', statements: 0 }
     },
     {
         id: 'order-status-switch',
@@ -543,7 +543,7 @@ export const examples: Example[] = [
         specRef: '§5.4',
         host: { dataset: 'demo' },
         focus: 'execution',
-        expect: { kind: 'value', value: 1302.5, statements: 1 }
+        expect: { kind: 'value', value: '1302.5', statements: 1 }
     },
     {
         id: 'room-occupancy',

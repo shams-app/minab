@@ -16,6 +16,7 @@ export interface SqlQuery {
 
 export type Row = Record<string, unknown>;
 
+/** The data port before R3 (see `DataPort` in `src/runtime/ports.ts`). */
 export interface QueryExecutor {
     execute(query: SqlQuery): Promise<Row[]>;
 }

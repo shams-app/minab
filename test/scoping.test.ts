@@ -40,8 +40,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'total', type: { kind: 'scalar', type: scalarType('DECIMAL') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let parse: ReturnType<typeof parseHelper<Model>>;

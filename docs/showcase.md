@@ -595,7 +595,23 @@ Two things worth calling out about *why* it's written this way, not just what it
 
 ---
 
-## 15. Names in any language, and quoted names
+## 15. Host inputs and host functions
+
+*Spec §8.7.* The host (for example Shamsine) declares typed names that a program can use. They are not declared in Minab source. Here the host declared the input `currentUser` (a record with `id`, `email` and `roles`) and the function `fxRate(from: TEXT, to: TEXT): DECIMAL`.
+
+```
+.owner_id == currentUser.id OR "admin" IN currentUser.roles OR .total * fxRate("EUR", .currency) > 1000
+```
+
+`currentUser` is read-only and the host gives its value for each run. `fxRate` is the host's code: it runs in the interpreter and is never turned into SQL. A user `fn`, a `let` or a parameter cannot use these names:
+
+```
+let currentUser: TEXT = "x";      // error: "currentUser" is a host input
+```
+
+---
+
+## 16. Names in any language, and quoted names
 
 Names are not limited to ASCII (spec §2.3). A Persian field name is a plain name:
 

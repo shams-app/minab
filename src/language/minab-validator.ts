@@ -31,14 +31,21 @@
 
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
+    isFilterAccess,
     isFunctionDecl,
+    isCallExpression,
+    isMemberAccess,
     isModel,
+    isNameRef,
+    isOrderByClause,
     isQuery,
+    isTupleAccess,
     isTypeRef,
     type AssignmentStatement,
     type BinaryExpression,
     type CallExpression,
     type CurrentRecord,
+    type Expression,
     type FieldValue,
     type FilterAccess,
     type FunctionDecl,
@@ -50,8 +57,11 @@ import {
     type MemberAccess,
     type MinabAstType,
     type NamedScope,
+    type NameRef,
     type Param,
+    type ParentRecord,
     type SwitchExpr,
+    type Subquery,
     type TupleAccess,
     type UnaryExpression,
     type VariableDecl,
@@ -88,6 +98,9 @@ export function registerValidationChecks(services: MinabServices): void {
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
         CurrentRecord: validator.checkExpressionTypeChecks,
+        ParentRecord: validator.checkExpressionTypeChecks,
+        NameRef: validator.checkNameRefTypeChecks,
+        Subquery: validator.checkExpressionTypeChecks,
         WhereClause: validator.checkConditionIsBoolean,
         HavingClause: validator.checkConditionIsBoolean,
         GroupByClause: validator.checkGroupKeysNotCollection,
@@ -143,13 +156,35 @@ export class MinabValidator {
             | ListLiteral
             | IfExpr
             | SwitchExpr
-            | CurrentRecord,
+            | CurrentRecord
+            | ParentRecord
+            | NameRef
+            | Subquery,
         accept: ValidationAcceptor
     ): void {
         const result = this.services.typeChecker.inferType(node);
         if (!result.ok && result.origin === node) {
             report(accept, result, { node });
         }
+    }
+
+    /**
+     * Two kinds of `NameRef` are not values, so they are skipped here:
+     *  - the callee of a call is a function name. The call itself reports
+     *    an unknown function;
+     *  - in `ORDERBY`, a name that is a `SELECT` alias (spec §4.1).
+     */
+    checkNameRefTypeChecks(node: NameRef, accept: ValidationAcceptor): void {
+        if (isCallExpression(node.$container) && node.$containerProperty === 'callee') return;
+        if (this.isSelectAliasInOrderBy(node)) return;
+        this.checkExpressionTypeChecks(node, accept);
+    }
+
+    private isSelectAliasInOrderBy(node: NameRef): boolean {
+        const orderBy = AstUtils.getContainerOfType(node, isOrderByClause);
+        const query = orderBy?.$container;
+        if (!orderBy || !isQuery(query)) return false;
+        return query.selectClause?.items.some(item => item.alias === node.name) ?? false;
     }
 
     checkConditionIsBoolean(node: WhereClause | HavingClause, accept: ValidationAcceptor): void {
@@ -174,6 +209,11 @@ export class MinabValidator {
     }
 
     checkAssignmentTypeCompatible(node: AssignmentStatement, accept: ValidationAcceptor): void {
+        const root = this.assignmentRoot(node.target);
+        if (root && this.isHostInputRef(root)) {
+            report(accept, coded('scope.assignToInput', { name: root.name }), { node, property: 'target' });
+            return;
+        }
         const targetResult = this.services.typeChecker.inferType(node.target);
         const valueResult = this.services.typeChecker.inferType(node.value);
         if (!targetResult.ok || !valueResult.ok) return;
@@ -218,6 +258,18 @@ export class MinabValidator {
         }
     }
 
+    /** The bare name an assignment target starts from: `currentUser` in `currentUser.id = 1;`. */
+    private assignmentRoot(target: Expression): NameRef | undefined {
+        let current = target;
+        while (isMemberAccess(current) || isTupleAccess(current) || isFilterAccess(current)) current = current.receiver;
+        return isNameRef(current) ? current : undefined;
+    }
+
+    private isHostInputRef(node: NameRef): boolean {
+        const resolved = this.services.scopeResolver.resolveNameRef(node);
+        return resolved.found && resolved.scope.hostInput !== undefined;
+    }
+
     checkVariableDeclTypeCompatible(node: VariableDecl, accept: ValidationAcceptor): void {
         if (!node.value) return;
         const valueResult = this.services.typeChecker.inferType(node.value);
@@ -243,19 +295,26 @@ export class MinabValidator {
         if (this.services.schema.getTable(node.name)) {
             report(accept, coded('scope.functionNameIsTable', { name: node.name }), { node, property: 'name' });
         }
-    }
-
-    /** D11: a `let` may not have the name of a declared `fn`. */
-    checkVariableNotFunctionName(node: VariableDecl, accept: ValidationAcceptor): void {
-        if (this.isFunctionName(node, node.name)) {
-            report(accept, coded('scope.nameIsFunction', { name: node.name }), { node, property: 'name' });
+        if (this.services.schema.isHostName(node.name)) {
+            report(accept, coded('scope.nameIsHostName', { name: node.name }), { node, property: 'name' });
         }
     }
 
-    /** D11: a parameter may not have the name of a declared `fn`. */
+    /** D11: a `let` may not have the name of a declared `fn`, a host input or a host function. */
+    checkVariableNotFunctionName(node: VariableDecl, accept: ValidationAcceptor): void {
+        if (this.isFunctionName(node, node.name)) {
+            report(accept, coded('scope.nameIsFunction', { name: node.name }), { node, property: 'name' });
+        } else if (this.services.schema.isHostName(node.name)) {
+            report(accept, coded('scope.nameIsHostName', { name: node.name }), { node, property: 'name' });
+        }
+    }
+
+    /** D11: a parameter may not have the name of a declared `fn`, a host input or a host function. */
     checkParamNotFunctionName(node: Param, accept: ValidationAcceptor): void {
         if (this.isFunctionName(node, node.name)) {
             report(accept, coded('scope.nameIsFunction', { name: node.name }), { node, property: 'name' });
+        } else if (this.services.schema.isHostName(node.name)) {
+            report(accept, coded('scope.nameIsHostName', { name: node.name }), { node, property: 'name' });
         }
     }
 

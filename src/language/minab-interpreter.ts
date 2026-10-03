@@ -59,6 +59,7 @@ import {
     isSwitchExpr,
     isTableRef,
     isTupleAccess,
+    isTypeRef,
     isTypeTestExpression,
     isUnaryExpression,
     isVariableDecl,
@@ -67,25 +68,63 @@ import {
     type FunctionDecl,
     type MainStatement,
     type Model,
-    type SwitchExpr
+    type SwitchExpr,
+    type Type
 } from './generated/ast.js';
 import { isBuiltinName } from './minab-builtins.js';
 import type { AstNode } from 'langium';
-import type { QueryExecutor, Row, SqlQuery } from './minab-executor.js';
+import type { Row, SqlQuery } from './minab-executor.js';
+import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
+import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabSqlCompiler, OuterRecord, OuterResolver } from './minab-sql-compiler.js';
 import type { SchemaProvider } from './schema.js';
+import {
+    arithmetic,
+    decimalCompare,
+    decimalEqual,
+    externalize,
+    jsonNumber,
+    literal,
+    negate,
+    normalizeIn,
+    NumberError,
+    toNumeric,
+    type Arithmetic,
+    type Numeric
+} from './values.js';
 
 export type MinabValue = unknown;
 
-export type EvalResult = { ok: true; value: MinabValue } | { ok: false; reason: string };
+/** `code` and `params` are set when the failure has a stable code (for example `eval.missingInput`). */
+export type EvalResult = { ok: true; value: MinabValue } | { ok: false; reason: string; code?: string; params?: Record<string, string | number> };
+
+/** Lets a data call that was never given a signal still pass one. It never aborts. */
+const NEVER_ABORTED = new AbortController().signal;
 
 /** What the host supplies for one evaluation: the connection, the record under validation (spec §6), and `$` when this is a field rule (§6.2). */
 export interface EvalContext {
-    executor: QueryExecutor;
+    /** The data port (ADR 0002, 4.1). A plain `QueryExecutor` fits: it ignores the second argument. */
+    executor: DataPort;
+    /** The write port (X5 builds it). Not used yet. */
+    write?: WritePort;
+    /** Values of the declared host inputs (D27). A declared input with no value is the run error `eval.missingInput`. */
+    hostInputs?: Record<string, MinabValue>;
+    hostFunctions?: HostFunctions;
+    /** The instant the run started: read once from the clock port. L6's `NOW()` returns it. */
+    now?: Date;
+    /** IANA name from the clock port. */
+    timeZone?: string;
+    /** One stream for statements, logs and timing (D33). */
+    events?: EventSink;
+    /** Passed to the host's ports. R4 checks it. */
+    signal?: AbortSignal;
     record?: Row;
     recordTable?: string;
     fieldValue?: MinabValue;
     /**
+     * Kept until R8 moves the playground to `events`. Same moment as the
+     * `statement` event, but it hands over the AST node instead of the range.
+     *
      * Called just before each statement goes to the executor, with the AST
      * node it was compiled from — the whole `Query` for a query program,
      * or the smallest subexpression pushed down for a rule. The executor
@@ -95,10 +134,18 @@ export interface EvalContext {
     onStatement?: (query: SqlQuery, origin: AstNode) => void;
 }
 
-class EvalError extends Error {}
+class EvalError extends Error {
+    constructor(
+        reason: string,
+        readonly code?: string,
+        readonly params?: Record<string, string | number>
+    ) {
+        super(reason);
+    }
+}
 
-function fail(reason: string): never {
-    throw new EvalError(reason);
+function fail(reason: string, code?: string, params?: Record<string, string | number>): never {
+    throw new EvalError(reason, code, params);
 }
 
 /** One level of the spec §2.2 scope stack, at runtime: what `.` means here, and what names are bound. */
@@ -111,27 +158,49 @@ interface Frame {
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
-        private readonly compiler: MinabSqlCompiler
+        private readonly compiler: MinabSqlCompiler,
+        private readonly typeChecker?: MinabTypeChecker
     ) {}
 
     async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
-        const frames: Frame[] = [{ record: context.record, table: context.recordTable, variables: new Map() }];
-        const state = new State(context, frames, this.collectFunctions(model));
+        const state = new State(context, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
+            state.frames.push({ record: this.normalizeRecord(context.record, context.recordTable), table: context.recordTable, variables: new Map() });
             for (const declaration of model.declarations) {
                 if (isVariableDecl(declaration)) {
-                    const value = declaration.value ? await this.expression(declaration.value, state) : null;
+                    const value = declaration.value ? this.coerce(declaration.type, await this.expression(declaration.value, state)) : null;
                     state.frames[0].variables.set(declaration.name, value);
                 } else if (!isFunctionDecl(declaration)) {
                     fail(`"${declaration.$type}" is not executed yet (Phase 5 covers queries and validation rules)`);
                 }
             }
             if (!model.tail) return { ok: true, value: null };
-            return { ok: true, value: await this.mainStatement(model.tail, state) };
+            return { ok: true, value: externalize(await this.mainStatement(model.tail, state)) };
         } catch (e) {
-            if (e instanceof EvalError) return { ok: false, reason: e.message };
+            if (e instanceof EvalError || e instanceof NumberError) return { ok: false, reason: e.message, code: e.code, params: e.params };
             throw e;
         }
+    }
+
+    /** The record under validation, with each column read by its type: `DECIMAL` is exact, `INTEGER` is a number in range (spec §7.2). */
+    private normalizeRecord(record: Row | undefined, table: string | undefined): Row | undefined {
+        if (!record || !table) return record;
+        const normalized: Row = { ...record };
+        for (const column of this.schema.getTable(table)?.columns ?? []) {
+            if (column.type.kind !== 'scalar' || !(column.name in record)) continue;
+            normalized[column.name] = normalizeIn(record[column.name], column.type.type.base, column.type.type.array);
+        }
+        return normalized;
+    }
+
+    /** A declared host input, read by bare name. The value comes from the host, per run. */
+    private readHostInput(name: string, context: EvalContext): MinabValue {
+        if (!this.schema.getHostInput(name)) fail(`unknown name "${name}"`);
+        const inputs = context.hostInputs;
+        if (!inputs || !Object.hasOwn(inputs, name) || inputs[name] === undefined) {
+            fail(`the host input "${name}" has no value for this run`, 'eval.missingInput', { name });
+        }
+        return inputs[name];
     }
 
     private collectFunctions(model: Model): Map<string, FunctionDecl> {
@@ -146,10 +215,27 @@ export class MinabInterpreter {
         if (isQuery(statement)) {
             const compiled = this.compiler.compileQuery(statement, this.outerResolver(state));
             if (!compiled.ok) fail(compiled.reason);
-            state.context.onStatement?.(compiled.query, statement);
-            return await state.context.executor.execute(compiled.query);
+            return await this.runStatement(compiled.query, statement, state);
         }
         return await this.expression(statement, state);
+    }
+
+    /**
+     * Sends one statement to the data port. The `statement` event goes out
+     * just before the call (the playground's execution map relies on that
+     * order), so it cannot hold the duration. The `timing` event after the
+     * call does.
+     */
+    private async runStatement(query: SqlQuery, origin: AstNode, state: State): Promise<Row[]> {
+        const { context } = state;
+        context.onStatement?.(query, origin);
+        context.events?.emit({ kind: 'statement', sql: query.text, params: query.params, range: origin.$cstNode?.range });
+        const started = performance.now();
+        try {
+            return await context.executor.execute(query, { signal: context.signal ?? NEVER_ABORTED });
+        } finally {
+            context.events?.emit({ kind: 'timing', phase: 'data', durationMs: performance.now() - started });
+        }
     }
 
     // ---- expressions ---------------------------------------------------
@@ -170,9 +256,20 @@ export class MinabInterpreter {
     private async pushDown(expr: Expression, state: State): Promise<{ pushed: true; value: MinabValue } | { pushed: false }> {
         const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
         if (!compiled.ok) return { pushed: false };
-        state.context.onStatement?.(compiled.query, expr);
-        const rows = await state.context.executor.execute(compiled.query);
-        return { pushed: true, value: rows.length > 0 ? rows[0].value : null };
+        const rows = await this.runStatement(compiled.query, expr, state);
+        return { pushed: true, value: this.readPushed(expr, rows.length > 0 ? rows[0].value : null) };
+    }
+
+    /** A value that SQL computed: read by the static type of the expression, so a `numeric` (text from the driver) becomes an exact decimal. */
+    private readPushed(expr: Expression, value: MinabValue): MinabValue {
+        if (!this.typeChecker || value === null || value === undefined) return value;
+        let inferred;
+        try {
+            inferred = this.typeChecker.inferType(expr);
+        } catch {
+            return value;
+        }
+        return inferred.ok && inferred.type.kind === 'scalar' ? normalizeIn(value, inferred.type.base, inferred.type.array) : value;
     }
 
     /**
@@ -219,12 +316,16 @@ export class MinabInterpreter {
         }
         if (isParentRecord(expr)) return state.parentTable();
         if (isNamedScope(expr) || isTableRef(expr)) return this.schema.getTable(expr.name)?.name;
+        if (isNameRef(expr)) {
+            const input = this.schema.getHostInput(expr.name);
+            return input?.kind === 'record' ? input.table : undefined;
+        }
         return undefined;
     }
 
     private async interpret(expr: Expression, state: State): Promise<MinabValue> {
         if (isStringLiteral(expr)) return expr.value;
-        if (isNumberLiteral(expr)) return expr.value;
+        if (isNumberLiteral(expr)) return this.numberLiteral(expr);
         if (isBooleanLiteral(expr)) return expr.value === 'true';
         if (isNullLiteral(expr)) return null;
         if (isCurrentRecord(expr)) {
@@ -239,7 +340,7 @@ export class MinabInterpreter {
         }
         if (isFieldValue(expr)) {
             if (state.context.fieldValue === undefined) fail('"$" was used but the host supplied no field value');
-            return state.context.fieldValue;
+            return this.fieldValue(state);
         }
         if (isMemberAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
@@ -250,7 +351,7 @@ export class MinabInterpreter {
         if (isUnaryExpression(expr)) {
             const operand = await this.expression(expr.operand, state);
             if (expr.negated) return !this.truthy(operand);
-            if (expr.operator === '-') return -this.number(operand);
+            if (expr.operator === '-') return negate(this.number(operand));
             return this.number(operand);
         }
         if (isListLiteral(expr)) {
@@ -261,7 +362,8 @@ export class MinabInterpreter {
         if (isJsonObjectLiteral(expr)) {
             const object: Record<string, MinabValue> = {};
             for (const property of expr.properties) {
-                object[property.key] = property.value ? await this.expression(property.value, state) : state.lookup(property.key);
+                // Numbers inside a JSON value are JSON numbers (D17).
+                object[property.key] = jsonNumber(property.value ? await this.expression(property.value, state) : state.lookup(property.key));
             }
             return object;
         }
@@ -329,17 +431,26 @@ export class MinabInterpreter {
         }
         const variables = new Map<string, MinabValue>();
         for (let i = 0; i < args.length; i++) {
-            variables.set(declaration.params[i].name, await this.expression(args[i], state));
+            variables.set(declaration.params[i].name, this.coerce(declaration.params[i].type, await this.expression(args[i], state)));
         }
         const inner = state.push({ record: state.currentRecord(), table: state.currentTable(), variables });
         for (const statement of declaration.body) {
             if (!isVariableDecl(statement)) {
                 fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
             }
-            variables.set(statement.name, statement.value ? await this.expression(statement.value, inner) : null);
+            variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, inner)) : null);
         }
         if (!declaration.tail) fail(`${name} has no tail expression to return`);
-        return await this.mainStatement(declaration.tail, inner);
+        return this.coerce(declaration.returnType, await this.mainStatement(declaration.tail, inner));
+    }
+
+    /** A host function runs in the host, with the values of its arguments. Never in SQL. */
+    private async callHostFunction(name: string, args: Expression[], state: State): Promise<MinabValue> {
+        const { hostFunctions, signal } = state.context;
+        if (!hostFunctions) fail(`the host function "${name}" was called, and the host gave no implementation`, 'eval.hostFunctionMissing', { name });
+        const values: MinabValue[] = [];
+        for (const arg of args) values.push(await this.expression(arg, state));
+        return await hostFunctions.call(name, values, { signal: signal ?? NEVER_ABORTED });
     }
 
     // ---- built-ins over in-memory collections ---------------------------
@@ -348,6 +459,9 @@ export class MinabInterpreter {
         const callee = expr.callee;
         if (!isNameRef(callee)) fail('only a named function can be called');
         if (!isBuiltinName(callee.name)) {
+            if (!state.functions.has(callee.name) && this.schema.getHostFunction(callee.name)) {
+                return await this.callHostFunction(callee.name, expr.args, state);
+            }
             return await this.callFunction(callee.name, expr.args, state);
         }
         const values = await this.expression(expr.args[0], state);
@@ -362,13 +476,13 @@ export class MinabInterpreter {
             case 'ANY':
                 return items.some(i => this.truthy(i));
             case 'SUM':
-                return items.reduce((total: number, i) => total + this.number(i), 0);
+                return this.sum(items);
             case 'AVG':
-                return items.length === 0 ? null : items.reduce((total: number, i) => total + this.number(i), 0) / items.length;
+                return items.length === 0 ? null : arithmetic('/', this.sum(items), items.length);
             case 'MIN':
-                return items.length === 0 ? null : items.reduce((a, b) => (this.number(b) < this.number(a) ? b : a));
+                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) < 0 ? b : a));
             case 'MAX':
-                return items.length === 0 ? null : items.reduce((a, b) => (this.number(b) > this.number(a) ? b : a));
+                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) > 0 ? b : a));
             default:
                 fail(`built-in "${callee.name}" is not evaluated yet`);
         }
@@ -405,8 +519,9 @@ export class MinabInterpreter {
             if (left === null || right === null) {
                 fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
             }
-            const a = left as number;
-            const b = right as number;
+            const exact = decimalCompare(left, right);
+            const a = exact ?? (left as number);
+            const b = exact === undefined ? (right as number) : 0;
             switch (operator) {
                 case '<':
                     return a < b;
@@ -418,22 +533,13 @@ export class MinabInterpreter {
                     return a >= b;
             }
         }
+        if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%') {
+            fail(`operator "${operator}" is not evaluated yet`);
+        }
         const a = this.number(left);
         const b = this.number(right);
-        switch (operator) {
-            case '+':
-                return typeof left === 'string' ? String(left) + String(right) : a + b;
-            case '-':
-                return a - b;
-            case '*':
-                return a * b;
-            case '/':
-                return a / b;
-            case '%':
-                return a % b;
-            default:
-                fail(`operator "${operator}" is not evaluated yet`);
-        }
+        if (operator === '+' && typeof left === 'string') return String(left) + String(right);
+        return arithmetic(operator as Arithmetic, a, b);
     }
 
     /**
@@ -449,7 +555,7 @@ export class MinabInterpreter {
             return left.toLowerCase() === right.toLowerCase();
         }
         if (left instanceof Date && right instanceof Date) return left.getTime() === right.getTime();
-        return left === right;
+        return decimalEqual(left, right) ?? left === right;
     }
 
     /** True when either side of a comparison is a `CITEXT` column. */
@@ -502,13 +608,38 @@ export class MinabInterpreter {
         fail('expected a boolean');
     }
 
-    private number(value: MinabValue): number {
-        if (typeof value === 'number') return value;
-        if (typeof value === 'string') {
-            const parsed = Number(value);
-            if (!Number.isNaN(parsed)) return parsed;
-        }
-        fail('expected a number');
+    /** A value that meets a declared type: a `DECIMAL` slot holds a `Big`, even when the value is a whole number (`let x: DECIMAL = 5`). */
+    private coerce(type: Type, value: MinabValue): MinabValue {
+        if (isTypeRef(type)) return normalizeIn(value, type.base, type.array);
+        if (Array.isArray(value) && value.length === type.elementTypes.length) return value.map((item, i) => this.coerce(type.elementTypes[i], item));
+        return value;
+    }
+
+    /** A number operand: an `INTEGER` (a number) or a `DECIMAL` (a `Big`). Number text from a driver is read as one of them. */
+    private number(value: MinabValue): Numeric {
+        const numeric = toNumeric(value);
+        if (numeric === undefined) fail('expected a number');
+        return numeric;
+    }
+
+    private compareNumbers(a: Numeric, b: Numeric): number {
+        return decimalCompare(a, b) ?? (a as number) - (b as number);
+    }
+
+    /** `SUM` is exact: `INTEGER` items give an `INTEGER`, any `DECIMAL` item gives a `DECIMAL`. */
+    private sum(items: MinabValue[]): Numeric {
+        return items.reduce((total: Numeric, i) => arithmetic('+', total, this.number(i)), 0);
+    }
+
+    /** A number literal reads its own text, so `0.30` and 20-digit numbers are not rounded by JavaScript. */
+    private numberLiteral(expr: { value: number; $cstNode?: { text: string } }): Numeric {
+        return literal(expr.$cstNode?.text ?? String(expr.value));
+    }
+
+    /** `$`: the value the host supplied. A number with a fraction is a `DECIMAL`. */
+    private fieldValue(state: State): MinabValue {
+        const value = state.context.fieldValue;
+        return typeof value === 'number' && !Number.isInteger(value) ? (toNumeric(value) ?? value) : value;
     }
 
     // ---- the SQL seam ---------------------------------------------------
@@ -575,11 +706,11 @@ export class MinabInterpreter {
         }
         if (isFieldValue(expr)) {
             if (state.context.fieldValue === undefined) fail('"$" was used but the host supplied no field value');
-            return state.context.fieldValue;
+            return this.fieldValue(state);
         }
         if (isNameRef(expr)) return state.lookup(expr.name);
         if (isStringLiteral(expr)) return expr.value;
-        if (isNumberLiteral(expr)) return expr.value;
+        if (isNumberLiteral(expr)) return this.numberLiteral(expr);
         fail(`"${expr.$type}" cannot be evaluated outside the query`);
     }
 }
@@ -589,11 +720,12 @@ class State {
     constructor(
         readonly context: EvalContext,
         readonly frames: Frame[],
-        readonly functions: Map<string, FunctionDecl>
+        readonly functions: Map<string, FunctionDecl>,
+        private readonly readHostInput: (name: string) => MinabValue
     ) {}
 
     push(frame: Frame): State {
-        return new State(this.context, [frame, ...this.frames], this.functions);
+        return new State(this.context, [frame, ...this.frames], this.functions, this.readHostInput);
     }
 
     /** Frame `n` levels out, innermost first. A negative index would name a level inside a compiled statement, which this interpreter doesn't hold. */
@@ -621,6 +753,6 @@ class State {
         for (const frame of this.frames) {
             if (frame.variables.has(name)) return frame.variables.get(name)!;
         }
-        fail(`unknown name "${name}"`);
+        return this.readHostInput(name);
     }
 }

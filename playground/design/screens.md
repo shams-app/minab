@@ -60,7 +60,7 @@ Every screen, its regions, and every state each region can be in. Component name
 │                                   [📖] [⤓] [</>] [Share] [▶ Run ⌘↵]  │
 ├───────────────────────────────┬───────────────────────────────────────┤
 │ Editor (Monaco)               │ OutputPanel                           │
-│                               │ [Result][SQL][Execution ①][Problems][AST]
+│                               │ [Result][SQL][Execution ①][Console][Problems][AST]
 │                               │                                       │
 ├ EditorStatusBar ──────────────┤  (tab body)                           │
 │ Record rule → BOOLEAN  ✓ No problems                                  │
@@ -103,7 +103,9 @@ Things Monaco draws, all colored by tokens:
 - The problems summary as a button: ✓ No problems, or ⚠ N errors.
 
 ### OutputPanel tabs
-Badges: Result shows the row count; Execution shows the statement count (pushdown tone); Problems shows the count (danger tone).
+Badges: Result shows the row count; Execution shows the statement count (pushdown tone); Console shows the log line count (neutral); Problems shows the count (danger tone).
+
+**Exact decimals.** `DECIMAL` values come back as exact strings (`"24.90"`). Every view shows them with their trailing zeros, right-aligned and tabular, never rounded.
 
 **Result (`ResultView`)**, one of:
 1. **Nothing run yet.** EmptyState + Run button.
@@ -139,8 +141,13 @@ Badges: Result shows the row count; Execution shows the statement count (pushdow
 - **Nothing ran:** fix problems first.
 - Legend: "Underlined in the editor: the parts that became SQL."
 
+**Console (`ConsoleView`, from L7)**: next to Execution.
+- The log lines of the last run, in order. `LOG(value, label?)` writes them.
+- Each line: optional label, the value (mono, type-colored), and `line:col`. Clicking a line highlights its source range in the editor.
+- Empty: "No log lines — `LOG(value)` prints a value here while the program runs."
+
 **Problems (`ProblemsList`)**:
-- A list of clickable rows: severity icon, message, `syntax|minab · line:col`.
+- A list of clickable rows: severity icon, message, the stable **error code** (for example `type.implicitCoercion`, `syntax.parser`; from B1), `line:col`.
 - A host-config error, when there is one, shown first.
 - Empty: ✓ "No problems — the program parses, resolves and type-checks against this host's schema."
 
@@ -185,6 +192,7 @@ Badges: Result shows the row count; Execution shows the statement count (pushdow
   - a code preview (comments stripped, first 7 lines);
   - tag badges, with a warning tone for check-only;
   - level, spec §, and "from the repo".
+- **One Persian example** (from L3): table and field names in Persian (`FROM سفارش WHERE .وضعیت == "ارسال‌شده" …`). The code stays left to right; only the names are Persian.
 - **Empty:** "No examples match" + Clear filters.
 
 ---

@@ -96,8 +96,7 @@ export const landing = {
 
     footer: {
         author: 'Hamed Zakery Miab',
-        // TODO(hamed): your portfolio URL.
-        authorUrl: '',
+        authorUrl: 'https://hamcker.github.io',
         links: [
             { label: 'GitHub', href: REPO_URL },
             { label: 'Language spec', href: SPEC_URL },

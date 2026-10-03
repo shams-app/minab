@@ -94,6 +94,7 @@ import {
     type MinabType,
     type ScalarType
 } from './minab-types.js';
+import type { ResolvedHostFunction } from './host-declarations.js';
 import type { MinabRuleContext, SchemaProvider } from './schema.js';
 
 /**
@@ -272,6 +273,7 @@ export class MinabTypeChecker {
     private inferNameRef(node: NameRef): TypeResult {
         const res = this.scopeResolver.resolveNameRef(node);
         if (!res.found) return failWith(res);
+        if (res.scope.hostInput) return ok(res.scope.hostInput);
         if (res.scope.tableName) {
             return ok({ kind: 'record', table: res.scope.tableName });
         }
@@ -417,7 +419,10 @@ export class MinabTypeChecker {
         }
         const name = node.callee.name;
         const builtin = getBuiltin(name);
-        if (!builtin) return this.inferUserCall(node, name);
+        if (!builtin) {
+            const host = this.schema.getHostFunction(name);
+            return host ? this.inferHostCall(node, host) : this.inferUserCall(node, name);
+        }
         if (node.args.length !== 1) {
             return err('call.builtinArity', { name, actual: node.args.length });
         }
@@ -433,7 +438,24 @@ export class MinabTypeChecker {
         return failWith(result);
     }
 
-    /** A call whose name is not a built-in: it must be a declared `fn` (D10). */
+    /** A call to a function the host declared (D27). Same rules as a user `fn`. */
+    private inferHostCall(node: CallExpression, host: ResolvedHostFunction): TypeResult {
+        const name = host.name;
+        if (node.args.length !== host.params.length) {
+            return err('call.userArity', { name, expected: host.params.length, actual: node.args.length });
+        }
+        for (let i = 0; i < node.args.length; i++) {
+            const argType = this.inferType(node.args[i]);
+            if (!argType.ok) return argType;
+            const paramType = host.params[i].type;
+            if (argType.type.kind !== 'null' && !baseTypesEqual(argType.type, paramType)) {
+                return err('call.argumentType', { name, position: i + 1, expected: formatType(paramType), actual: formatType(argType.type) });
+            }
+        }
+        return ok(host.returns);
+    }
+
+    /** A call whose name is not a built-in or a host function: it must be a declared `fn` (D10). */
     private inferUserCall(node: CallExpression, name: string): TypeResult {
         const decl = this.findFunctionDecl(node, name);
         if (!decl) return err('call.unknownFunction', { name });
