@@ -5,7 +5,8 @@
  * Compiles the parts of Minab that *are* relational algebra: a `Query`
  * pipeline (spec §4), an ad-hoc `#Table` scope (§3.3), a relation
  * traversal (§3.1), and the built-in aggregates/predicates over either
- * (§5.3.1). Everything else — `&fn`, `if`/`switch`, loops, tuples — is
+ * (§5.3.1), plus `if`/`switch` (as `CASE`), `is`/`isnot` and JSON literals.
+ * Everything else — user functions, loops, tuples, statements in a block — is
  * deliberately *not* compiled here; it belongs to `MinabInterpreter`, and
  * this compiler answers `{ok:false, reason}` for it rather than inventing
  * a SQL encoding. That refusal is load-bearing: it's how the interpreter
@@ -31,6 +32,7 @@
 
 import {
     isBinaryExpression,
+    isBlock,
     isBooleanLiteral,
     isCallExpression,
     isCastExpr,
@@ -38,6 +40,8 @@ import {
     isFieldValue,
     isFilterAccess,
     isGroupKeyRef,
+    isIfExpr,
+    isJsonObjectLiteral,
     isListLiteral,
     isMemberAccess,
     isNamedScope,
@@ -45,24 +49,35 @@ import {
     isNullLiteral,
     isNumberLiteral,
     isParentRecord,
+    isQuery,
     isStringLiteral,
     isSubquery,
+    isSwitchExpr,
     isTableRef,
     isTupleAccess,
+    isTypeTestExpression,
     isUnaryExpression,
     type BinaryExpression,
     type CallExpression,
     type Expression,
+    type IfExpr,
+    type JsonObjectLiteral,
+    type ListLiteral,
+    type NameRef,
     type Query,
+    type SwitchExpr,
     type TypeRef,
+    type TypeTestExpression,
     type UnaryExpression
 } from './generated/ast.js';
+import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { isBuiltinName } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
-export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string };
+/** A refusal has an English `reason`. When the refusal has a stable code (see the registry), `code` and `params` come with it. */
+export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string; code?: DiagnosticCode; params?: DiagnosticParams };
 
 /** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
 export interface OuterRecord {
@@ -98,10 +113,24 @@ export const NO_OUTER_SCOPE: OuterResolver = {
     resolveRecord: () => ({ found: false, reason: NO_OUTER_REASON })
 };
 
-class CompileError extends Error {}
+class CompileError extends Error {
+    constructor(
+        reason: string,
+        readonly code?: DiagnosticCode,
+        readonly params?: DiagnosticParams
+    ) {
+        super(reason);
+    }
+}
 
 function fail(reason: string): never {
     throw new CompileError(reason);
+}
+
+/** A refusal with a stable code from the registry. */
+function failCoded<C extends DiagnosticCode>(code: C, ...args: ParamsArgs<C>): never {
+    const message = coded(code, ...args);
+    throw new CompileError(message.reason, code, message.params);
 }
 
 interface NamedEntry {
@@ -161,6 +190,15 @@ const COMPARISONS: Record<string, string> = {
     LIKE: 'LIKE'
 };
 
+/** The `jsonb_typeof` name of each kind that `is` / `isnot` can test, besides `null` (spec §5.6). */
+const JSON_KINDS: Record<string, string> = {
+    ArrayKind: 'array',
+    ObjectKind: 'object',
+    StringKind: 'string',
+    NumberKind: 'number',
+    BooleanKind: 'boolean'
+};
+
 const ARITHMETIC: Record<string, string> = {
     '+': '+',
     '-': '-',
@@ -198,7 +236,7 @@ export class MinabSqlCompiler {
             return { ok: true, query: { text, params: ctx.params } };
         } catch (e) {
             if (e instanceof CompileError) {
-                return { ok: false, reason: e.message };
+                return e.code ? { ok: false, reason: e.message, code: e.code, params: e.params } : { ok: false, reason: e.message };
             }
             throw e;
         }
@@ -207,7 +245,8 @@ export class MinabSqlCompiler {
     // ---- query ---------------------------------------------------------
 
     private query(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
-        const scope = this.scopeOf(query, ctx, outerScopes);
+        const source = this.querySource(query, ctx, outerScopes);
+        const scope = this.scopeOf(query, source);
         const scopes = [scope, ...outerScopes];
         this.joinGroupKeys(query, scope, ctx, scopes);
 
@@ -215,7 +254,9 @@ export class MinabSqlCompiler {
         // to right in the emitted statement.
         const select = this.selectClause(query, ctx, scopes);
         const from = this.fromClause(query, scope, ctx, scopes);
-        const where = query.whereClause ? ` WHERE ${this.expression(query.whereClause.condition, ctx, scopes)}` : '';
+        // A related collection brings its own predicates (`<fk> = <outer key>`, `[filter]`). The user's WHERE follows them.
+        const predicates = [...source.predicates, ...(query.whereClause ? [this.expression(query.whereClause.condition, ctx, scopes)] : [])];
+        const where = predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '';
         const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k, ctx, scopes)).join(', ')}` : '';
         const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
@@ -230,10 +271,11 @@ export class MinabSqlCompiler {
         return `${select}${from}${where}${groupBy}${having}${orderBy}${limit}`;
     }
 
-    private scopeOf(query: Query, ctx: Ctx, outerScopes: SqlScope[]): SqlScope {
-        const table = this.sourceTable(query, ctx, outerScopes);
-        const alias = query.alias ?? table;
+    private scopeOf(query: Query, source: CollectionSource): SqlScope {
+        const { table, alias } = source;
         const named = new Map<string, NamedEntry>([[alias, { alias, table }]]);
+        // `FROM .orders[...] AS o`: the user's name and the generated alias are the same row.
+        if (query.alias) named.set(query.alias, { alias, table });
         for (const join of query.joins) {
             const joinTable = this.table(join.source).name;
             named.set(join.alias, { alias: join.alias, table: joinTable });
@@ -246,16 +288,19 @@ export class MinabSqlCompiler {
         return scope;
     }
 
-    private sourceTable(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
+    /**
+     * The table a query reads, the alias that names its rows, and the predicates that narrow them
+     * (none for a plain table). The predicates of a related collection bind their parameters here,
+     * before the SELECT list, so in that one form `$n` does not follow the text order.
+     */
+    private querySource(query: Query, ctx: Ctx, outerScopes: SqlScope[]): CollectionSource {
         const source = query.source;
-        if (isTableRef(source)) return this.table(source.name).name;
-        if (isNamedScope(source)) return this.table(source.name).name;
-        // `FROM .orders` — a collection field on an enclosing record.
-        const collection = this.collectionSource(source, ctx, outerScopes);
-        if (collection.predicates.length > 0) {
-            fail('FROM over a related collection is not compiled yet — reach it through an aggregate or EXISTS instead');
+        if (isTableRef(source) || isNamedScope(source)) {
+            const table = this.table(source.name).name;
+            return { table, alias: query.alias ?? table, predicates: [] };
         }
-        return collection.table;
+        // `FROM .orders` or `FROM .orders[.status == "x"]` — a collection field on an enclosing record.
+        return this.collectionSource(source, ctx, outerScopes);
     }
 
     private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
@@ -344,6 +389,12 @@ export class MinabSqlCompiler {
             return `CAST(${this.expression(expr.value, ctx, scopes)} AS ${this.sqlType(expr.targetType)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
+        if (isIfExpr(expr)) return this.ifExpr(expr, ctx, scopes);
+        if (isSwitchExpr(expr)) return this.switchExpr(expr, ctx, scopes);
+        if (isBlock(expr)) return this.branch(expr, ctx, scopes);
+        if (isTypeTestExpression(expr)) return this.typeTest(expr, ctx, scopes);
+        if (isJsonObjectLiteral(expr)) return this.jsonObject(expr, ctx, scopes);
+        if (isListLiteral(expr)) return this.jsonArray(expr, ctx, scopes);
         // `$` (spec §6.2) is always the host's, never a column: the value
         // of the field under validation, bound as a parameter.
         if (isFieldValue(expr)) return this.outerScalar(expr, ctx, scopes.length);
@@ -354,6 +405,87 @@ export class MinabSqlCompiler {
             fail(`"${expr.$type}" refers to a record, not a value — use one of its fields`);
         }
         fail(`"${expr.$type}" has no SQL form (it belongs to the interpreted layer)`);
+    }
+
+    // ---- if, switch, is, JSON literals (spec §5.6, §7.3, §9) -------------
+
+    /** `if c { a } else { b }` is `CASE WHEN c THEN a ELSE b END`. Without `else`, the answer is `NULL`. */
+    private ifExpr(expr: IfExpr, ctx: Ctx, scopes: SqlScope[]): string {
+        const condition = this.expression(expr.condition, ctx, scopes);
+        const then = this.branch(expr.thenBranch, ctx, scopes);
+        const otherwise = expr.elseIf ?? expr.elseBranch;
+        const fallback = otherwise ? this.branch(otherwise, ctx, scopes) : 'NULL';
+        return `CASE WHEN ${condition} THEN ${then} ELSE ${fallback} END`;
+    }
+
+    /**
+     * `switch s { a => x, _ => d }` is `CASE s WHEN a THEN x ELSE d END`.
+     * A `null` case value cannot use that form (`= NULL` never matches),
+     * so a switch with one uses `CASE WHEN s IS NULL THEN …` for every arm.
+     * An arm with several values becomes several `WHEN`s with one result.
+     */
+    private switchExpr(expr: SwitchExpr, ctx: Ctx, scopes: SqlScope[]): string {
+        const subject = this.expression(expr.subject, ctx, scopes);
+        const searched = expr.cases.some(arm => arm.values.some(isNullLiteral));
+        const arms: string[] = [];
+        for (const arm of expr.cases) {
+            for (const value of arm.values) {
+                const when = !searched
+                    ? this.expression(value, ctx, scopes)
+                    : isNullLiteral(value)
+                      ? `${subject} IS NULL`
+                      : `${subject} = ${this.expression(value, ctx, scopes)}`;
+                // The result is compiled again for each value, so `$n` follows the text order.
+                arms.push(`WHEN ${when} THEN ${this.branch(arm.result, ctx, scopes)}`);
+            }
+        }
+        const fallback = this.branch(expr.defaultResult, ctx, scopes);
+        return `CASE${searched ? '' : ` ${subject}`} ${arms.join(' ')} ELSE ${fallback} END`;
+    }
+
+    /**
+     * The result of an `if` or `switch` arm. A block with statements has no SQL
+     * form: a statement cannot run inside a query. A block with only a tail is its tail.
+     * A literal result gets its type (`$1::text`), because `CASE` over bare parameters
+     * would read them as text.
+     */
+    private branch(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isBlock(expr)) {
+            if (expr.statements.length > 0) failCoded('compile.blockInQuery');
+            if (!expr.tail) fail('a block with no tail expression has no value');
+            return isQuery(expr.tail) ? `(${this.query(expr.tail, ctx, scopes)})` : this.branch(expr.tail, ctx, scopes);
+        }
+        return this.typedValue(expr, ctx, scopes);
+    }
+
+    /** Text and number literals carry their type; everything else compiles as usual. */
+    private typedValue(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isStringLiteral(expr)) return `${ctx.bind(expr.value)}::text`;
+        if (isNumberLiteral(expr)) return `${ctx.bind(expr.value)}::numeric`;
+        return this.expression(expr, ctx, scopes);
+    }
+
+    /** `x is null` is `x IS NULL`. The other kinds read `jsonb_typeof`, and a `null` answers `false` (`isnot`: `true`), as in the interpreter. */
+    private typeTest(expr: TypeTestExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const value = this.expression(expr.value, ctx, scopes);
+        const is = expr.operator === 'is';
+        if (isNullLiteral(expr.test)) return `(${value} IS ${is ? '' : 'NOT '}NULL)`;
+        const kind = JSON_KINDS[expr.test.$type];
+        if (!kind) fail(`"${expr.test.$type}" is not a JSON kind`);
+        return `(jsonb_typeof(${value}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
+    }
+
+    private jsonObject(expr: JsonObjectLiteral, ctx: Ctx, scopes: SqlScope[]): string {
+        const pairs = expr.properties.flatMap(property => {
+            // `{ id }` is `{ id: id }`: the value is the variable of that name.
+            const value = property.value ?? ({ $type: 'NameRef', name: property.key } as NameRef);
+            return [`${ctx.bind(property.key)}::text`, this.typedValue(value, ctx, scopes)];
+        });
+        return `jsonb_build_object(${pairs.join(', ')})`;
+    }
+
+    private jsonArray(expr: ListLiteral, ctx: Ctx, scopes: SqlScope[]): string {
+        return `jsonb_build_array(${expr.items.map(item => this.typedValue(item, ctx, scopes)).join(', ')})`;
     }
 
     /**

@@ -12,6 +12,8 @@ export interface QueryCase {
     rows: Record<string, Row[]>;
     /** The Minab program (a query). */
     program: string;
+    /** The record the program sees as `.`, for a program that starts from `.field` (a rule on that record). */
+    record?: { table: string; row: Row };
     /** The rows it must return. Column order does not matter. */
     expectRows: Row[];
     /** Set when the order of `expectRows` matters (use it with `ORDERBY`). */
@@ -22,7 +24,7 @@ export interface QueryCase {
 
 /** Parses, checks, compiles and runs the program. Returns the rows. */
 export async function runQuery(db: TestDatabase, c: QueryCase): Promise<{ rows: Row[]; errors: string[]; sqlText?: string }> {
-    const loaded = loadSchema(c.schema);
+    const loaded = loadSchema(c.schema, c.record?.table);
     return await db.isolated(loaded.script(c.rows), async () => {
         const { model, errors } = await loaded.parse(c.program);
         let sqlText: string | undefined;
@@ -32,7 +34,7 @@ export async function runQuery(db: TestDatabase, c: QueryCase): Promise<{ rows: 
                 return await db.executor.execute(q);
             }
         };
-        const result = await loaded.run(model, spy);
+        const result = await loaded.run(model, spy, c.record);
         if (!result.ok) throw new Error(`could not run the program: ${result.reason}`);
         return { rows: result.value as Row[], errors, sqlText };
     });
