@@ -87,6 +87,25 @@ describe('prepare', () => {
         expect(await fits('1', { expect: 'list' })).toBe(false);
     });
 
+    test('no expect: the program may return anything (formula fields)', async () => {
+        const minab = createMinab({ schema: orderSchema(), ruleContext: record });
+        const cases: [string, string][] = [
+            ['.total > 1', 'BOOLEAN'],
+            ['.total + 1', 'DECIMAL'],
+            ['.status', 'TEXT'],
+            ['[1, 2]', 'INTEGER[]']
+        ];
+        for (const [source, type] of cases) {
+            for (const options of [undefined, {}, { expect: undefined }]) {
+                const program = await minab.prepare(source, options);
+                expect(program.ok, source).toBe(true);
+                // The host can still read the type to store it.
+                expect(program.resultType).toBe(type);
+            }
+        }
+        expect((await minab.prepare('FROM Order SELECT .id')).ok).toBe(true);
+    });
+
     test('a program with errors is not also checked against expect', async () => {
         const minab = createMinab({ schema: orderSchema(), ruleContext: record });
         const program = await minab.prepare('.status == .total', { expect: 'number' });

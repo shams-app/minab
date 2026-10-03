@@ -51,7 +51,11 @@ export interface MinabOptions {
 export interface PrepareOptions {
     /** Where the program sits: which table `.` means, and whether `$` exists. */
     ruleContext?: MinabRuleContext;
-    /** The type of the answer the host needs. A different type is `type.unexpectedResultType`. */
+    /**
+     * The type of the answer the host needs. A different type is `type.unexpectedResultType`.
+     * Leave it out when the program may return anything (a formula field): nothing is
+     * checked, and `resultType` still tells the host the type.
+     */
     expect?: ExpectedType;
 }
 

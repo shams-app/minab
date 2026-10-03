@@ -30,6 +30,9 @@ database driver. A test checks the imports.
   parser build and is slow (about 2.8 s per service set).
 - Do not import `node:*`, `langium/node`, `vscode-languageserver/node` or `pg` from here.
 
+- `expect` is optional. Without it nothing is checked and the program may return any type;
+  `resultType` still reports the type.
+
 ## Not done yet
 
 - `run` takes today's `QueryExecutor` as its data port. R3 adds the full ports.
