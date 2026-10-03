@@ -47,7 +47,12 @@ const CONFIG = {
             {
                 name: 'Booking',
                 primaryKey: 'id',
-                columns: { id: 'UUID', room_id: 'UUID', start_date: 'DATE', end_date: 'DATE' }
+                columns: {
+                    id: 'UUID',
+                    room_id: 'UUID',
+                    start_date: 'DATE',
+                    end_date: 'DATE'
+                }
             },
             {
                 name: 'Customer',
@@ -71,7 +76,12 @@ const CONFIG = {
         ]
     },
     rule: { recordTable: 'Booking' },
-    record: { id: 'b-1', room_id: 'room-7', start_date: '2026-10-01', end_date: '2026-10-05' },
+    record: {
+        id: 'b-1',
+        room_id: 'room-7',
+        start_date: '2026-10-01',
+        end_date: '2026-10-05'
+    },
     data: { responses: [{ match: 'EXISTS', value: false }] }
 };
 
@@ -123,14 +133,20 @@ describe('minab run', () => {
     });
 
     test('prints query rows as a table', async () => {
-        const config = { ...CONFIG, data: { responses: [{ rows: [{ name: 'Ada', spent: 1700 }] }] } };
+        const config = {
+            ...CONFIG,
+            data: { responses: [{ rows: [{ name: 'Ada', spent: 1700 }] }] }
+        };
         writeJson('rows.config.json', config);
         const result = await cli('run', 'query.minab', '--config', 'rows.config.json');
         expect(result.output).toBe(['name  spent', '----  -----', 'Ada   1700'].join('\n'));
     });
 
     test('--json prints the value instead of the table', async () => {
-        const config = { ...CONFIG, data: { responses: [{ rows: [{ name: 'Ada' }] }] } };
+        const config = {
+            ...CONFIG,
+            data: { responses: [{ rows: [{ name: 'Ada' }] }] }
+        };
         writeJson('json.config.json', config);
         const result = await cli('run', 'query.minab', '--config', 'json.config.json', '--json');
         expect(JSON.parse(result.output)).toEqual([{ name: 'Ada' }]);
@@ -157,6 +173,19 @@ describe('minab run', () => {
         expect(result.errors).toContain('SELECT EXISTS');
     });
 
+    test('--json adds the stable code (and range) of a failed run, and human output stays the same', async () => {
+        write('badcast.minab', 'CAST("x" AS INTEGER)');
+        const result = await cli('run', 'badcast.minab', '--json');
+        expect(result.code).toBe(EXIT_PROGRAM_ERROR);
+        expect(result.errors).toContain('minab: cannot evaluate this program: cannot cast "x" to INTEGER');
+        const body = JSON.parse(result.output);
+        expect(body.ok).toBe(false);
+        expect(body.error.code).toBe('eval.castFailed');
+        expect(body.error.range.start).toEqual({ line: 0, character: 0 });
+        // Without --json nothing is printed on stdout.
+        expect((await cli('run', 'badcast.minab')).output).toBe('');
+    });
+
     test('a construct the evaluator does not implement yet reports its reason, not a stack trace', async () => {
         // Loops are Phase 5's explicit "next increment" (spec §9.4).
         write('loop.minab', 'loop n from 0 to 3 { }');
@@ -175,9 +204,16 @@ describe('a rule with a top-level collection filter (C6)', () => {
                 {
                     name: 'Customer',
                     primaryKey: 'id',
-                    columns: { id: 'UUID', orders: { collection: 'Order', foreignKey: 'customer_id' } }
+                    columns: {
+                        id: 'UUID',
+                        orders: { collection: 'Order', foreignKey: 'customer_id' }
+                    }
                 },
-                { name: 'Order', primaryKey: 'id', columns: { id: 'UUID', status: 'TEXT' } }
+                {
+                    name: 'Order',
+                    primaryKey: 'id',
+                    columns: { id: 'UUID', status: 'TEXT' }
+                }
             ]
         },
         rule: { recordTable: 'Customer' },
@@ -303,14 +339,57 @@ describe('usage', () => {
 describe('the config file', () => {
     test('expands the column-type shorthand', () => {
         const path = writeJson('shorthand.json', {
-            schema: { tables: [{ name: 'T', columns: { a: 'TEXT', b: 'TEXT?', c: 'INTEGER[]', d: 'TEXT?[]?' } }] }
+            schema: {
+                tables: [
+                    {
+                        name: 'T',
+                        columns: { a: 'TEXT', b: 'TEXT?', c: 'INTEGER[]', d: 'TEXT?[]?' }
+                    }
+                ]
+            }
         });
         const columns = loadConfigFile(path).schema.tables[0].columns;
         expect(columns.map(c => c.type)).toEqual([
-            { kind: 'scalar', type: { kind: 'scalar', base: 'TEXT', nullable: false, array: false, arrayNullable: false } },
-            { kind: 'scalar', type: { kind: 'scalar', base: 'TEXT', nullable: true, array: false, arrayNullable: false } },
-            { kind: 'scalar', type: { kind: 'scalar', base: 'INTEGER', nullable: false, array: true, arrayNullable: false } },
-            { kind: 'scalar', type: { kind: 'scalar', base: 'TEXT', nullable: true, array: true, arrayNullable: true } }
+            {
+                kind: 'scalar',
+                type: {
+                    kind: 'scalar',
+                    base: 'TEXT',
+                    nullable: false,
+                    array: false,
+                    arrayNullable: false
+                }
+            },
+            {
+                kind: 'scalar',
+                type: {
+                    kind: 'scalar',
+                    base: 'TEXT',
+                    nullable: true,
+                    array: false,
+                    arrayNullable: false
+                }
+            },
+            {
+                kind: 'scalar',
+                type: {
+                    kind: 'scalar',
+                    base: 'INTEGER',
+                    nullable: false,
+                    array: true,
+                    arrayNullable: false
+                }
+            },
+            {
+                kind: 'scalar',
+                type: {
+                    kind: 'scalar',
+                    base: 'TEXT',
+                    nullable: true,
+                    array: true,
+                    arrayNullable: true
+                }
+            }
         ]);
     });
 
@@ -331,17 +410,32 @@ describe('the config file', () => {
         });
         const table = loadConfigFile(path).schema.tables[0];
         expect(table.primaryKey).toBe('id');
-        expect(table.columns[0].type).toEqual({ kind: 'ref', table: 'U', nullable: false, foreignKey: 'u_id' });
-        expect(table.columns[1].type).toEqual({ kind: 'collection', table: 'U', foreignKey: 't_id' });
+        expect(table.columns[0].type).toEqual({
+            kind: 'ref',
+            table: 'U',
+            nullable: false,
+            foreignKey: 'u_id'
+        });
+        expect(table.columns[1].type).toEqual({
+            kind: 'collection',
+            table: 'U',
+            foreignKey: 't_id'
+        });
     });
 
     test('declaring a field type is enough to mean "this is a field rule"', () => {
-        const path = writeJson('fieldrule.json', { rule: { fieldType: 'INTEGER' } });
-        expect(loadConfigFile(path).ruleContext).toMatchObject({ isFieldRule: true });
+        const path = writeJson('fieldrule.json', {
+            rule: { fieldType: 'INTEGER' }
+        });
+        expect(loadConfigFile(path).ruleContext).toMatchObject({
+            isFieldRule: true
+        });
     });
 
     test('a bad type names the JSON path that caused it', () => {
-        const path = writeJson('badtype.json', { schema: { tables: [{ name: 'T', columns: { a: 'STRING' } }] } });
+        const path = writeJson('badtype.json', {
+            schema: { tables: [{ name: 'T', columns: { a: 'STRING' } }] }
+        });
         expect(() => loadConfigFile(path)).toThrow(ConfigError);
         expect(() => loadConfigFile(path)).toThrow(/schema\.tables\[0\]\.columns\.a: unknown type "STRING"/);
     });
@@ -370,7 +464,10 @@ describe('output formatting', () => {
     test('a diagnostic underlines its own span', () => {
         const diagnostic = {
             severity: 1 as const,
-            range: { start: { line: 1, character: 4 }, end: { line: 1, character: 9 } },
+            range: {
+                start: { line: 1, character: 4 },
+                end: { line: 1, character: 9 }
+            },
             message: 'boom'
         };
         expect(formatDiagnostic(diagnostic, 'first\n    total == 1\n', 'x.minab')).toBe(
@@ -381,7 +478,10 @@ describe('output formatting', () => {
     test('a multi-line message keeps its detail under the caret', () => {
         const diagnostic = {
             severity: 1 as const,
-            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+            range: {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 1 }
+            },
             message: 'headline\ndetail'
         };
         expect(formatDiagnostic(diagnostic, 'x', 'x.minab').split('\n')).toEqual(['x.minab:1:1: error: headline', '1 | x', '  | ^', '  | detail']);

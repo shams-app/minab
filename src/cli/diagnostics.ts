@@ -11,10 +11,33 @@
  */
 
 import type { Diagnostic } from 'vscode-languageserver-types';
+import type { MinabDiagnostic } from '../runtime/index.js';
 
 export type Severity = 'error' | 'warning' | 'info' | 'hint';
 
-const SEVERITIES: Record<number, Severity> = { 1: 'error', 2: 'warning', 3: 'info', 4: 'hint' };
+const SEVERITIES: Record<number, Severity> = {
+    1: 'error',
+    2: 'warning',
+    3: 'info',
+    4: 'hint'
+};
+
+/**
+ * A runtime diagnostic in the shape the CLI prints and `check --json` has always
+ * printed: a numeric severity (1 error to 4 hint), the stable `code`, and `data.params`.
+ */
+const SEVERITY_NUMBERS = { error: 1, warning: 2, info: 3, hint: 4 } as const;
+
+export function toCliDiagnostic(diagnostic: MinabDiagnostic): Diagnostic {
+    return {
+        severity: SEVERITY_NUMBERS[diagnostic.severity],
+        range: diagnostic.range,
+        message: diagnostic.message,
+        data: { params: diagnostic.params },
+        source: 'minab',
+        code: diagnostic.code
+    };
+}
 
 export function severityOf(diagnostic: Diagnostic): Severity {
     return SEVERITIES[diagnostic.severity ?? 1] ?? 'error';

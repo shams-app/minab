@@ -11,7 +11,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { Row } from '../language/minab-executor.js';
+import type { Row } from '../runtime/index.js';
 import { ConfigError, parseConfig, parseJsonObject, type HostConfig } from '../host/config.js';
 
 export { ConfigError, emptyConfig, matchResponse, type FixtureResponse } from '../host/config.js';
@@ -38,7 +38,9 @@ export function loadConfigFile(path: string): LoadedConfig {
     const raw = readJson(path, path);
     const baseDir = dirname(path);
     // `"record": "booking.json"` reads that file relative to the config.
-    const config = parseConfig(raw, { readJson: (file, at) => readJson(resolve(baseDir, file), at) });
+    const config = parseConfig(raw, {
+        readJson: (file, at) => readJson(resolve(baseDir, file), at)
+    });
     return { path, ...config };
 }
 
