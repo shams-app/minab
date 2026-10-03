@@ -24,6 +24,7 @@ const AREAS = {
     null: 'A null rule is broken (spec §7.7).',
     call: 'A function call is wrong.',
     compile: 'A program cannot become SQL.',
+    eval: 'A program fails while it runs.',
     query: 'A query is used in a way its shape does not allow.',
     rule: 'A rule cannot be checked in this setting.'
 };

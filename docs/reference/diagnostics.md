@@ -121,6 +121,14 @@ A program cannot become SQL.
 | `compile.blockInQuery` | error | a block with statements cannot run inside a query (a statement cannot become SQL) | none | A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query. |
 | `compile.hostFunctionInSql` | error | "{name}" is a host function — it runs in the host, never in SQL | `name` | A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query. |
 
+## eval
+
+A program fails while it runs.
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
+
 ## query
 
 A query is used in a way its shape does not allow.

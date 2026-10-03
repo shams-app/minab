@@ -112,7 +112,7 @@ function createMinabModule(
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema),
-        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler),
+        interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler, services.typeChecker),
         validation: {
             DocumentValidator: services => new MinabDocumentValidator(services)
         },

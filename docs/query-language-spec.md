@@ -481,6 +481,10 @@ Minab's scalar types are a small, storage-agnostic vocabulary — behavioral cat
 
 Any type may be suffixed with `[]` to form an array — `INTEGER[]`, `UUID[]` — since function parameters (§8) need arrays of arbitrary element types.
 
+**Exact numbers.** A `DECIMAL` is exact, as Postgres `numeric` is: `0.1 + 0.2 == 0.3` is `true`, in the interpreter and in the compiled SQL. A number literal with a fractional part (`0.30`) is a `DECIMAL`; one without (`30`) is an `INTEGER`. `INTEGER` with `INTEGER` stays `INTEGER`; a mix is `DECIMAL`. An `INTEGER` is a whole number from -9,007,199,254,740,991 to 9,007,199,254,740,991. A result outside that range is an evaluation error, `eval.integerOutOfRange`, never a silently wrong value. Use `DECIMAL` for larger numbers.
+
+A `DECIMAL` result leaves Minab as a **string** in its shortest exact form, with no exponent and no trailing zeros: `"0.3"`, `"170"`. This holds for run results, `--json` output and parameters bound to SQL. An `INTEGER` stays a number. Numbers inside a `JSON` value stay JSON numbers. A host that reads a `DECIMAL` result should parse the string with a decimal library, not with `parseFloat`.
+
 **Nullable types.** A trailing `?` marks a type as nullable — it can hold `null` in addition to its ordinary values. `?` can appear in **two independent positions**: right after the base type (before any `[]`), and right after the `[]` suffix (if present) — because "can this element be null" and "can the whole column be null" are two separate questions once arrays are involved:
 
 | Type | Meaning |

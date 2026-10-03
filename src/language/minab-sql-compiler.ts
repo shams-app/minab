@@ -64,6 +64,7 @@ import {
     type JsonObjectLiteral,
     type ListLiteral,
     type NameRef,
+    type NumberLiteral,
     type Query,
     type SwitchExpr,
     type TypeRef,
@@ -73,6 +74,7 @@ import {
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { isBuiltinName } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
+import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
@@ -377,9 +379,15 @@ export class MinabSqlCompiler {
 
     // ---- expressions ---------------------------------------------------
 
+    /** A literal with a fraction is a `DECIMAL`: it is bound as its own text, so Postgres reads it exactly (D17). */
+    private numberLiteralValue(expr: NumberLiteral): number | string {
+        const text = expr.$cstNode?.text;
+        return text?.includes('.') ? text : expr.value;
+    }
+
     private expression(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
-        if (isNumberLiteral(expr)) return ctx.bind(expr.value);
+        if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr));
         if (isBooleanLiteral(expr)) return expr.value === 'true' ? 'TRUE' : 'FALSE';
         if (isNullLiteral(expr)) return 'NULL';
         if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes);
@@ -921,7 +929,7 @@ class Ctx {
     constructor(readonly outer: OuterResolver) {}
 
     bind(value: unknown): string {
-        this.params.push(value);
+        this.params.push(sqlParameter(value));
         return `$${this.params.length}`;
     }
 

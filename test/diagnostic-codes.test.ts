@@ -12,6 +12,7 @@
  * Those are tested at the type checker (`via: 'checker'`). Two scope
  * messages come only from the scope resolver (`via: 'resolver'`).
  * A compile refusal is tested at the SQL compiler (`via: 'compiler'`).
+ * One entry is an evaluation error (`via: 'evaluation'`): the program runs in the interpreter.
  * Two entries are guards that the current grammar cannot reach; they are
  * tested with a hand-made node (`via: 'guard'`).
  * `type.unexpectedResultType` is made by the runtime's `expect` option, not by
@@ -76,6 +77,7 @@ type Case =
     | { via: 'resolver'; program: string; target: Pick }
     | { via: 'compiler'; program: string }
     | { via: 'runtime' }
+    | { via: 'evaluation'; program: string }
     | { via: 'guard' };
 
 /** One program per code. Keep it in the same order as the registry. */
@@ -94,6 +96,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
@@ -189,7 +192,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^(syntax|scope|type|null|call|compile|query|rule)\.[a-z][A-Za-z0-9]*$/);
+        expect(code).toMatch(/^(syntax|scope|type|null|call|compile|eval|query|rule)\.[a-z][A-Za-z0-9]*$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);
@@ -255,6 +258,13 @@ describe('every code is reported by a program', () => {
             }
             case 'runtime':
                 break; // tested in test/runtime.test.ts
+            case 'evaluation': {
+                // The error carries its code and the English message.
+                const { document } = await validate.record(testCase.program);
+                const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
+                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message({} as never) });
+                break;
+            }
             case 'guard':
                 break; // tested below, with a hand-made node
         }

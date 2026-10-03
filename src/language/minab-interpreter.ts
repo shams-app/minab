@@ -59,6 +59,7 @@ import {
     isSwitchExpr,
     isTableRef,
     isTupleAccess,
+    isTypeRef,
     isTypeTestExpression,
     isUnaryExpression,
     isVariableDecl,
@@ -67,14 +68,30 @@ import {
     type FunctionDecl,
     type MainStatement,
     type Model,
-    type SwitchExpr
+    type SwitchExpr,
+    type Type
 } from './generated/ast.js';
 import { isBuiltinName } from './minab-builtins.js';
 import type { AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
+import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabSqlCompiler, OuterRecord, OuterResolver } from './minab-sql-compiler.js';
 import type { SchemaProvider } from './schema.js';
+import {
+    arithmetic,
+    decimalCompare,
+    decimalEqual,
+    externalize,
+    jsonNumber,
+    literal,
+    negate,
+    normalizeIn,
+    NumberError,
+    toNumeric,
+    type Arithmetic,
+    type Numeric
+} from './values.js';
 
 export type MinabValue = unknown;
 
@@ -141,27 +158,39 @@ interface Frame {
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
-        private readonly compiler: MinabSqlCompiler
+        private readonly compiler: MinabSqlCompiler,
+        private readonly typeChecker?: MinabTypeChecker
     ) {}
 
     async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
-        const frames: Frame[] = [{ record: context.record, table: context.recordTable, variables: new Map() }];
-        const state = new State(context, frames, this.collectFunctions(model), name => this.readHostInput(name, context));
+        const state = new State(context, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
+            state.frames.push({ record: this.normalizeRecord(context.record, context.recordTable), table: context.recordTable, variables: new Map() });
             for (const declaration of model.declarations) {
                 if (isVariableDecl(declaration)) {
-                    const value = declaration.value ? await this.expression(declaration.value, state) : null;
+                    const value = declaration.value ? this.coerce(declaration.type, await this.expression(declaration.value, state)) : null;
                     state.frames[0].variables.set(declaration.name, value);
                 } else if (!isFunctionDecl(declaration)) {
                     fail(`"${declaration.$type}" is not executed yet (Phase 5 covers queries and validation rules)`);
                 }
             }
             if (!model.tail) return { ok: true, value: null };
-            return { ok: true, value: await this.mainStatement(model.tail, state) };
+            return { ok: true, value: externalize(await this.mainStatement(model.tail, state)) };
         } catch (e) {
-            if (e instanceof EvalError) return { ok: false, reason: e.message, code: e.code, params: e.params };
+            if (e instanceof EvalError || e instanceof NumberError) return { ok: false, reason: e.message, code: e.code, params: e.params };
             throw e;
         }
+    }
+
+    /** The record under validation, with each column read by its type: `DECIMAL` is exact, `INTEGER` is a number in range (spec §7.2). */
+    private normalizeRecord(record: Row | undefined, table: string | undefined): Row | undefined {
+        if (!record || !table) return record;
+        const normalized: Row = { ...record };
+        for (const column of this.schema.getTable(table)?.columns ?? []) {
+            if (column.type.kind !== 'scalar' || !(column.name in record)) continue;
+            normalized[column.name] = normalizeIn(record[column.name], column.type.type.base, column.type.type.array);
+        }
+        return normalized;
     }
 
     /** A declared host input, read by bare name. The value comes from the host, per run. */
@@ -228,7 +257,19 @@ export class MinabInterpreter {
         const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
         if (!compiled.ok) return { pushed: false };
         const rows = await this.runStatement(compiled.query, expr, state);
-        return { pushed: true, value: rows.length > 0 ? rows[0].value : null };
+        return { pushed: true, value: this.readPushed(expr, rows.length > 0 ? rows[0].value : null) };
+    }
+
+    /** A value that SQL computed: read by the static type of the expression, so a `numeric` (text from the driver) becomes an exact decimal. */
+    private readPushed(expr: Expression, value: MinabValue): MinabValue {
+        if (!this.typeChecker || value === null || value === undefined) return value;
+        let inferred;
+        try {
+            inferred = this.typeChecker.inferType(expr);
+        } catch {
+            return value;
+        }
+        return inferred.ok && inferred.type.kind === 'scalar' ? normalizeIn(value, inferred.type.base, inferred.type.array) : value;
     }
 
     /**
@@ -284,7 +325,7 @@ export class MinabInterpreter {
 
     private async interpret(expr: Expression, state: State): Promise<MinabValue> {
         if (isStringLiteral(expr)) return expr.value;
-        if (isNumberLiteral(expr)) return expr.value;
+        if (isNumberLiteral(expr)) return this.numberLiteral(expr);
         if (isBooleanLiteral(expr)) return expr.value === 'true';
         if (isNullLiteral(expr)) return null;
         if (isCurrentRecord(expr)) {
@@ -299,7 +340,7 @@ export class MinabInterpreter {
         }
         if (isFieldValue(expr)) {
             if (state.context.fieldValue === undefined) fail('"$" was used but the host supplied no field value');
-            return state.context.fieldValue;
+            return this.fieldValue(state);
         }
         if (isMemberAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
@@ -310,7 +351,7 @@ export class MinabInterpreter {
         if (isUnaryExpression(expr)) {
             const operand = await this.expression(expr.operand, state);
             if (expr.negated) return !this.truthy(operand);
-            if (expr.operator === '-') return -this.number(operand);
+            if (expr.operator === '-') return negate(this.number(operand));
             return this.number(operand);
         }
         if (isListLiteral(expr)) {
@@ -321,7 +362,8 @@ export class MinabInterpreter {
         if (isJsonObjectLiteral(expr)) {
             const object: Record<string, MinabValue> = {};
             for (const property of expr.properties) {
-                object[property.key] = property.value ? await this.expression(property.value, state) : state.lookup(property.key);
+                // Numbers inside a JSON value are JSON numbers (D17).
+                object[property.key] = jsonNumber(property.value ? await this.expression(property.value, state) : state.lookup(property.key));
             }
             return object;
         }
@@ -389,17 +431,17 @@ export class MinabInterpreter {
         }
         const variables = new Map<string, MinabValue>();
         for (let i = 0; i < args.length; i++) {
-            variables.set(declaration.params[i].name, await this.expression(args[i], state));
+            variables.set(declaration.params[i].name, this.coerce(declaration.params[i].type, await this.expression(args[i], state)));
         }
         const inner = state.push({ record: state.currentRecord(), table: state.currentTable(), variables });
         for (const statement of declaration.body) {
             if (!isVariableDecl(statement)) {
                 fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
             }
-            variables.set(statement.name, statement.value ? await this.expression(statement.value, inner) : null);
+            variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, inner)) : null);
         }
         if (!declaration.tail) fail(`${name} has no tail expression to return`);
-        return await this.mainStatement(declaration.tail, inner);
+        return this.coerce(declaration.returnType, await this.mainStatement(declaration.tail, inner));
     }
 
     /** A host function runs in the host, with the values of its arguments. Never in SQL. */
@@ -434,13 +476,13 @@ export class MinabInterpreter {
             case 'ANY':
                 return items.some(i => this.truthy(i));
             case 'SUM':
-                return items.reduce((total: number, i) => total + this.number(i), 0);
+                return this.sum(items);
             case 'AVG':
-                return items.length === 0 ? null : items.reduce((total: number, i) => total + this.number(i), 0) / items.length;
+                return items.length === 0 ? null : arithmetic('/', this.sum(items), items.length);
             case 'MIN':
-                return items.length === 0 ? null : items.reduce((a, b) => (this.number(b) < this.number(a) ? b : a));
+                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) < 0 ? b : a));
             case 'MAX':
-                return items.length === 0 ? null : items.reduce((a, b) => (this.number(b) > this.number(a) ? b : a));
+                return items.length === 0 ? null : items.map(i => this.number(i)).reduce((a, b) => (this.compareNumbers(b, a) > 0 ? b : a));
             default:
                 fail(`built-in "${callee.name}" is not evaluated yet`);
         }
@@ -477,8 +519,9 @@ export class MinabInterpreter {
             if (left === null || right === null) {
                 fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
             }
-            const a = left as number;
-            const b = right as number;
+            const exact = decimalCompare(left, right);
+            const a = exact ?? (left as number);
+            const b = exact === undefined ? (right as number) : 0;
             switch (operator) {
                 case '<':
                     return a < b;
@@ -490,22 +533,13 @@ export class MinabInterpreter {
                     return a >= b;
             }
         }
+        if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%') {
+            fail(`operator "${operator}" is not evaluated yet`);
+        }
         const a = this.number(left);
         const b = this.number(right);
-        switch (operator) {
-            case '+':
-                return typeof left === 'string' ? String(left) + String(right) : a + b;
-            case '-':
-                return a - b;
-            case '*':
-                return a * b;
-            case '/':
-                return a / b;
-            case '%':
-                return a % b;
-            default:
-                fail(`operator "${operator}" is not evaluated yet`);
-        }
+        if (operator === '+' && typeof left === 'string') return String(left) + String(right);
+        return arithmetic(operator as Arithmetic, a, b);
     }
 
     /**
@@ -521,7 +555,7 @@ export class MinabInterpreter {
             return left.toLowerCase() === right.toLowerCase();
         }
         if (left instanceof Date && right instanceof Date) return left.getTime() === right.getTime();
-        return left === right;
+        return decimalEqual(left, right) ?? left === right;
     }
 
     /** True when either side of a comparison is a `CITEXT` column. */
@@ -574,13 +608,38 @@ export class MinabInterpreter {
         fail('expected a boolean');
     }
 
-    private number(value: MinabValue): number {
-        if (typeof value === 'number') return value;
-        if (typeof value === 'string') {
-            const parsed = Number(value);
-            if (!Number.isNaN(parsed)) return parsed;
-        }
-        fail('expected a number');
+    /** A value that meets a declared type: a `DECIMAL` slot holds a `Big`, even when the value is a whole number (`let x: DECIMAL = 5`). */
+    private coerce(type: Type, value: MinabValue): MinabValue {
+        if (isTypeRef(type)) return normalizeIn(value, type.base, type.array);
+        if (Array.isArray(value) && value.length === type.elementTypes.length) return value.map((item, i) => this.coerce(type.elementTypes[i], item));
+        return value;
+    }
+
+    /** A number operand: an `INTEGER` (a number) or a `DECIMAL` (a `Big`). Number text from a driver is read as one of them. */
+    private number(value: MinabValue): Numeric {
+        const numeric = toNumeric(value);
+        if (numeric === undefined) fail('expected a number');
+        return numeric;
+    }
+
+    private compareNumbers(a: Numeric, b: Numeric): number {
+        return decimalCompare(a, b) ?? (a as number) - (b as number);
+    }
+
+    /** `SUM` is exact: `INTEGER` items give an `INTEGER`, any `DECIMAL` item gives a `DECIMAL`. */
+    private sum(items: MinabValue[]): Numeric {
+        return items.reduce((total: Numeric, i) => arithmetic('+', total, this.number(i)), 0);
+    }
+
+    /** A number literal reads its own text, so `0.30` and 20-digit numbers are not rounded by JavaScript. */
+    private numberLiteral(expr: { value: number; $cstNode?: { text: string } }): Numeric {
+        return literal(expr.$cstNode?.text ?? String(expr.value));
+    }
+
+    /** `$`: the value the host supplied. A number with a fraction is a `DECIMAL`. */
+    private fieldValue(state: State): MinabValue {
+        const value = state.context.fieldValue;
+        return typeof value === 'number' && !Number.isInteger(value) ? (toNumeric(value) ?? value) : value;
     }
 
     // ---- the SQL seam ---------------------------------------------------
@@ -647,11 +706,11 @@ export class MinabInterpreter {
         }
         if (isFieldValue(expr)) {
             if (state.context.fieldValue === undefined) fail('"$" was used but the host supplied no field value');
-            return state.context.fieldValue;
+            return this.fieldValue(state);
         }
         if (isNameRef(expr)) return state.lookup(expr.name);
         if (isStringLiteral(expr)) return expr.value;
-        if (isNumberLiteral(expr)) return expr.value;
+        if (isNumberLiteral(expr)) return this.numberLiteral(expr);
         fail(`"${expr.$type}" cannot be evaluated outside the query`);
     }
 }

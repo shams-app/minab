@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, query, rule.
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
  *  - After you change an entry, run `npm run docs:diagnostics`.
@@ -97,6 +97,12 @@ export const DIAGNOSTICS = {
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
         doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
     }),
+    'eval.integerOutOfRange': entry({
+        severity: error,
+        message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
+        doc: 'INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers.'
+    }),
+
     'null.likeWithNull': entry({
         severity: error,
         message: () => `"LIKE" doesn't accept null as an operand`,
