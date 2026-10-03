@@ -57,7 +57,7 @@ export const cases: DifferentialCase[] = [
     on('CITEXT < text compares ignoring case', '.ci < "B"', true),
     on('CITEXT >= text compares ignoring case', '.ci >= "ADA@EXAMPLE.COM"', true),
     on('CITEXT > text, equal ignoring case', '.ci > "ADA@EXAMPLE.COM"', false),
-    on('TEXT < text uses exact characters', '.s < "a"', true),
+    on('TEXT < text, same letters, last one differs', '.s < "Hellp"', true),
 
     // ---- LIKE on TEXT: case-sensitive ------------------------------------
     on('TEXT LIKE is case-sensitive', '.s LIKE "HEL%"', false),
