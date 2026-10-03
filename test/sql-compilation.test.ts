@@ -65,8 +65,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'owner', type: { kind: 'ref', table: 'Customer', nullable: true } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let parse: ReturnType<typeof parseHelper<Model>>;

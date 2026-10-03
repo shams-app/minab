@@ -21,7 +21,7 @@
 
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import { scalarType, type ColumnType, type MinabColumnSchema, type MinabRuleContext, type MinabSchema, type MinabTableSchema } from '../language/schema.js';
-import type { LogicalTypeBase, MinabType, ScalarType } from '../language/minab-types.js';
+import type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';
 
 /** A config that can't be used — always reported as a plain message, never a stack trace. */
 export class ConfigError extends Error {}
@@ -168,29 +168,15 @@ function parseTables(spec: unknown, at: string): MinabTableSchema[] {
     });
 }
 
-function parseFunctions(spec: unknown, at: string): MinabSchema['functions'] {
-    if (spec === undefined) return [];
-    if (!Array.isArray(spec)) throw new ConfigError(`${at}: expected an array of functions, got ${describe(spec)}`);
-    return spec.map((entry, index) => {
-        const entryAt = `${at}[${index}]`;
-        if (!isRecordValue(entry)) throw new ConfigError(`${entryAt}: expected an object`);
-        const params = entry.params ?? [];
-        if (!Array.isArray(params)) throw new ConfigError(`${entryAt}.params: expected an array, got ${describe(params)}`);
-        return {
-            name: requireString(entry.name, `${entryAt}.name`),
-            paramTypes: params.map((p, i) => parseScalar(requireString(p, `${entryAt}.params[${i}]`), `${entryAt}.params[${i}]`) as MinabType),
-            returnType: parseScalar(requireString(entry.returns, `${entryAt}.returns`), `${entryAt}.returns`) as MinabType
-        };
-    });
-}
-
 export function parseSchema(spec: unknown, at: string): MinabSchema {
-    if (spec === undefined) return { tables: [], functions: [] };
+    if (spec === undefined) return { tables: [] };
     if (!isRecordValue(spec)) throw new ConfigError(`${at}: expected an object, got ${describe(spec)}`);
-    return {
-        tables: parseTables(spec.tables ?? [], `${at}.tables`),
-        functions: parseFunctions(spec.functions, `${at}.functions`)
-    };
+    if (spec.functions !== undefined) {
+        throw new ConfigError(
+            `${at}.functions: a schema no longer has functions. Host functions are declared with the "functions" option of createMinab (spec §8.7). Remove this key.`
+        );
+    }
+    return { tables: parseTables(spec.tables ?? [], `${at}.tables`) };
 }
 
 export function parseRuleContext(spec: unknown, at: string): MinabRuleContext {
@@ -273,7 +259,7 @@ export function parseConfig(raw: Record<string, unknown>, options: ParseConfigOp
 
 /** An empty host: no tables, no record, no data source. What `minab check` falls back to with no config file. */
 export function emptyConfig(): HostConfig {
-    return { schema: { tables: [], functions: [] }, ruleContext: { isFieldRule: false }, responses: [] };
+    return { schema: { tables: [] }, ruleContext: { isFieldRule: false }, responses: [] };
 }
 
 export function matchResponse(responses: FixtureResponse[], query: SqlQuery): FixtureResponse | undefined {

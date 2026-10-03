@@ -31,8 +31,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'orders', type: { kind: 'collection', table: 'Order' } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let validateRecordRule: ReturnType<typeof validationHelper<Model>>;

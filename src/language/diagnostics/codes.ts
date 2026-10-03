@@ -130,6 +130,11 @@ export const DIAGNOSTICS = {
         doc: 'The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule.'
     }),
 
+    'scope.assignToInput': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is a host input — it is read-only`,
+        doc: 'A host input can be read but not changed. Copy it into a let first, and change the copy.'
+    }),
     'scope.columnNeedsTable': entry<{ column: string }>({
         severity: error,
         message: p => `column "${p.column}" needs a statically known table (requires the Phase 4 type system)`,
@@ -169,6 +174,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" is the name of a function — a variable or parameter may not reuse it`,
         doc: 'A let or a parameter may not have the name of a function declared in the program. Rename it.'
+    }),
+    'scope.nameIsHostName': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is the name of a host input or host function — a function, variable or parameter may not reuse it`,
+        doc: 'The host declared this name. A fn, a let or a parameter may not use it. Rename yours.'
     }),
     'scope.noActiveScope': entry({
         severity: error,

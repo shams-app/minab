@@ -33,8 +33,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'status', type: { kind: 'scalar', type: scalarType('TEXT') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let validate: ReturnType<typeof validationHelper<Model>>;

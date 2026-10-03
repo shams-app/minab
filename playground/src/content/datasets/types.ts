@@ -10,6 +10,6 @@ export interface Dataset {
     title: string;
     /** One sentence: what the data is about. */
     description: string;
-    schema: { tables: unknown[]; functions?: unknown[] };
+    schema: { tables: unknown[] };
     seed: Record<string, Row[]>;
 }

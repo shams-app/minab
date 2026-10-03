@@ -1,14 +1,15 @@
 /**
  * The public types of the runtime API (ADR 0002, section 3).
  *
- * R2 builds the driving side: `createMinab`, `prepare`, `run`. Today `run`
- * takes the existing `QueryExecutor` as its data port and returns the
- * interpreter's answer. R3 replaces `RunPorts` and `RunResult` with the full
- * set (write, clock, host functions, events, stats).
+ * R2 builds the driving side: `createMinab`, `prepare`, `run`. R3 adds the
+ * ports (`ports.ts`): data, write, host functions, clock and events, and the
+ * host's declared inputs and functions.
  */
 
 import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
-import type { QueryExecutor, SqlQuery } from '../language/minab-executor.js';
+import type { SqlQuery } from '../language/minab-executor.js';
+import type { HostFunctionDeclaration, HostInputType } from '../language/host-declarations.js';
+import type { ClockPort, DataPort, EventSink, HostFunctions, WritePort } from './ports.js';
 import type { ProgramKind } from './program-kind.js';
 
 export type { ProgramKind } from './program-kind.js';
@@ -38,6 +39,18 @@ export type ExpectedType = 'text' | 'number' | 'boolean' | 'date' | 'dateTime' |
 export interface MinabOptions {
     /** The whole read surface of every program (D29). Give `version` so services can be cached by it. */
     schema: MinabSchema;
+    /**
+     * Typed functions the host implements (D27), for example `fxRate`. A name needs a
+     * lowercase letter. The implementation comes with each run (`RunPorts.hostFunctions`).
+     * They run in the interpreter, never in SQL.
+     */
+    functions?: HostFunctionDeclaration[];
+    /**
+     * Typed read-only names the host gives to each run (D27), for example
+     * `{ currentUser: { id: 'TEXT', roles: 'TEXT[]' }, url: 'JSON' }`. The values come with
+     * each run (`RunInputs.hostInputs`).
+     */
+    inputs?: Record<string, HostInputType>;
     /** The default rule context of `prepare`. A call can give its own. */
     ruleContext?: MinabRuleContext;
     /** Limits for runs. Stored now, enforced by R4. */
@@ -59,15 +72,24 @@ export interface PrepareOptions {
     expect?: ExpectedType;
 }
 
-/** Given, never asked: the record under validation and `$`. */
+/** Given, never asked: the record under validation, `$`, and the values of the declared host inputs. */
 export interface RunInputs {
     record?: Record<string, unknown>;
     fieldValue?: unknown;
+    /** One value for each declared input. A missing one is the run error `eval.missingInput`. */
+    hostInputs?: Record<string, unknown>;
 }
 
-/** Today a data port is a `QueryExecutor`. R3 widens this. */
+/** Asked, never given: what the program needs from outside (ADR 0002, section 4). */
 export interface RunPorts {
-    data?: QueryExecutor;
+    /** Without it, a statement fails with `data.noPort`. */
+    data?: DataPort;
+    /** Without it, a write fails with `eval.writesNotSupported` (X5 builds writes). */
+    write?: WritePort;
+    hostFunctions?: HostFunctions;
+    /** Default: the system clock, in UTC. Read once for each run. */
+    clock?: ClockPort;
+    events?: EventSink;
 }
 
 export interface RunOptions {

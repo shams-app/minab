@@ -62,7 +62,8 @@ import type { SqlQuery } from './minab-executor.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
-export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string };
+/** `code` is set when the refusal has its own stable code, for example `compile.hostFunctionInSql`. */
+export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string; code?: string };
 
 /** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
 export interface OuterRecord {
@@ -98,10 +99,17 @@ export const NO_OUTER_SCOPE: OuterResolver = {
     resolveRecord: () => ({ found: false, reason: NO_OUTER_REASON })
 };
 
-class CompileError extends Error {}
+class CompileError extends Error {
+    constructor(
+        reason: string,
+        readonly code?: string
+    ) {
+        super(reason);
+    }
+}
 
-function fail(reason: string): never {
-    throw new CompileError(reason);
+function fail(reason: string, code?: string): never {
+    throw new CompileError(reason, code);
 }
 
 interface NamedEntry {
@@ -194,7 +202,7 @@ export class MinabSqlCompiler {
             return { ok: true, query: { text, params: ctx.params } };
         } catch (e) {
             if (e instanceof CompileError) {
-                return { ok: false, reason: e.message };
+                return { ok: false, reason: e.message, code: e.code };
             }
             throw e;
         }
@@ -510,6 +518,10 @@ export class MinabSqlCompiler {
 
     private call(expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         const callee = expr.callee;
+        if (isNameRef(callee) && this.schema.getHostFunction(callee.name)) {
+            // A host function is the host's code. Emitting `name(...)` would call a database function of that name.
+            fail(`"${callee.name}" is a host function — it runs in the host, never in SQL`, 'compile.hostFunctionInSql');
+        }
         if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
             // A user `fn` runs in the interpreter. Emitting `name(...)` would call a database function of that name: a wrong answer.
             fail(

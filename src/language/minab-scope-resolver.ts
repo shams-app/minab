@@ -48,6 +48,7 @@ import {
     type VariableDecl
 } from './generated/ast.js';
 import { coded, type CodedMessage } from './diagnostics/codes.js';
+import type { MinabType } from './minab-types.js';
 import type { SchemaProvider } from './schema.js';
 
 export interface ResolvedScope {
@@ -55,6 +56,8 @@ export interface ResolvedScope {
     owner: AstNode;
     /** The table this scope's rows come from, when statically known. Absent when it would require the Phase 4 type system to determine (e.g. traversal through a relation column). */
     tableName?: string;
+    /** Set when the name is a host input (D27): its declared type. */
+    hostInput?: MinabType;
 }
 
 export type ScopeResolution = { found: true; scope: ResolvedScope } | ({ found: false } & CodedMessage);
@@ -171,6 +174,10 @@ export class MinabScopeResolver {
         const decl = this.lexicalLookup(node, node.name);
         if (decl) {
             return { found: true, scope: { owner: decl } };
+        }
+        const input = this.schema.getHostInput(node.name);
+        if (input) {
+            return { found: true, scope: { owner: node, tableName: input.kind === 'record' ? input.table : undefined, hostInput: input } };
         }
         return { found: false, ...coded('scope.unknownName', { name: node.name }) };
     }

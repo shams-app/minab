@@ -24,6 +24,7 @@ A name, table, column or sigil cannot be found.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `scope.assignToInput` | error | "{name}" is a host input — it is read-only | `name` | A host input can be read but not changed. Copy it into a let first, and change the copy. |
 | `scope.columnNeedsTable` | error | column "{column}" needs a statically known table (requires the Phase 4 type system) | `column` | The scope has no known table, so the column cannot be looked up. Open a table first, for example with FROM. |
 | `scope.computedReceiver` | error | member access on a computed receiver requires the Phase 4 type system | none | The scope resolver cannot follow a member access on a computed value. Use the type checker for this case. |
 | `scope.currentRecordNoTable` | error | "." has no statically known table here | none | The current record has no known table. Use "." inside a query, or give the host a record table. |
@@ -32,6 +33,7 @@ A name, table, column or sigil cannot be found.
 | `scope.keyOutsideQuery` | error | KEY used outside any query | none | KEY is the group key of a query. Use it inside a query with GROUPBY. |
 | `scope.keyWithoutGroupBy` | error | KEY is only valid after a GROUPBY clause | none | This query has no GROUPBY. Add a GROUPBY clause, or remove KEY. |
 | `scope.nameIsFunction` | error | "{name}" is the name of a function — a variable or parameter may not reuse it | `name` | A let or a parameter may not have the name of a function declared in the program. Rename it. |
+| `scope.nameIsHostName` | error | "{name}" is the name of a host input or host function — a function, variable or parameter may not reuse it | `name` | The host declared this name. A fn, a let or a parameter may not use it. Rename yours. |
 | `scope.noActiveScope` | error | no active scope for "." | none | There is no current record here. Use "." inside a query, a filter or a loop. |
 | `scope.noParentScope` | error | "^" has no enclosing parent scope here | none | The "^" sigil means the record one level up. Use it only inside a nested scope. |
 | `scope.noStaticTable` | error | no statically known table at this point | none | The checker cannot tell which table this refers to. Open the table explicitly, for example with #Table. |
