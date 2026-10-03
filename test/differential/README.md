@@ -37,6 +37,7 @@ export const cases: DifferentialCase[] = [
 - `schema`, `record`, `table`: the table and the one row that `.` means.
   A column you leave out gets a neutral value (`null` if it may be null).
   Without `schema`, the case has one table `One` and no record.
+- `clock`: `{ now, timeZone }` (an ISO 8601 instant and an IANA name). Both runtimes get the same clock.
 - `expect`: the answer both runtimes must give. For an error use `{ error: 'division-by-zero' } or { error: 'cast-failed' }`.
 - `knownGap: { card, note }`: a bug we know. The test asserts the two answers **differ**.
   The card that fixes the bug removes `knownGap` and adds `expect`.

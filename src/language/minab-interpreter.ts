@@ -71,7 +71,7 @@ import {
     type SwitchExpr,
     type Type
 } from './generated/ast.js';
-import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinSignature } from './minab-builtins.js';
+import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinClock, type BuiltinSignature } from './minab-builtins.js';
 import type { AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
@@ -171,7 +171,13 @@ export class MinabInterpreter {
         private readonly typeChecker?: MinabTypeChecker
     ) {}
 
-    async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
+    async evaluate(model: Model, given: EvalContext): Promise<EvalResult> {
+        // The clock is read once: every `NOW()` in this run is the same instant (D21).
+        const context: EvalContext = {
+            ...given,
+            now: given.now ?? new Date(),
+            timeZone: given.timeZone ?? 'UTC'
+        };
         const state = new State(context, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
             state.frames.push({
@@ -196,6 +202,11 @@ export class MinabInterpreter {
             if (e instanceof EvalError || e instanceof NumberError) return { ok: false, reason: e.message, code: e.code, params: e.params };
             throw e;
         }
+    }
+
+    /** The run's clock, for the compiler (it binds the instant and the zone as parameters). */
+    private clockOf(state: State): BuiltinClock {
+        return { now: state.context.now!, timeZone: state.context.timeZone! };
     }
 
     /** The record under validation, with each column read by its type: `DECIMAL` is exact, `INTEGER` is a number in range (spec §7.2). */
@@ -229,7 +240,7 @@ export class MinabInterpreter {
 
     private async mainStatement(statement: MainStatement, state: State): Promise<MinabValue> {
         if (isQuery(statement)) {
-            const compiled = this.compiler.compileQuery(statement, this.outerResolver(state));
+            const compiled = this.compiler.compileQuery(statement, this.outerResolver(state), this.clockOf(state));
             if (!compiled.ok) fail(compiled.reason);
             return await this.runStatement(compiled.query, statement, state);
         }
@@ -281,7 +292,7 @@ export class MinabInterpreter {
      * interpret the node instead and push down its parts.
      */
     private async pushDown(expr: Expression, state: State): Promise<{ pushed: true; value: MinabValue } | { pushed: false }> {
-        const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
+        const compiled = this.compiler.compileValue(expr, this.outerResolver(state), this.clockOf(state));
         if (!compiled.ok) return { pushed: false };
         const rows = await this.runStatement(compiled.query, expr, state);
         return {
@@ -437,7 +448,8 @@ export class MinabInterpreter {
                     array: !!expr.targetType.array
                 },
                 operand?.base,
-                operand?.array
+                operand?.array,
+                state.context.timeZone
             );
         }
         if (isTupleAccess(expr)) {
@@ -532,19 +544,26 @@ export class MinabInterpreter {
             if (expr.args.length !== 1) fail(`${builtin.name} takes one argument`);
             const values = await this.expression(expr.args[0], state);
             const items = Array.isArray(values) ? values : values === null ? [] : [values];
-            return this.runBuiltin(builtin, [items], []);
+            return this.runBuiltin(builtin, [items], [], state);
         }
         const values: MinabValue[] = [];
         for (const arg of expr.args) values.push(await this.expression(arg, state));
         // A function without `nullPropagates: false` gives `null` for a `null` argument (spec §7.7).
         if (builtin.nullPropagates !== false && values.some(v => v === null || v === undefined)) return null;
-        const info = expr.args.map(arg => ({ citext: this.isCitextArg(arg, state) }));
-        return this.runBuiltin(builtin, values, info);
+        const info = expr.args.map((arg): BuiltinArgInfo => {
+            const base = this.staticScalar(arg);
+            return {
+                citext: this.isCitextArg(arg, state),
+                base: base && !base.array ? base.base : undefined,
+                literal: isStringLiteral(arg) ? arg.value : undefined
+            };
+        });
+        return this.runBuiltin(builtin, values, info, state);
     }
 
-    private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[]): MinabValue {
+    private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[], state: State): MinabValue {
         try {
-            return builtin.evaluate(args, info);
+            return builtin.evaluate(args, info, this.clockOf(state)) as MinabValue;
         } catch (e) {
             if (e instanceof BuiltinError) fail(e.message);
             throw e;

@@ -686,6 +686,36 @@ CEIL(.total)
 
 ---
 
+## 18. Dates, times and time zones
+
+*Spec §5.3.1 and §7.2.* A run has a clock and a time zone from the host. `NOW()` is the instant the run started; `TODAY()` is its date in the run's time zone. The unit of `DATE_ADD` and `DATE_DIFF` is a text literal.
+
+```
+// A DATETIME column (an instant)
+.placed_at < NOW()
+YEAR(.placed_at) == 2026
+HOUR(.placed_at) >= 9 AND HOUR(.placed_at) < 17    // in the run's time zone
+DATE_DIFF(NOW(), .placed_at, "hour") > 48
+DATE_ADD(.placed_at, 1, "day") > NOW()             // keeps the wall-clock time across daylight saving
+CAST(.placed_at AS DATE) == TODAY()                // the date in the run's time zone
+```
+
+```
+// A DATE column
+.start_date < TODAY()
+DATE_DIFF(TODAY(), .start_date, "day") > 30
+DATE_ADD(.start_date, 1, "month") > .end_date      // Jan 31 + 1 month is Feb 28 (Feb 29 in a leap year)
+DATE_DIFF(.end_date, .start_date, "week") <= 2
+YEAR(.start_date) == 2026 AND MONTH(.start_date) == 10
+```
+
+```
+// An unknown unit is an error: this is wrong on purpose
+DATE_ADD(.start_date, 1, "fortnight")
+```
+
+---
+
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.

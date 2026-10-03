@@ -360,6 +360,30 @@ export const cheatsheet: CheatSection[] = [
                 description: '`ROUND` goes half away from zero and is exact for `DECIMAL`. `digits` is optional.',
                 specRef: '§5.3.1',
                 keywords: ['ROUND', 'ABS', 'FLOOR', 'CEIL']
+            },
+            {
+                id: 'now-today',
+                title: 'NOW · TODAY',
+                syntax: '.placed_at < NOW()  →  BOOLEAN\n.due_date < TODAY()  →  BOOLEAN',
+                description: '`NOW()` is the instant the run started (the same everywhere in one run). `TODAY()` is its date in the time zone of the run.',
+                specRef: '§5.3.1',
+                keywords: ['NOW', 'TODAY']
+            },
+            {
+                id: 'date-parts',
+                title: 'YEAR · MONTH · DAY · HOUR · MINUTE',
+                syntax: 'YEAR(.placed_at) == 2026  →  BOOLEAN\nHOUR(.placed_at)  →  INTEGER',
+                description: 'Parts of a `DATE`, a `TIME` or a `DATETIME`. A `DATETIME` is read in the time zone of the run.',
+                specRef: '§5.3.1',
+                keywords: ['YEAR', 'MONTH', 'DAY', 'HOUR', 'MINUTE']
+            },
+            {
+                id: 'date-math',
+                title: 'DATE_ADD · DATE_DIFF',
+                syntax: 'DATE_ADD(.start_date, 1, "month")  →  DATE\nDATE_DIFF(TODAY(), .paid_on, "day") > 30  →  BOOLEAN',
+                description: 'Units: `"year"`, `"month"`, `"week"`, `"day"`, and for a `DATETIME` also `"hour"`, `"minute"`, `"second"`. The unit is a text literal. Month ends clamp: Jan 31 + 1 month is Feb 28. `DATE_DIFF` truncates toward zero.',
+                specRef: '§5.3.1',
+                keywords: ['DATE_ADD', 'DATE_DIFF']
             }
         ]
     },

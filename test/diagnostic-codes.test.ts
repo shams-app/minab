@@ -90,6 +90,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.builtinNeedsOrderableCollection': { via: 'validator', program: 'MIN(1)' },
     'call.calleeNotName': { via: 'validator', program: '.id(1)' },
     'call.functionNameCase': { via: 'validator', program: 'fn TAX(a: INTEGER): INTEGER { a }' },
+    'call.unknownDateUnit': { via: 'validator', program: 'DATE_ADD(CAST("2026-01-31" AS DATE), 1, "fortnight")' },
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
     'call.wrongArgumentCount': { via: 'validator', program: 'ROUND()' },

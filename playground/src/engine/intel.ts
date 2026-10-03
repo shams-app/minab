@@ -68,7 +68,22 @@ export const BUILTIN_DOCS: Record<string, { signature: string; doc: string }> = 
     FLOOR: { signature: 'FLOOR(n: N) → INTEGER', doc: 'Rounds down to a whole number.' },
     CEIL: { signature: 'CEIL(n: N) → INTEGER', doc: 'Rounds up to a whole number.' },
     GREATEST: { signature: 'GREATEST(a: T, b: T, …) → T', doc: 'The largest value. `null` arguments are ignored; the answer is `null` only when all are.' },
-    LEAST: { signature: 'LEAST(a: T, b: T, …) → T', doc: 'The smallest value. `null` arguments are ignored; the answer is `null` only when all are.' }
+    LEAST: { signature: 'LEAST(a: T, b: T, …) → T', doc: 'The smallest value. `null` arguments are ignored; the answer is `null` only when all are.' },
+    NOW: { signature: 'NOW() → DATETIME', doc: 'The instant the run started. Every `NOW()` in one run is the same. In SQL it is a parameter, not the database clock.' },
+    TODAY: { signature: 'TODAY() → DATE', doc: 'The date of `NOW()` in the time zone of the run.' },
+    YEAR: { signature: 'YEAR(d: DATE | DATETIME) → INTEGER', doc: 'The year. A `DATETIME` is read in the time zone of the run.' },
+    MONTH: { signature: 'MONTH(d: DATE | DATETIME) → INTEGER', doc: 'The month, 1 to 12. A `DATETIME` is read in the time zone of the run.' },
+    DAY: { signature: 'DAY(d: DATE | DATETIME) → INTEGER', doc: 'The day of the month. A `DATETIME` is read in the time zone of the run.' },
+    HOUR: { signature: 'HOUR(t: TIME | DATETIME) → INTEGER', doc: 'The hour, 0 to 23. A `DATETIME` is read in the time zone of the run.' },
+    MINUTE: { signature: 'MINUTE(t: TIME | DATETIME) → INTEGER', doc: 'The minute, 0 to 59. A `DATETIME` is read in the time zone of the run.' },
+    DATE_ADD: {
+        signature: 'DATE_ADD(d: DATE | DATETIME, n: INTEGER, unit: "year" | "month" | "week" | "day" | "hour" | "minute" | "second") → same type as d',
+        doc: 'Adds `n` units (may be negative). Month ends clamp: Jan 31 + 1 month is Feb 28. Hours, minutes and seconds are for a `DATETIME` only. The unit is a text literal.'
+    },
+    DATE_DIFF: {
+        signature: 'DATE_DIFF(a: DATE | DATETIME, b: DATE | DATETIME, unit: "year" | "month" | "week" | "day" | "hour" | "minute" | "second") → INTEGER',
+        doc: 'Whole units from `b` to `a`, truncated toward zero. Both are `DATE` or both are `DATETIME`. The unit is a text literal.'
+    }
 };
 
 const PLACEHOLDER = '__minab_completion__';

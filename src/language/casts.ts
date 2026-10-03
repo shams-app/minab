@@ -15,6 +15,7 @@
  *  - `DATETIME`: `2026-10-02 08:30:00` (no time zone)
  */
 
+import { DateError, dateOf, parseInstant, timeOf } from './dates.js';
 import { coded } from './diagnostics/codes.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import { Big, NumberError, checkInteger, decimalText, toBig } from './values.js';
@@ -107,6 +108,16 @@ function dateText(value: unknown): unknown {
     return value instanceof Date ? value.toISOString() : value;
 }
 
+/** The date or the time of a `DATETIME` text, read in the run's time zone (D21). `undefined` when the text is not a date time. */
+function inZone(text: string, zone: string, part: (ms: number, zone: string) => string): string | undefined {
+    try {
+        return part(parseInstant(text), zone);
+    } catch (e) {
+        if (e instanceof DateError) return undefined;
+        throw e;
+    }
+}
+
 function toInteger(value: Big, from: Kind, original: unknown): number {
     try {
         return checkInteger(Number(value.round(0, Big.roundHalfUp).toFixed()));
@@ -115,7 +126,7 @@ function toInteger(value: Big, from: Kind, original: unknown): number {
     }
 }
 
-function castOne(value: unknown, from: Kind, to: Kind): unknown {
+function castOne(value: unknown, from: Kind, to: Kind, zone: string): unknown {
     const fail = () => castFailed(value, from, to);
     const text = typeof dateText(value) === 'string' ? (dateText(value) as string) : undefined;
     switch (to) {
@@ -125,7 +136,11 @@ function castOne(value: unknown, from: Kind, to: Kind): unknown {
             if (from === 'INTEGER') return String(value);
             if (from === 'BOOLEAN') return String(value);
             if (from === 'JSON') throw fail();
-            if (from === 'DATETIME' && value instanceof Date) return parseDateTime(value.toISOString())!.join(' ');
+            if (from === 'DATETIME') {
+                const parts = text === undefined ? undefined : parseDateTime(text);
+                if (!parts) throw fail();
+                return parts.join(' ');
+            }
             if (text === undefined) throw fail();
             return text;
         case 'INTEGER': {
@@ -172,14 +187,14 @@ function castOne(value: unknown, from: Kind, to: Kind): unknown {
                 from === 'DATE' || from === 'TEXT'
                     ? parseDate(from === 'TEXT' ? text.trim() : text)
                     : from === 'DATETIME'
-                      ? parseDateTime(text)?.[0]
+                      ? inZone(text, zone, dateOf)
                       : undefined;
             if (date === undefined) throw fail();
             return date;
         }
         case 'TIME': {
             if (text === undefined) throw fail();
-            const time = from === 'TIME' || from === 'TEXT' ? parseTime(text.trim()) : from === 'DATETIME' ? parseDateTime(text)?.[1] : undefined;
+            const time = from === 'TIME' || from === 'TEXT' ? parseTime(text.trim()) : from === 'DATETIME' ? inZone(text, zone, timeOf) : undefined;
             if (time === undefined) throw fail();
             return time;
         }
@@ -206,18 +221,19 @@ function castOne(value: unknown, from: Kind, to: Kind): unknown {
 /**
  * Converts a value to the target type. `null` stays `null`. `staticBase` is the type the
  * checker inferred for the operand (it tells a `JSON` string from a `TEXT` value).
+ * `zone` is the run's time zone: a `DATETIME` is read in it when it becomes a `DATE` or a `TIME`.
  * Throws `NumberError` (`eval.castFailed`) when the value cannot convert.
  */
-export function castValue(value: unknown, target: CastTarget, staticBase?: LogicalTypeBase, staticArray = false): unknown {
+export function castValue(value: unknown, target: CastTarget, staticBase?: LogicalTypeBase, staticArray = false, zone = 'UTC'): unknown {
     if (value === null || value === undefined) return null;
     if (staticBase === 'JSON' && target.base === 'JSON' && !!target.array === staticArray) return value;
     if (Array.isArray(value) && staticBase !== 'JSON') {
         if (!target.array) throw castFailed(value, kindOf(value[0], staticBase), target.base);
-        return value.map(item => (item === null ? null : castOne(item, kindOf(item, staticBase), target.base)));
+        return value.map(item => (item === null ? null : castOne(item, kindOf(item, staticBase), target.base, zone)));
     }
     if (target.array) {
         if (staticBase === 'JSON' && Array.isArray(value)) throw castFailed(value, 'JSON', target.base);
         throw castFailed(value, kindOf(value, staticBase), target.base);
     }
-    return castOne(value, kindOf(value, staticBase), target.base);
+    return castOne(value, kindOf(value, staticBase), target.base, zone);
 }

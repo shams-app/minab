@@ -107,7 +107,16 @@ export const BUILTINS = [
     'FLOOR',
     'CEIL',
     'GREATEST',
-    'LEAST'
+    'LEAST',
+    'NOW',
+    'TODAY',
+    'YEAR',
+    'MONTH',
+    'DAY',
+    'HOUR',
+    'MINUTE',
+    'DATE_ADD',
+    'DATE_DIFF'
 ] as const;
 
 const WORD_TYPES = new Map<string, TokenType>();
