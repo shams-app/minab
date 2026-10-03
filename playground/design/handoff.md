@@ -10,7 +10,7 @@ This file is written by phase W1, one section per approved round. Phases W2 and 
 |---|---|---|
 | 1 · Design system | 0, 1 | Approved 2026-10-03 |
 | 2 · The app | 2–5 | Approved 2026-10-03 |
-| 3 · The other pages | 6–13 | — |
+| 3 · The other pages | 6–13 | Approved 2026-10-03 |
 | 4 · Check and hand off | 14 | — |
 
 ---
@@ -299,3 +299,130 @@ All at 780×340.
   - JSON toggle: the presets stay above, the JSON editor below, then the related-rows footnote.
 - **Field:** "Type of `$`" with a DECIMAL select, presets 500 ✓ · 950 ✕ · −5 ✕ (active), "Fails locally — the database is never asked.", and a labelled value input.
 - **Collapsed host panel:** one 36 px bar, "Host — schema, data, record ›".
+
+---
+
+## Round 3 · The other pages (approved 2026-10-03)
+
+Canvas page "Round 3 · The other pages", boards 12–19.
+
+### Tour (`/learn/:lesson`, board 12)
+
+- **Wide:** a 380 px left column on `--bg-surface`, then the compact workbench.
+  - **LessonList** at the top:
+    - "Tour" eyebrow with "n/12 done" in mono, and a 4 px `--accent` progress bar;
+    - lessons in a 2-column grid, each with a 16 px round marker. Done is a `--success` fill with ✓. Current has an `--accent` ring, `--surface-selected` and a 2 px left accent bar, and `aria-current="step"`. To do is a `--border-default` ring with the number.
+  - **LessonPanel:**
+    - "Lesson 7" in mono accent, then the H1 at 26 px;
+    - the prose at 14.5 px / 1.65 in `--text-secondary`, with inline code on `--surface-sunken` in syntax colors;
+    - the **Goal box**. Open: a dashed `--border-strong` box with a flag icon and "Goal". Met: a `--success` border and soft fill, a ✓ disc, "Goal met — nicely done.";
+    - the hint callout (warning tone, lightbulb line icon, "Hint 1.");
+    - actions: Another hint (secondary), Show solution and Start over (ghost);
+    - footer nav: "← previous" (ghost) and "next →". Next is secondary while the goal is open and **primary once it is met**.
+- **Compact workbench:**
+  - a 44 px toolbar: "Your program", the status pill, Run;
+  - the editor and status bar, with the host panel collapsed to its 36 px bar;
+  - output tabs Result · SQL · Execution · Problems.
+- **Small celebration:** when the goal is met, four sigil glyphs (`.` `$` `^` `#`, in their colors) rise 12 px above the goal box and fade out once (700 ms). **Big celebration** (lesson 12): the tulip mark draws its strokes, then a quiet "Tour complete" card.
+- **Narrow:**
+  - the lesson list becomes a strip of 36 px round numbers that scrolls sideways;
+  - the lesson comes first, then the workbench as tabs (Code · Result · Host);
+  - a floating Run button.
+
+### Gallery (`/examples`, board 13)
+
+- Header: H1 at 40 px, subtitle "30 programs, …".
+- **GalleryFilters:**
+  - a 38 px search input (focused: `--accent` border), a Level select, "n of 30" in mono, and "Clear filters" (link-style ghost, only when filtered);
+  - topic chips with mono counts, `aria-pressed`. "Names 1" is new.
+- **ExampleCard:** 3 columns, 20 px gap, `--bg-surface`, radius xl.
+  - Content: the title, a one-line summary, a code preview on `--editor-bg` (up to 5 lines), tag badges, and the meta line on the right (level · § · source).
+  - Check-only shows a dashed badge.
+  - **Hover:** `--border-strong`, `--shadow-md`, translateY −2 px. **Focus:** the focus ring (the whole card is one link).
+- **Persian names card:** `FROM سفارش WHERE .وضعیت == "ارسال‌شده" SELECT .مبلغ AS مبلغ_کل`. The line stays LTR; the Persian names fall back from JetBrains Mono to the system font (W3: add `Vazirmatn` or `Noto Sans Arabic` after the mono stack if the fallback looks poor).
+- **Empty:** a dashed box with `EXISTS(#Example[.title LIKE $]) → false`, "No examples match", a hint, and Clear filters.
+- **Narrow:** a 44 px search input, topic chips that scroll sideways, cards in one column.
+
+### Reference (`/reference`, board 14)
+
+- Header with "Read the full spec ↗". The search input (40 px) and the section chips (TOC) **stick** to the top while scrolling.
+- Sections: an h2 at 22 px, then a 3-column grid of **cheat cards**:
+  - the title, a check-only dashed badge where it applies, and a spec § badge-link on the right;
+  - the syntax on `--editor-bg` with a Copy IconButton in its corner;
+  - the description, then "Run an example →".
+- **Search-filtered:** the input gets the accent border and a hit count ("2 cards"); the matching section chip turns active; only the matches are shown.
+- **Drawer** (from the workbench):
+  - 560 px from the right, glass (`--surface-overlay` + blur), a `--border-strong` left edge, `--shadow-overlay`;
+  - a scrim over the workbench: the new token **`--scrim`**, dark `rgb(5 6 10 / .6)`, light `rgb(18 21 27 / .35)`;
+  - a header with "Cheat sheet", "Open full page ↗" and Close; then search (with an `esc` hint), compact chips and compact cards.
+- **Narrow:** stacked cards, the chips scroll sideways and stick.
+
+### Embed (`/embed`, board 15)
+
+- **Quiet chrome inside the host page:**
+  - a 1 px `--border-default` frame, radius lg;
+  - a header with the small mark and `.minab` (links to the playground), the example title, "Open in playground ↗" (just "↗" below 640 px, with an `aria-label`) and Run (sm).
+- Two columns, editor | output tabs (Result · Execution · SQL). Below 640 px it is one column with the editor on top.
+- Content: "Within the credit limit". It shows **Fails** ("its total, 2600.00, is over the limit, 2500.00"). The Execution tab shows one statement from `.customer.credit_limit`, which returned `"2500.00"`.
+
+### Mobile pass (board 16, 375 × 812)
+
+- The top bar is 52 px: the lockup, Search and Menu (44 px targets).
+- **Workbench:**
+  - The toolbar wraps: the ExamplePicker (full width, 40 px), the status pill, Share and a "More actions" IconButton. Cheat sheet, Download and Embed go into More.
+  - Tabs Code · Result (with a verdict mark) · Host, each 44 px.
+  - Inside Result, the output tabs become **chips that scroll sideways** (Verdict · SQL · Execution · Console · Problems). Host tabs become chips too.
+- **Floating Run:** a 52 px pill, bottom-right (16 px inset, 28 px above the bottom plus the safe area), `--accent` with a shadow and a glow. Content gets a 96 px bottom padding, so Run never hides anything.
+- Form inputs are 44 px tall at 14 px mono. Every link and button is at least 44 px.
+- Tour, gallery and reference follow the narrow rules above.
+
+### Overlays and edge pages (board 17)
+
+- **CommandPalette:**
+  - 640 px, centered 15vh from the top, glass, radius lg, a scrim behind;
+  - a 16 px search field with an `esc` kbd;
+  - groups Actions · Examples · Lessons · Pages with small uppercase headers;
+  - rows are 22 px icon, label (the matched letters in bold), and kbd or meta on the right. The active row: `--surface-selected` with a 2 px accent bar, `aria-selected`;
+  - a footer of key hints (↑↓ move, ↵ open, esc close). "Nothing matches" has one line of help.
+- **Toast:** bottom center, 420 px, glass. Info and success close after 4 s. **Errors stay until closed** (a close button).
+- **EngineStatusPill, all 5 states** (`role="status"`):
+  - Starting… (accent dot, pulsing ring);
+  - Ready (muted dot);
+  - Starting Postgres… (warning dot, pulsing);
+  - Postgres ready (success dot with a glow);
+  - Postgres failed (danger pill with a "Restart" link).
+- **Hover card:** glass, radius md, 380 px. `.total` — a column of the current record · type `DECIMAL` · table `Order`.
+- **Completion list:** glass, mono 12.5 px. The name is in member color and the type on the right in type color. Relations (`⇉ Order[]`) are in alias color. The selected row uses `--surface-selected`.
+- **404:** `EXISTS(#Page[.path == $])`, "→ false" in constant color, "Nothing here", one line, "Go home" (primary).
+- **Error page:** a `--danger` border, a "!" disc, "Something broke on this page", the reassurance line, Reload (primary) and Restart the engine (secondary).
+
+### Social image and icons (board 18)
+
+- **OG image, 1200 × 630** (`public/og-image.png`). Dark is the default; a light one is optional.
+  - Grid texture. Left: mark C (with the stem) with a glow, `.minab` at 76 px, the one-liner at 26 px. Right: the booking rule at 24 px with the pushdown underline, and a large "✓ Passes · 1 statement to Postgres" verdict.
+  - It stays readable at 300 × 158.
+- **apple-touch-icon.png, 180:** mark B on `#0D1015`, radius 40, glow.
+- **favicon.svg:** mark B without the middle petal, stroke 14 (32 px) / 18 (16 px), on a `#0D1015` rounded square.
+- W2 writes the SVG from the paths in round 1 and renders the PNGs.
+
+### Motion (board 19, interactive)
+
+| Interaction | Trigger | Property | Duration | Easing |
+|---|---|---|---|---|
+| Run button | press, ⌘↵ | scale 0.97 → 1; the label swaps to a spinner while busy | fast | standard |
+| Result appears | the run finishes | opacity 0 → 1, translateY 4 px → 0 | normal | standard |
+| Stale result | an edit after a run | opacity 1 → 0.45; the badge fades in | normal | standard |
+| Verdict flip | pass ↔ fail | fill, border and word color; the icon rotates 90° and swaps at the midpoint | slow | emphasized (icon), standard (color) |
+| Trace hover | hover or focus a TraceItem | editor span: pushdown-soft fill, ring, glow; the card border | fast (out after a 60 ms delay) | standard |
+| Preset chip | select | fill and border; the form values cross-fade | fast | standard |
+| Lesson complete | goal met | goal box tone; 4 sigil glyphs rise 12 px and fade once | slow (glyphs 700 ms) | standard |
+| Tour complete | lesson 12 goal met | the mark draws its strokes (stroke-dashoffset), then the card | 1200 ms | standard |
+| Toast | show, hide | translateY 8 px → 0 and opacity; out is opacity only | normal | standard |
+| Command palette | open, close | scrim opacity; the panel scales 0.98 → 1 with opacity | normal (close: fast) | standard |
+| Panel collapse | toggle the host panel | height to the 36 px bar; the chevron rotates 180° | normal | standard |
+| Hero demo tabs | switch tab | the body cross-fades; the card height animates | normal | standard |
+| Engine pill | starting states | the dot ring grows and fades, in a loop | 1200 ms loop | ease-out |
+
+- If a trace span is off screen, the editor scrolls it into view.
+- The verdict is announced through `role="status"`.
+- **Reduced motion:** every duration is 0; no pulsing, rising or drawing; only colors change.
