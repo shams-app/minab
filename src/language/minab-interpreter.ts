@@ -599,10 +599,24 @@ export class MinabInterpreter {
         if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%') {
             fail(`operator "${operator}" is not evaluated yet`);
         }
+        if (operator === '+' && this.isTextSum(expr, left, right)) {
+            return left === null || right === null ? null : String(left) + String(right);
+        }
         const a = this.number(left);
         const b = this.number(right);
-        if (operator === '+' && typeof left === 'string') return String(left) + String(right);
         return arithmetic(operator as Arithmetic, a, b);
+    }
+
+    /** `+` joins texts (D13). A `null` side gives `null`. */
+    private isTextSum(expr: BinaryExpression, left: MinabValue, right: MinabValue): boolean {
+        if (typeof left === 'string' || typeof right === 'string') return true;
+        if (left !== null || right !== null || !this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && inferred.type.base === 'TEXT';
+        } catch {
+            return false;
+        }
     }
 
     /**

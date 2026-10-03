@@ -106,12 +106,24 @@ export function decimalCompare(a: unknown, b: unknown): number | undefined {
     return pair ? pair[0].cmp(pair[1]) : undefined;
 }
 
+/** The error of `/` and `%` by zero. */
+export function divisionByZero(): NumberError {
+    const { code, reason } = coded('eval.divisionByZero');
+    return new NumberError(reason, code);
+}
+
+/** `/` gives 16 digits after the point, rounded half away from zero (D14). Same digits as the SQL form. */
+const Quotient = Big();
+Quotient.DP = 16;
+Quotient.RM = 1;
+
 export type Arithmetic = '+' | '-' | '*' | '/' | '%';
 
 /**
  * One arithmetic step. `INTEGER` with `INTEGER` stays an `INTEGER` (range checked for
  * `+`, `-`, `*`). Any `DECIMAL` makes the result a `DECIMAL`.
- * Division and `%` of two integers keep the JavaScript meaning until C4.
+ * `/` is always a `DECIMAL` (16 digits after the point, half away from zero). `%` has the
+ * sign of its left side. Both throw `eval.divisionByZero` when the right side is zero.
  */
 export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeric {
     if (typeof a === 'number' && typeof b === 'number') {
@@ -123,8 +135,10 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
             case '*':
                 return checkInteger(a * b);
             case '/':
-                return a / b;
+                if (b === 0) throw divisionByZero();
+                return new Quotient(a).div(b);
             case '%':
+                if (b === 0) throw divisionByZero();
                 return a % b;
         }
     }
@@ -138,10 +152,10 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
         case '*':
             return x.times(y);
         case '/':
-            if (y.eq(0)) throw new NumberError('division by zero');
-            return x.div(y);
+            if (y.eq(0)) throw divisionByZero();
+            return new Quotient(x).div(y);
         case '%':
-            if (y.eq(0)) throw new NumberError('division by zero');
+            if (y.eq(0)) throw divisionByZero();
             return x.mod(y);
     }
 }

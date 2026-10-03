@@ -110,6 +110,11 @@ export const DIAGNOSTICS = {
         message: p => `cannot cast ${p.value} to ${p.to}`,
         doc: 'The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value.'
     }),
+    'eval.divisionByZero': entry({
+        severity: error,
+        message: () => 'division by zero',
+        doc: '"/" and "%" fail when the right side is zero. Check the divisor first, for example with "if".'
+    }),
     'eval.integerOutOfRange': entry({
         severity: error,
         message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
@@ -267,8 +272,9 @@ export const DIAGNOSTICS = {
         right: string;
     }>({
         severity: error,
-        message: p => `"${p.operator}" requires numeric operands, got ${p.left} and ${p.right}`,
-        doc: 'Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands.'
+        message: p =>
+            `"${p.operator}" requires numeric operands${p.operator === '+' ? ' (or two texts)' : ''}, got ${p.left} and ${p.right}; use CAST to convert one side`,
+        doc: 'Arithmetic works on INTEGER and DECIMAL. "+" also joins two texts. Use numbers, or CAST the operands (for example CAST(.n AS TEXT)).'
     }),
     'type.assignMismatch': entry<{ actual: string; expected: string }>({
         severity: error,

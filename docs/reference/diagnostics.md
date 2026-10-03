@@ -48,7 +48,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
-| `type.arithmeticNeedsNumeric` | error | "{operator}" requires numeric operands, got {left} and {right} | `operator`, `left`, `right` | Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands. |
+| `type.arithmeticNeedsNumeric` | error | "{operator}" requires numeric operands, got {left} and {right}; use CAST to convert one side | `operator`, `left`, `right` | Arithmetic works on INTEGER and DECIMAL. "+" also joins two texts. Use numbers, or CAST the operands (for example CAST(.n AS TEXT)). |
 | `type.assignMismatch` | error | can't assign {actual} to a target of type {expected} (no implicit coercion) | `actual`, `expected` | The value has another type than the target. Use a value of the target type, or CAST it. |
 | `type.assignNeedsNumericTarget` | error | "{operator}" requires a numeric target, got {actual} | `operator`, `actual` | The operators "-=", "*=" and "/=" work on INTEGER and DECIMAL targets. Use "=" or change the target type. |
 | `type.blockNoValue` | error | a block with no tail has no value | none | A block used as a value must end with an expression. Add the expression that gives the value. |
@@ -128,6 +128,7 @@ A program fails while it runs.
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
 | `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
+| `eval.divisionByZero` | error | division by zero | none | "/" and "%" fail when the right side is zero. Check the divisor first, for example with "if". |
 | `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
 
 ## query

@@ -577,16 +577,18 @@ export class MinabTypeChecker {
         if (!right.ok) return right;
 
         if (node.operator === '+' && isTextual(left.type) && isTextual(right.type)) {
-            if (left.type.kind === 'scalar' && right.type.kind === 'scalar' && left.type.base === right.type.base) {
-                return ok(scalarType(left.type.base, { nullable: left.type.nullable || right.type.nullable }));
-            }
-            return err('type.implicitCoercion', { operator: '+', left: formatType(left.type), right: formatType(right.type) });
+            return ok(scalarType('TEXT', { nullable: left.type.nullable || right.type.nullable }));
+        }
+        if (node.operator === '+' && (left.type.kind === 'null' || right.type.kind === 'null')) {
+            const other = left.type.kind === 'null' ? right.type : left.type;
+            if (isTextual(other)) return ok(scalarType('TEXT', { nullable: true }));
         }
 
         if (!isNumeric(left.type) || !isNumeric(right.type)) {
             return err('type.arithmeticNeedsNumeric', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
-        const base = widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
+        // `/` always gives a DECIMAL, even for two INTEGERs (D14).
+        const base = node.operator === '/' ? 'DECIMAL' : widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
         const nullable = (left.type as ScalarType).nullable || (right.type as ScalarType).nullable;
         return ok(scalarType(base, { nullable }));
     }

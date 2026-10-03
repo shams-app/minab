@@ -190,6 +190,28 @@ discount
 .total < null    // semantic error — < doesn't accept null as an operand
 ```
 
+**Text `+`, division and `%`** — `+` joins two texts, `/` always gives a `DECIMAL`, `%` keeps the sign of the left side. (§5.1)
+
+```
+"Ada" + " " + "Lovelace"    // "Ada Lovelace"
+```
+
+```
+"a" + null    // null — a null side gives null
+```
+
+```
+7 / 2    // 3.5
+```
+
+```
+-7 % 3    // -1
+```
+
+```
+5 / 0    // evaluation error: eval.divisionByZero
+```
+
 ---
 
 ## 8. Tuples
