@@ -284,7 +284,7 @@ export const cheatsheet: CheatSection[] = [
     {
         id: 'builtins',
         title: 'Built-in functions',
-        intro: 'Called by name, in ALL CAPS. Each takes one collection.',
+        intro: 'Called by name, in ALL CAPS. The first group takes one collection. The text, null and number functions take values.',
         entries: [
             {
                 id: 'count',
@@ -328,6 +328,38 @@ export const cheatsheet: CheatSection[] = [
                 description: 'Over a collection of booleans.',
                 specRef: '§5.3.1',
                 keywords: ['ALL', 'ANY']
+            },
+            {
+                id: 'text-functions',
+                title: 'LOWER · UPPER · TRIM · LENGTH',
+                syntax: 'LENGTH(TRIM(.name))  →  INTEGER\nUPPER(.code)  →  TEXT',
+                description: 'Text helpers. `LENGTH` counts characters (code points). `null` gives `null`.',
+                specRef: '§5.3.1',
+                keywords: ['LOWER', 'UPPER', 'TRIM', 'LENGTH']
+            },
+            {
+                id: 'text-search',
+                title: 'SUBSTRING · REPLACE · STARTS_WITH · ENDS_WITH · CONTAINS',
+                syntax: 'SUBSTRING(.name, 1, 3)  →  TEXT\nREPLACE(.name, " ", "-")  →  TEXT\nSTARTS_WITH(.sku, "BR-")  →  BOOLEAN\nCONTAINS(.name, "%")  →  BOOLEAN',
+                description: '`SUBSTRING` counts from 1; `length` is optional. The searches ignore case for `CITEXT`, and `%` and `_` are plain characters.',
+                specRef: '§5.3.1',
+                keywords: ['SUBSTRING', 'REPLACE', 'STARTS_WITH', 'ENDS_WITH', 'CONTAINS']
+            },
+            {
+                id: 'coalesce',
+                title: 'COALESCE · GREATEST · LEAST',
+                syntax: 'COALESCE(.nickname, .name)  →  T\nGREATEST(.a, .b, 0)  →  T',
+                description: '`COALESCE` gives the first value that is not `null`. `GREATEST` and `LEAST` ignore `null`.',
+                specRef: '§5.3.1',
+                keywords: ['COALESCE', 'GREATEST', 'LEAST']
+            },
+            {
+                id: 'number-functions',
+                title: 'ROUND · ABS · FLOOR · CEIL',
+                syntax: 'ROUND(.total * 1.09, 2)  →  N\nABS(.delta)  →  N\nFLOOR(.total)  →  INTEGER',
+                description: '`ROUND` goes half away from zero and is exact for `DECIMAL`. `digits` is optional.',
+                specRef: '§5.3.1',
+                keywords: ['ROUND', 'ABS', 'FLOOR', 'CEIL']
             }
         ]
     },

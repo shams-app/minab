@@ -83,7 +83,11 @@ export const TYPE_KEYWORDS = [
 export const CONSTANT_KEYWORDS = ['true', 'false', 'null', 'NULL'] as const;
 
 /** Built-in names, ALL CAPS (`minab-builtins.ts`). Not grammar keywords — plain identifiers the checker knows. */
-export const BUILTINS = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'EXISTS', 'ALL', 'ANY'] as const;
+export const BUILTINS = [
+    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'EXISTS', 'ALL', 'ANY',
+    'LOWER', 'UPPER', 'TRIM', 'LENGTH', 'SUBSTRING', 'REPLACE', 'STARTS_WITH', 'ENDS_WITH',
+    'CONTAINS', 'COALESCE', 'ROUND', 'ABS', 'FLOOR', 'CEIL', 'GREATEST', 'LEAST'
+] as const;
 
 const WORD_TYPES = new Map<string, TokenType>();
 for (const k of PIPELINE_KEYWORDS) WORD_TYPES.set(k, 'keyword.pipeline');

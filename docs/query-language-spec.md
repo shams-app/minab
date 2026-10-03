@@ -293,7 +293,9 @@ AVG(.orders.total)
 
 #### 5.3.1 Built-in function signatures
 
-Not previously written down formally — the built-ins were introduced only by example. Each is polymorphic over its collection's element type `T`, not a single fixed signature:
+Built-ins are table-driven (`src/language/minab-builtins.ts`): each has a name, a kind, parameters (a type rule, optional, or rest) and a return-type rule. The checker, the interpreter and the SQL compiler all read that one table. A wrong number of arguments is `call.wrongArgumentCount` (the aggregates and predicates keep `call.builtinArity`); a wrong argument type is `call.argumentType`.
+
+**Aggregates and predicates.** Each takes one collection and is polymorphic over its element type `T`, not a single fixed signature:
 
 | Function | Signature | Notes |
 |---|---|---|
@@ -305,6 +307,26 @@ Not previously written down formally — the built-ins were introduced only by e
 | `EXISTS` | `(collection<T>) -> BOOLEAN` | Any `T`; `true` iff the collection is non-empty. |
 | `ALL` | `(collection<BOOLEAN>) -> BOOLEAN` | Typically a broadcast boolean column, e.g. `ALL(.orders.paid)`. |
 | `ANY` | `(collection<BOOLEAN>) -> BOOLEAN` | Same shape as `ALL`. |
+
+**Scalar functions (decision D20).** Each reads values and gives a value. Both runtimes give the same answer (a differential test proves it).
+
+**Null rule.** A `null` argument gives `null` (§7.7), except for `COALESCE`, `GREATEST` and `LEAST`, which handle `null` themselves. The result type is nullable when any argument is nullable (for `COALESCE`, `GREATEST` and `LEAST`: when all are).
+
+| Function | Signature | Notes |
+|---|---|---|
+| `LOWER(s)`, `UPPER(s)` | `(TEXT) -> TEXT` | `CITEXT` stays `CITEXT`. Unicode case mapping, not locale-specific. |
+| `TRIM(s)` | `(TEXT) -> TEXT` | Removes spaces, tabs and line breaks at both ends. |
+| `LENGTH(s)` | `(TEXT) -> INTEGER` | Counts Unicode code points, like Postgres `char_length`: `LENGTH("😀")` is `1`, `LENGTH("سلام")` is `4`. |
+| `SUBSTRING(s, start, length?)` | `(TEXT, INTEGER, INTEGER?) -> TEXT` | 1-based, counted in code points, like SQL. Without `length`, it reads to the end. A negative `length` is an error. |
+| `REPLACE(s, from, to)` | `(TEXT, TEXT, TEXT) -> TEXT` | Replaces every match. An empty `from` changes nothing. |
+| `STARTS_WITH(s, part)`, `ENDS_WITH(s, part)`, `CONTAINS(s, part)` | `(TEXT, TEXT) -> BOOLEAN` | Ignore case when either side is `CITEXT`. `%` and `_` in `part` are plain characters, not wildcards. |
+| `COALESCE(a, b, …)` | `(T, T, …) -> T` | At least two arguments. First value that is not `null`. `INTEGER` and `DECIMAL` may mix (the result is `DECIMAL`). Not nullable when any argument is not nullable. |
+| `ROUND(n, digits?)` | `(N, INTEGER?) -> N` | Half away from zero (`ROUND(2.5)` is `3`, `ROUND(-2.5)` is `-3`); exact for `DECIMAL` (`ROUND(1.005, 2)` is `1.01`). `digits` defaults to `0` and may be negative. |
+| `ABS(n)` | `(N) -> N` | |
+| `FLOOR(n)`, `CEIL(n)` | `(N) -> INTEGER` | Round down, round up. |
+| `GREATEST(a, b, …)`, `LEAST(a, b, …)` | `(T, T, …) -> T` | `T` is orderable. At least two arguments. Ignore `null` arguments, like Postgres; the result is `null` only when all are. |
+
+Known difference: `UPPER`, `LOWER` and the case-insensitive checks use full Unicode case mapping in the interpreter and the database's simple mapping in SQL. They may differ for a few non-ASCII letters (for example `UPPER("straße")` is `STRASSE` in the interpreter and `STRAẞE` in Postgres, and `LOWER("İ")` has two code points in the interpreter and one in Postgres). Ordinary accented letters (`é`, `É`) agree. Text ordering in `GREATEST`/`LEAST` follows the same rule as `<` on text.
 
 ### 5.4 Subqueries as expressions
 

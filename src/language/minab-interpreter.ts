@@ -635,15 +635,6 @@ export class MinabInterpreter {
         return numeric;
     }
 
-    private compareNumbers(a: Numeric, b: Numeric): number {
-        return decimalCompare(a, b) ?? (a as number) - (b as number);
-    }
-
-    /** `SUM` is exact: `INTEGER` items give an `INTEGER`, any `DECIMAL` item gives a `DECIMAL`. */
-    private sum(items: MinabValue[]): Numeric {
-        return items.reduce((total: Numeric, i) => arithmetic('+', total, this.number(i)), 0);
-    }
-
     /** A number literal reads its own text, so `0.30` and 20-digit numbers are not rounded by JavaScript. */
     private numberLiteral(expr: { value: number; $cstNode?: { text: string } }): Numeric {
         return literal(expr.$cstNode?.text ?? String(expr.value));

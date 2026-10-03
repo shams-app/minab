@@ -42,7 +42,16 @@ export type BuiltinKind = 'aggregate' | 'predicate' | 'scalar';
  * - `text`: `TEXT` or `CITEXT`; `integer`: `INTEGER`; `number`: `INTEGER` or `DECIMAL`;
  * - `orderable`: a type with an order (not an array); `scalar`: any single value.
  */
-export type ParamKind = 'collection' | 'numericCollection' | 'orderableCollection' | 'booleanCollection' | 'text' | 'integer' | 'number' | 'orderable' | 'scalar';
+export type ParamKind =
+    | 'collection'
+    | 'numericCollection'
+    | 'orderableCollection'
+    | 'booleanCollection'
+    | 'text'
+    | 'integer'
+    | 'number'
+    | 'orderable'
+    | 'scalar';
 
 export interface BuiltinParam {
     kind: ParamKind;
@@ -162,7 +171,14 @@ function arityFits(params: BuiltinParam[], count: number): boolean {
     return count >= min && (rest || count <= params.length);
 }
 
-function collectionCode(kind: ParamKind): 'call.builtinNeedsCollection' | 'call.builtinNeedsNumericCollection' | 'call.builtinNeedsOrderableCollection' | 'call.builtinNeedsBooleanCollection' | undefined {
+function collectionCode(
+    kind: ParamKind
+):
+    | 'call.builtinNeedsCollection'
+    | 'call.builtinNeedsNumericCollection'
+    | 'call.builtinNeedsOrderableCollection'
+    | 'call.builtinNeedsBooleanCollection'
+    | undefined {
     switch (kind) {
         case 'collection':
             return 'call.builtinNeedsCollection';
@@ -201,6 +217,7 @@ export function checkBuiltin(builtin: BuiltinSignature, args: MinabType[]): Buil
 
 const COLLECTION: BuiltinParam[] = [{ kind: 'collection' }];
 
+/** `SUM` is exact: `INTEGER` items give an `INTEGER`, any `DECIMAL` item gives a `DECIMAL`. */
 const sum = (items: unknown[]): Numeric => items.reduce<Numeric>((total, item) => arithmetic('+', total, number(item)), 0);
 
 function number(value: unknown): Numeric {

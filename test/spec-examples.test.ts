@@ -115,7 +115,10 @@ const PIECES: Record<string, 'lines' | 'paragraphs'> = {
     'showcase §7 #6': 'lines',
     'showcase §9 #3': 'lines',
     'showcase §9 #4': 'paragraphs',
-    'showcase §10 #4': 'lines'
+    'showcase §10 #4': 'lines',
+    'showcase §16 #1': 'lines',
+    'showcase §16 #2': 'lines',
+    'showcase §16 #3': 'lines'
 };
 
 // ---- how to check ------------------------------------------------------------
