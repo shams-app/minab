@@ -74,7 +74,7 @@ const ofType =
 type Case =
     | { via: 'validator'; program: string; setting?: Setting }
     | { via: 'checker'; program: string; target: Pick; setting?: Setting }
-    | { via: 'resolver'; program: string; target: Pick }
+    | { via: 'resolver'; program: string; target: Pick; setting?: Setting }
     | { via: 'compiler'; program: string }
     | { via: 'runtime' }
     | { via: 'evaluation'; program: string }
@@ -112,7 +112,8 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.columnNeedsTable': {
         via: 'resolver',
         program: 'EXISTS(#Order[^.id == .id])',
-        target: node => isMemberAccess(node) && node.member === 'id' && node.receiver.$type === 'ParentRecord'
+        target: node => isMemberAccess(node) && node.member === 'id' && node.receiver.$type === 'ParentRecord',
+        setting: 'plain'
     },
     'scope.computedReceiver': { via: 'resolver', program: 'CAST(1 AS TEXT).size', target: ofType('MemberAccess') },
     'scope.currentRecordNoTable': { via: 'validator', program: 'FROM Nope SELECT .' },
@@ -233,10 +234,11 @@ describe('every code is reported by a program', () => {
                 break;
             }
             case 'resolver': {
-                const { document } = await validate.record(testCase.program);
+                const setting = testCase.setting ?? 'record';
+                const { document } = await validate[setting](testCase.program);
                 const node = AstUtils.streamAst(document.parseResult.value).find(testCase.target);
                 expect(node, 'the program has the node to resolve').toBeDefined();
-                const result = services.record.scopeResolver.resolveMemberAccess(node as never);
+                const result = services[setting].scopeResolver.resolveMemberAccess(node as never);
                 expect(result.found).toBe(false);
                 if (!result.found) {
                     expect(result.code).toBe(expected);

@@ -87,8 +87,8 @@ interface RawLevel {
 
 export class MinabScopeResolver {
     /**
-     * `rootTable` is the host's `ruleContext.recordTable`. It is used in one place only:
-     * `FROM .orders` at the top of a rule needs the rule's record to find the table of `.orders`.
+     * `rootTable` is the host's `ruleContext.recordTable`: the table of the record under
+     * validation. It is the table of a top-level `.` and `^` (spec §6).
      */
     constructor(
         private readonly schema: SchemaProvider,
@@ -268,11 +268,11 @@ export class MinabScopeResolver {
         // evaluation time, not declared anywhere in-file. Register it as
         // an implicit outermost level so `^` inside e.g. the §6.1
         // `#Booking[... ^...]` pattern (no enclosing FROM at all) still
-        // reaches *something*, with an honestly-unknown table. This is
-        // deliberately permissive — whether `.`/`^` are legal in a given
+        // reaches *something*. Its table is the host's `recordTable`, or
+        // unknown when the host gave none. This is deliberately permissive — whether `.`/`^` are legal in a given
         // position at all is Phase 3's (the Validator's) job, not this
         // one's.
-        const root: ScopeLevel = { owner: child, tableName: undefined, aliases: new Map() };
+        const root: ScopeLevel = { owner: child, tableName: this.rootTableName(), aliases: new Map() };
 
         // `raw` is innermost-first. A receiver can only refer to an outer
         // scope (e.g. `FROM .orders`, or a bare alias from further out), so
@@ -291,6 +291,11 @@ export class MinabScopeResolver {
             outerToInner.push({ owner: r.owner, tableName, aliases });
         }
         return outerToInner.reverse();
+    }
+
+    /** The table of the record under validation (spec §6), when the host named one and the schema has it. */
+    private rootTableName(): string | undefined {
+        return this.rootTable === undefined ? undefined : this.schema.getTable(this.rootTable)?.name;
     }
 
     private receiverTableName(receiver: Expression | undefined, outerLevels: ScopeLevel[]): string | undefined {
