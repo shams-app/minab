@@ -108,7 +108,14 @@ function createMinabModule(
     options: MinabServiceOptions
 ): Module<MinabServices, PartialLangiumServices & MinabAddedServices> {
     return {
-        ...(options.mode === 'production' ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) } : {}),
+        ...(options.mode === 'production'
+            ? {
+                  LanguageMetaData: () => ({
+                      ...MinabLanguageMetaData,
+                      mode: 'production' as const
+                  })
+              }
+            : {}),
         schema: () => new SchemaProvider(schema, options.host),
         scopeResolver: services => new MinabScopeResolver(services.schema, services.ruleContext.recordTable),
         ruleContext: () => ruleContext,

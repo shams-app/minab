@@ -8,27 +8,6 @@ const record = { id: 1, a: 7, b: 2, x: 0.1, y: 0.2, z: 0.3, s: '12', ci: 'Hello'
 
 export const cases: DifferentialCase[] = [
     {
-        name: 'CAST DECIMAL to INTEGER',
-        schema,
-        record: { ...record, x: 3.7 },
-        expr: 'CAST(.x AS INTEGER)',
-        knownGap: { card: 'C3', note: 'the two runtimes round or cut differently' }
-    },
-    {
-        name: 'CAST TEXT to INTEGER, then add',
-        schema,
-        record,
-        expr: 'CAST(.s AS INTEGER) + 1',
-        knownGap: { card: 'C3', note: 'the interpreter does not run CAST' }
-    },
-    {
-        name: 'CAST INTEGER to TEXT, then compare',
-        schema,
-        record,
-        expr: 'CAST(.a AS TEXT) == "7"',
-        knownGap: { card: 'C3', note: 'the interpreter does not run CAST' }
-    },
-    {
         name: 'CITEXT column compared with a TEXT column',
         schema,
         record: { ...record, s: 'hello' },

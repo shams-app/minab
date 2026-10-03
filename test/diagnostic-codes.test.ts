@@ -96,6 +96,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
@@ -265,7 +266,8 @@ describe('every code is reported by a program', () => {
                 // The error carries its code and the English message.
                 const { document } = await validate.record(testCase.program);
                 const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
-                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message({} as never) });
+                const params = (!result.ok && result.params) || {};
+                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message(params as never) });
                 break;
             }
             case 'guard':

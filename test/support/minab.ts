@@ -52,10 +52,13 @@ export function loadSchema(spec: SchemaSpec, recordTable?: string): Loaded {
 /** What a runtime answered: a value, or an error with its meaning. */
 export type Outcome = { ok: true; value: unknown } | { ok: false; kind: ErrorKind; message: string };
 
-export type ErrorKind = 'division-by-zero' | 'other';
+export type ErrorKind = 'division-by-zero' | 'cast-failed' | 'other';
 
 export function errorKind(message: string): ErrorKind {
-    return /division by zero|divide by zero|modulo by zero/i.test(message) ? 'division-by-zero' : 'other';
+    if (/division by zero|divide by zero|modulo by zero/i.test(message)) return 'division-by-zero';
+    // Ours is "cannot cast ..."; Postgres says "invalid input syntax" (22P02) or "out of range" (22003).
+    if (/^cannot cast |invalid input syntax|out of range|invalid input value|date\/time field value|malformed/i.test(message)) return 'cast-failed';
+    return 'other';
 }
 
 /** The exact text of a number, so `0.30` and `0.3` are the same decimal. */

@@ -371,7 +371,34 @@ CAST(.id AS TEXT) == rawIdParam
 CAST(.total AS INTEGER)
 ```
 
-`CAST`'s target is always a scalar type (`TypeRef`, §7.2) — casting to a `TupleType` isn't meaningful, so it's not accepted there. A cast is a runtime conversion request, not a guarantee: a widening cast (`INTEGER` → `DECIMAL`) always succeeds, a narrowing numeric cast (`DECIMAL` → `INTEGER`) truncates or rounds, and a cast that can't be satisfied for a given value (`TEXT` → `UUID` on a malformed string) fails at evaluation time rather than being caught statically — the type checker only verifies the cast target is a valid scalar type, not that every possible input value will convert.
+`CAST`'s target is always a scalar type (`TypeRef`, §7.2) — casting to a `TupleType` isn't meaningful, so it's not accepted there. A cast is a runtime conversion request, not a guarantee: a widening cast (`INTEGER` → `DECIMAL`) always succeeds, and a cast that can't be satisfied for a given value fails at evaluation time rather than being caught statically — the type checker only verifies the cast target is a valid scalar type, not that every possible input value will convert.
+
+The interpreter and the compiled SQL give the same answer for every cast below (they follow Postgres). `CAST(null AS T)` is always `null`. A cast that fails is the error `eval.castFailed` (`cannot cast "12a" to INTEGER`); in SQL it is the matching Postgres error (invalid text, `22P02`, or number out of range, `22003`).
+
+| From | To | What happens |
+|---|---|---|
+| `DECIMAL` | `INTEGER` | Rounds half away from zero: `3.5` → `4`, `-3.5` → `-4`, `3.4` → `3`. A result outside the `INTEGER` range fails. |
+| `INTEGER` | `DECIMAL` | Exact, always succeeds. |
+| `TEXT`/`CITEXT` | `INTEGER` | Spaces around the text are trimmed, then it must be whole digits with an optional sign: `" 12 "` → `12`; `"12a"` and `"12.5"` fail. |
+| `TEXT`/`CITEXT` | `DECIMAL` | Spaces are trimmed, then it must be a number (digits, optional point, optional exponent): `"2.50"` → `2.5`; `"2.5x"` fails. |
+| `INTEGER` | `TEXT`/`CITEXT` | The digits: `5` → `"5"`. |
+| `DECIMAL` | `TEXT`/`CITEXT` | The shortest exact form, with no trailing zeros and no exponent: `2.50` → `"2.5"`, `3.00` → `"3"`. (SQL uses `trim_scale`.) |
+| `BOOLEAN` | `TEXT`/`CITEXT` | `"true"` or `"false"`. |
+| `BOOLEAN` | `INTEGER` | `true` → `1`, `false` → `0`. |
+| `TEXT`/`CITEXT` | `BOOLEAN` | Spaces are trimmed, then, in any case: `true`, `t`, `yes`, `y`, `on`, `1` give `true`; `false`, `f`, `no`, `n`, `off`, `0` give `false` (Postgres also accepts the short forms `tr`, `tru`, `fa`, `fal`, `fals`, `ye`, `of`). Any other text fails. |
+| `TEXT`/`CITEXT` | `UUID` | Must be the form 8-4-4-4-12 of hex digits, in any case. The result is in lower case. Any other text fails. |
+| `TEXT`/`CITEXT` | `DATE` | ISO 8601 date only: `"2026-10-02"`. A date that does not exist (`"2026-02-30"`) fails. |
+| `TEXT`/`CITEXT` | `TIME` | ISO 8601 time, with up to six fraction digits: `"08:30"`, `"08:30:00"`, `"08:30:00.5"`. |
+| `TEXT`/`CITEXT` | `DATETIME` | ISO 8601: `"2026-10-02T08:30:00"` or `"2026-10-02 08:30:00"`. A date alone means midnight. A zone (`Z`, `+02:00`) is read and ignored, as `DATETIME` has no time zone. |
+| `DATETIME` | `DATE` or `TIME` | The date part or the time part. |
+| `DATE` | `DATETIME` | The date at `00:00:00`. |
+| `DATE`, `TIME`, `DATETIME`, `UUID` | `TEXT`/`CITEXT` | The value as text (a `DATETIME` is `2026-10-02 08:30:00`). |
+| `TEXT`/`CITEXT` | `JSON` | The text is parsed as JSON: `"{\"a\": 1}"` → an object. Text that is not JSON fails. |
+| `JSON` | `JSON` | Unchanged. |
+| `JSON` | `INTEGER`, `DECIMAL`, `BOOLEAN` | Only a JSON number or a JSON boolean converts (a number as above). |
+| any type | the same type | Unchanged. |
+
+Every other pair fails with `eval.castFailed` when the value is converted, for example a `JSON` object to `INTEGER`, or `BOOLEAN` to `DECIMAL`. An array converts item by item, to an array type. Postgres accepts more text than the table lists (`"tomorrow"` as a `DATE`, a `UUID` without hyphens); do not rely on that: only the forms in the table are the same in both runtimes. `JSON` to `TEXT` is not covered yet: it fails in the interpreter.
 
 ### 5.6 `is` / `isnot` — JSON shape testing
 
