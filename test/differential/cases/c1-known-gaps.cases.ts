@@ -8,20 +8,6 @@ const record = { id: 1, a: 7, b: 2, x: 0.1, y: 0.2, z: 0.3, s: '12', ci: 'Hello'
 
 export const cases: DifferentialCase[] = [
     {
-        name: 'integer division',
-        schema,
-        record: { ...record, a: 7, b: 2 },
-        expr: '.a / .b',
-        knownGap: { card: 'C4', note: 'JS divides to 3.5, Postgres divides integers to 3' }
-    },
-    {
-        name: 'remainder by zero',
-        schema,
-        record: { ...record, b: 0 },
-        expr: '.a % .b',
-        expect: { error: 'division-by-zero' }
-    },
-    {
         name: 'CITEXT column compared with a TEXT column',
         schema,
         record: { ...record, s: 'hello' },

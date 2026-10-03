@@ -190,6 +190,28 @@ discount
 .total < null    // semantic error — < doesn't accept null as an operand
 ```
 
+**Text `+`, division and `%`** — `+` joins two texts, `/` always gives a `DECIMAL`, `%` keeps the sign of the left side. (§5.1)
+
+```
+"Ada" + " " + "Lovelace"    // "Ada Lovelace"
+```
+
+```
+"a" + null    // null — a null side gives null
+```
+
+```
+7 / 2    // 3.5
+```
+
+```
+-7 % 3    // -1
+```
+
+```
+5 / 0    // evaluation error: eval.divisionByZero
+```
+
 ---
 
 ## 8. Tuples
@@ -631,6 +653,36 @@ SELECT .id, .`FROM` AS source
 ```
 
 Turkish letters work too: `.İl == "İzmir"`.
+
+---
+
+## 17. Text, null and number functions
+
+*Spec §5.3.1.* Built-ins can take several arguments, and some arguments are optional. A `null` argument gives `null`, except in `COALESCE`, `GREATEST` and `LEAST`.
+
+```
+// Text
+LENGTH(TRIM(.tracking_code)) >= 5
+STARTS_WITH(.tracking_code, "BR-") OR ENDS_WITH(.tracking_code, "-X")
+CONTAINS(.status, "%")               // a plain character: no wildcard
+SUBSTRING(.tracking_code, 1, 3)
+REPLACE(LOWER(.status), " ", "")
+```
+
+```
+// Null
+COALESCE(.customer.country, .customer.city)   // same type as .customer.city; not null
+GREATEST(.total, 10)
+LEAST(.total, 10, 100)
+```
+
+```
+// Numbers
+ROUND(.total * 1.09, 2)              // half away from zero, exact decimals
+ABS(.total - 100)
+FLOOR(.total)
+CEIL(.total)
+```
 
 ---
 

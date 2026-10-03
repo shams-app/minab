@@ -43,7 +43,32 @@ export const BUILTIN_DOCS: Record<string, { signature: string; doc: string }> = 
     MAX: { signature: 'MAX(collection<T>) → T', doc: 'The largest value of an orderable column across a collection.' },
     EXISTS: { signature: 'EXISTS(collection<T>) → BOOLEAN', doc: 'Whether the collection has at least one row — pushed down as one `SELECT EXISTS`.' },
     ALL: { signature: 'ALL(collection<BOOLEAN>) → BOOLEAN', doc: 'True when every value is true.' },
-    ANY: { signature: 'ANY(collection<BOOLEAN>) → BOOLEAN', doc: 'True when at least one value is true.' }
+    ANY: { signature: 'ANY(collection<BOOLEAN>) → BOOLEAN', doc: 'True when at least one value is true.' },
+    LOWER: { signature: 'LOWER(s: TEXT) → TEXT', doc: 'The text in lower case. `null` gives `null`.' },
+    UPPER: { signature: 'UPPER(s: TEXT) → TEXT', doc: 'The text in upper case. `null` gives `null`.' },
+    TRIM: { signature: 'TRIM(s: TEXT) → TEXT', doc: 'Removes spaces, tabs and line breaks at both ends.' },
+    LENGTH: { signature: 'LENGTH(s: TEXT) → INTEGER', doc: 'The number of characters (Unicode code points): `LENGTH("😀")` is `1`.' },
+    SUBSTRING: {
+        signature: 'SUBSTRING(s: TEXT, start: INTEGER, length?: INTEGER) → TEXT',
+        doc: 'Part of the text. `start` counts from 1. Without `length`, it reads to the end.'
+    },
+    REPLACE: { signature: 'REPLACE(s: TEXT, from: TEXT, to: TEXT) → TEXT', doc: 'Replaces every match of `from` with `to`.' },
+    STARTS_WITH: {
+        signature: 'STARTS_WITH(s: TEXT, part: TEXT) → BOOLEAN',
+        doc: 'Whether the text starts with `part`. Ignores case for `CITEXT`. `%` and `_` are plain characters.'
+    },
+    ENDS_WITH: { signature: 'ENDS_WITH(s: TEXT, part: TEXT) → BOOLEAN', doc: 'Whether the text ends with `part`. Ignores case for `CITEXT`.' },
+    CONTAINS: { signature: 'CONTAINS(s: TEXT, part: TEXT) → BOOLEAN', doc: 'Whether the text has `part` inside. Ignores case for `CITEXT`.' },
+    COALESCE: { signature: 'COALESCE(a: T, b: T, …) → T', doc: 'The first value that is not `null`. Not nullable when any argument is not nullable.' },
+    ROUND: {
+        signature: 'ROUND(n: N, digits?: INTEGER) → N',
+        doc: 'Rounds half away from zero: `ROUND(2.5)` is `3`, `ROUND(-2.5)` is `-3`. `digits` defaults to 0.'
+    },
+    ABS: { signature: 'ABS(n: N) → N', doc: 'The value without its sign.' },
+    FLOOR: { signature: 'FLOOR(n: N) → INTEGER', doc: 'Rounds down to a whole number.' },
+    CEIL: { signature: 'CEIL(n: N) → INTEGER', doc: 'Rounds up to a whole number.' },
+    GREATEST: { signature: 'GREATEST(a: T, b: T, …) → T', doc: 'The largest value. `null` arguments are ignored; the answer is `null` only when all are.' },
+    LEAST: { signature: 'LEAST(a: T, b: T, …) → T', doc: 'The smallest value. `null` arguments are ignored; the answer is `null` only when all are.' }
 };
 
 const PLACEHOLDER = '__minab_completion__';

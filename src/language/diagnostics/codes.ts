@@ -96,6 +96,11 @@ export const DIAGNOSTICS = {
         doc: 'A user function needs one argument for each declared parameter. Add or remove arguments.'
     }),
 
+    'call.wrongArgumentCount': entry<{ name: string; expected: string; actual: number }>({
+        severity: error,
+        message: p => `${p.name} expects ${p.expected} argument(s), got ${p.actual}`,
+        doc: 'A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments.'
+    }),
     cancelled: entry({
         severity: error,
         message: () => 'the run was cancelled',
@@ -145,7 +150,7 @@ export const DIAGNOSTICS = {
     'eval.divisionByZero': entry({
         severity: error,
         message: () => 'division by zero',
-        doc: 'The divisor is zero. Check it first, for example with an if.'
+        doc: '"/" and "%" fail when the right side is zero. Check the divisor first, for example with "if".'
     }),
     'eval.failed': entry<{ reason: string }>({
         severity: error,
@@ -371,8 +376,9 @@ export const DIAGNOSTICS = {
         right: string;
     }>({
         severity: error,
-        message: p => `"${p.operator}" requires numeric operands, got ${p.left} and ${p.right}`,
-        doc: 'Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands.'
+        message: p =>
+            `"${p.operator}" requires numeric operands${p.operator === '+' ? ' (or two texts)' : ''}, got ${p.left} and ${p.right}; use CAST to convert one side`,
+        doc: 'Arithmetic works on INTEGER and DECIMAL. "+" also joins two texts. Use numbers, or CAST the operands (for example CAST(.n AS TEXT)).'
     }),
     'type.assignMismatch': entry<{ actual: string; expected: string }>({
         severity: error,

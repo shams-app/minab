@@ -78,7 +78,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
-import { getBuiltin } from './minab-builtins.js';
+import { checkBuiltin, getBuiltin } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
@@ -423,16 +423,18 @@ export class MinabTypeChecker {
             const host = this.schema.getHostFunction(name);
             return host ? this.inferHostCall(node, host) : this.inferUserCall(node, name);
         }
-        if (node.args.length !== 1) {
-            return err('call.builtinArity', { name, actual: node.args.length });
+        const argTypes: MinabType[] = [];
+        for (const arg of node.args) {
+            const argType = this.inferType(arg);
+            if (!argType.ok) return argType;
+            argTypes.push(argType.type);
         }
-        const argType = this.inferType(node.args[0]);
-        if (!argType.ok) return argType;
-        const result = builtin.check(argType.type);
+        const result = checkBuiltin(builtin, argTypes);
         if (result.ok) return ok(result.type);
-        const promoted = this.promoteForGroupedAggregate(node, argType.type);
+        // In a grouped query an aggregate reads the group: `SUM(.total)` has one value per row.
+        const promoted = builtin.kind === 'scalar' || argTypes.length !== 1 ? undefined : this.promoteForGroupedAggregate(node, argTypes[0]);
         if (promoted) {
-            const retried = builtin.check(promoted);
+            const retried = checkBuiltin(builtin, [promoted]);
             if (retried.ok) return ok(retried.type);
         }
         return failWith(result);
@@ -577,16 +579,18 @@ export class MinabTypeChecker {
         if (!right.ok) return right;
 
         if (node.operator === '+' && isTextual(left.type) && isTextual(right.type)) {
-            if (left.type.kind === 'scalar' && right.type.kind === 'scalar' && left.type.base === right.type.base) {
-                return ok(scalarType(left.type.base, { nullable: left.type.nullable || right.type.nullable }));
-            }
-            return err('type.implicitCoercion', { operator: '+', left: formatType(left.type), right: formatType(right.type) });
+            return ok(scalarType('TEXT', { nullable: left.type.nullable || right.type.nullable }));
+        }
+        if (node.operator === '+' && (left.type.kind === 'null' || right.type.kind === 'null')) {
+            const other = left.type.kind === 'null' ? right.type : left.type;
+            if (isTextual(other)) return ok(scalarType('TEXT', { nullable: true }));
         }
 
         if (!isNumeric(left.type) || !isNumeric(right.type)) {
             return err('type.arithmeticNeedsNumeric', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
-        const base = widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
+        // `/` always gives a DECIMAL, even for two INTEGERs (D14).
+        const base = node.operator === '/' ? 'DECIMAL' : widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
         const nullable = (left.type as ScalarType).nullable || (right.type as ScalarType).nullable;
         return ok(scalarType(base, { nullable }));
     }

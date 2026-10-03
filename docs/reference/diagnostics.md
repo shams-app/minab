@@ -48,7 +48,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
-| `type.arithmeticNeedsNumeric` | error | "{operator}" requires numeric operands, got {left} and {right} | `operator`, `left`, `right` | Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands. |
+| `type.arithmeticNeedsNumeric` | error | "{operator}" requires numeric operands, got {left} and {right}; use CAST to convert one side | `operator`, `left`, `right` | Arithmetic works on INTEGER and DECIMAL. "+" also joins two texts. Use numbers, or CAST the operands (for example CAST(.n AS TEXT)). |
 | `type.assignMismatch` | error | can't assign {actual} to a target of type {expected} (no implicit coercion) | `actual`, `expected` | The value has another type than the target. Use a value of the target type, or CAST it. |
 | `type.assignNeedsNumericTarget` | error | "{operator}" requires a numeric target, got {actual} | `operator`, `actual` | The operators "-=", "*=" and "/=" work on INTEGER and DECIMAL targets. Use "=" or change the target type. |
 | `type.blockNoValue` | error | a block with no tail has no value | none | A block used as a value must end with an expression. Add the expression that gives the value. |
@@ -111,6 +111,7 @@ A function call is wrong.
 | `call.functionNameCase` | error | "{name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins | `name` | Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it. |
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
+| `call.wrongArgumentCount` | error | {name} expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments. |
 
 ## compile
 
@@ -131,7 +132,7 @@ A program fails while it runs.
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
 | `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
-| `eval.divisionByZero` | error | division by zero | none | The divisor is zero. Check it first, for example with an if. |
+| `eval.divisionByZero` | error | division by zero | none | "/" and "%" fail when the right side is zero. Check the divisor first, for example with "if". |
 | `eval.failed` | error | {reason} | `reason` | The program failed while it ran. params.reason has the English reason. Specific failures have their own code. |
 | `eval.hostFunctionFailed` | error | the host function "{name}" failed | `name` | The host function threw an error. The text of that error is not copied here. The host can log it. |
 | `eval.hostFunctionMissing` | error | the host function "{name}" was called, and the host gave no implementation | `name` | The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run. |
