@@ -74,7 +74,7 @@ const ofType =
 type Case =
     | { via: 'validator'; program: string; setting?: Setting }
     | { via: 'checker'; program: string; target: Pick; setting?: Setting }
-    | { via: 'resolver'; program: string; target: Pick }
+    | { via: 'resolver'; program: string; target: Pick; setting?: Setting }
     | { via: 'compiler'; program: string }
     | { via: 'runtime' }
     | { via: 'evaluation'; program: string }
@@ -97,6 +97,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
@@ -113,7 +114,8 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.columnNeedsTable': {
         via: 'resolver',
         program: 'EXISTS(#Order[^.id == .id])',
-        target: node => isMemberAccess(node) && node.member === 'id' && node.receiver.$type === 'ParentRecord'
+        target: node => isMemberAccess(node) && node.member === 'id' && node.receiver.$type === 'ParentRecord',
+        setting: 'plain'
     },
     'scope.computedReceiver': { via: 'resolver', program: 'CAST(1 AS TEXT).size', target: ofType('MemberAccess') },
     'scope.currentRecordNoTable': { via: 'validator', program: 'FROM Nope SELECT .' },
@@ -234,10 +236,11 @@ describe('every code is reported by a program', () => {
                 break;
             }
             case 'resolver': {
-                const { document } = await validate.record(testCase.program);
+                const setting = testCase.setting ?? 'record';
+                const { document } = await validate[setting](testCase.program);
                 const node = AstUtils.streamAst(document.parseResult.value).find(testCase.target);
                 expect(node, 'the program has the node to resolve').toBeDefined();
-                const result = services.record.scopeResolver.resolveMemberAccess(node as never);
+                const result = services[setting].scopeResolver.resolveMemberAccess(node as never);
                 expect(result.found).toBe(false);
                 if (!result.found) {
                     expect(result.code).toBe(expected);
@@ -263,7 +266,8 @@ describe('every code is reported by a program', () => {
                 // The error carries its code and the English message.
                 const { document } = await validate.record(testCase.program);
                 const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
-                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message({} as never) });
+                const params = (!result.ok && result.params) || {};
+                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message(params as never) });
                 break;
             }
             case 'guard':

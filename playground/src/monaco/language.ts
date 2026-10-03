@@ -85,7 +85,7 @@ export function registerMinab(): void {
     monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.minab'], aliases: ['Minab', 'minab'] });
     monaco.languages.setLanguageConfiguration(LANGUAGE_ID, {
         ...(languageConfiguration as unknown as monaco.languages.LanguageConfiguration),
-        wordPattern: /(-?\d+(\.\d+)?)|([A-Za-z_][A-Za-z0-9_]*!?)/g
+        wordPattern: /(-?\d+(\.\d+)?)|([\p{L}_][\p{L}\p{N}_\u200C\u200D]*!?)|(`(?:[^`\\]|\\[\s\S])*`)/gu
     });
 
     monaco.languages.setTokensProvider(LANGUAGE_ID, {

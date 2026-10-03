@@ -13,7 +13,10 @@
         "discount_rate": "DECIMAL",
         "tags": "JSON",
         "metadata": "JSON",
-        "orders": { "collection": "Order", "foreignKey": "customer_id" }
+        "orders": {
+          "collection": "Order",
+          "foreignKey": "customer_id"
+        }
       }
     },
     {
@@ -21,29 +24,51 @@
       "primaryKey": "id",
       "columns": {
         "id": "UUID",
-        "customer": { "ref": "Customer", "foreignKey": "customer_id" },
+        "customer": {
+          "ref": "Customer",
+          "foreignKey": "customer_id"
+        },
         "customer_id": "UUID",
         "status": "TEXT",
         "total": "DECIMAL",
         "discount_rate": "DECIMAL",
         "tracking_code": "TEXT",
-        "placed_at": "DATETIME"
+        "placed_at": "DATETIME",
+        "Order date": "DATE",
+        "Ship date": "DATE",
+        "FROM": "TEXT",
+        "İl": "TEXT"
       }
     },
     {
       "name": "Customers",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "balance": "DECIMAL", "metadata": "JSON", "status": "TEXT", "flaggedAt": "INTEGER", "city": "TEXT" }
+      "columns": {
+        "id": "UUID",
+        "balance": "DECIMAL",
+        "metadata": "JSON",
+        "status": "TEXT",
+        "flaggedAt": "INTEGER",
+        "city": "TEXT"
+      }
     },
     {
       "name": "CollectionsQueue",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "customer_id": "UUID", "reason": "TEXT" }
+      "columns": {
+        "id": "UUID",
+        "customer_id": "UUID",
+        "reason": "TEXT"
+      }
     },
     {
       "name": "Payment",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "customer_id": "UUID", "days_ago": "INTEGER" }
+      "columns": {
+        "id": "UUID",
+        "customer_id": "UUID",
+        "days_ago": "INTEGER"
+      }
     },
     {
       "name": "Shipment",
@@ -59,17 +84,38 @@
     {
       "name": "Product",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "name": "TEXT" }
+      "columns": {
+        "id": "UUID",
+        "name": "TEXT"
+      }
     },
     {
       "name": "Warehouse",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "name": "TEXT", "default_product_id": "UUID" }
+      "columns": {
+        "id": "UUID",
+        "name": "TEXT",
+        "default_product_id": "UUID"
+      }
     },
     {
       "name": "Booking",
       "primaryKey": "id",
-      "columns": { "id": "UUID", "room_id": "UUID", "start_date": "DATE", "end_date": "DATE" }
+      "columns": {
+        "id": "UUID",
+        "room_id": "UUID",
+        "start_date": "DATE",
+        "end_date": "DATE"
+      }
+    },
+    {
+      "name": "سفارش",
+      "primaryKey": "شناسه",
+      "columns": {
+        "شناسه": "INTEGER",
+        "وضعیت": "TEXT",
+        "مبلغ": "DECIMAL"
+      }
     }
   ]
 }

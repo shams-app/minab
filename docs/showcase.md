@@ -611,7 +611,30 @@ let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 
 ---
 
-## 16. Text, null and number functions
+## 16. Names in any language, and quoted names
+
+Names are not limited to ASCII (spec §2.3). A Persian field name is a plain name:
+
+```
+FROM سفارش
+WHERE .وضعیت == "ارسال‌شده" AND .مبلغ > 100
+SELECT .مبلغ AS مبلغ_کل
+ORDERBY .مبلغ DESC
+```
+
+A name with spaces or symbols goes in backticks. A backtick also lets a keyword be a field name:
+
+```
+FROM Order
+WHERE .`Order date` <= .`Ship date`
+SELECT .id, .`FROM` AS source
+```
+
+Turkish letters work too: `.İl == "İzmir"`.
+
+---
+
+## 17. Text, null and number functions
 
 *Spec §5.3.1.* Built-ins can take several arguments, and some arguments are optional. A `null` argument gives `null`, except in `COALESCE`, `GREATEST` and `LEAST`.
 

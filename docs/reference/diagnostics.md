@@ -128,6 +128,7 @@ A program fails while it runs.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
 | `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
 
 ## query

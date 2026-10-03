@@ -9,6 +9,8 @@ import { MinabInterpreter } from './minab-interpreter.js';
 import { MinabDocumentValidator } from './diagnostics/minab-document-validator.js';
 import { MinabScopeResolver } from './minab-scope-resolver.js';
 import { MinabSqlCompiler } from './minab-sql-compiler.js';
+import { MinabTokenBuilder } from './minab-token-builder.js';
+import { MinabValueConverter } from './minab-value-converter.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
 import type { ResolvedHost } from './host-declarations.js';
@@ -106,13 +108,24 @@ function createMinabModule(
     options: MinabServiceOptions
 ): Module<MinabServices, PartialLangiumServices & MinabAddedServices> {
     return {
-        ...(options.mode === 'production' ? { LanguageMetaData: () => ({ ...MinabLanguageMetaData, mode: 'production' as const }) } : {}),
+        ...(options.mode === 'production'
+            ? {
+                  LanguageMetaData: () => ({
+                      ...MinabLanguageMetaData,
+                      mode: 'production' as const
+                  })
+              }
+            : {}),
         schema: () => new SchemaProvider(schema, options.host),
         scopeResolver: services => new MinabScopeResolver(services.schema, services.ruleContext.recordTable),
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema, services.typeChecker),
         interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler, services.typeChecker),
+        parser: {
+            TokenBuilder: () => new MinabTokenBuilder(),
+            ValueConverter: () => new MinabValueConverter()
+        },
         validation: {
             DocumentValidator: services => new MinabDocumentValidator(services)
         },

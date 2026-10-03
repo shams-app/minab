@@ -59,6 +59,7 @@ import {
     isUnaryExpression,
     type BinaryExpression,
     type CallExpression,
+    type CastExpr,
     type Expression,
     type IfExpr,
     type JsonObjectLiteral,
@@ -73,14 +74,21 @@ import {
 } from './generated/ast.js';
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { getBuiltin, isBuiltinName, type BuiltinSignature, type SqlArg } from './minab-builtins.js';
-import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { SqlQuery } from './minab-executor.js';
 import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
+import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
 /** A refusal has an English `reason`. When the refusal has a stable code (see the registry), `code` and `params` come with it. */
-export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string; code?: DiagnosticCode; params?: DiagnosticParams };
+export type SqlResult =
+    | { ok: true; query: SqlQuery }
+    | {
+          ok: false;
+          reason: string;
+          code?: DiagnosticCode;
+          params?: DiagnosticParams;
+      };
 
 /** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
 export interface OuterRecord {
@@ -310,10 +318,11 @@ export class MinabSqlCompiler {
     }
 
     private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
-        const source = scope.alias === scope.table ? ` FROM ${quoteIdent(scope.table)}` : ` FROM ${quoteIdent(scope.table)} AS ${quoteIdent(scope.alias)}`;
+        const physical = this.sqlTable(scope.table);
+        const source = scope.alias === physical ? ` FROM ${quoteIdent(physical)}` : ` FROM ${quoteIdent(physical)} AS ${quoteIdent(scope.alias)}`;
         const joins = query.joins.map(join => {
             const keyword = join.cross ? 'CROSS JOIN' : join.left ? 'LEFT JOIN' : 'JOIN';
-            const target = `${quoteIdent(this.table(join.source).name)} AS ${quoteIdent(join.alias)}`;
+            const target = `${quoteIdent(this.sqlTable(join.source))} AS ${quoteIdent(join.alias)}`;
             if (join.cross) return ` ${keyword} ${target}`;
             if (!join.condition) fail(`"${join.alias}" is joined without an ON condition`);
             return ` ${keyword} ${target} ON ${this.expression(join.condition, ctx, scopes)}`;
@@ -372,13 +381,47 @@ export class MinabSqlCompiler {
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
         const clause = query.selectClause;
         if (!clause || clause.all || clause.items.length === 0) {
-            return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}*`;
+            return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}${this.star(scopes[0])}`;
         }
         const items = clause.items.map(item => {
             const sql = this.expression(item.expression, ctx, scopes);
-            return item.alias ? `${sql} AS ${quoteIdent(item.alias)}` : sql;
+            const alias = item.alias ?? this.renamedField(item.expression, ctx, scopes);
+            return alias ? `${sql} AS ${quoteIdent(alias)}` : sql;
         });
         return `SELECT ${clause.distinct ? 'DISTINCT ' : ''}${items.join(', ')}`;
+    }
+
+    /**
+     * The Minab name of a bare field in a `SELECT` item without `AS`, when
+     * the column's `sqlName` is different. Without this alias the row would
+     * come back keyed by the physical name.
+     */
+    private renamedField(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        const field = isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
+        if (!field) return undefined;
+        const table = isCurrentRecord(expr) ? this.currentTable(ctx, scopes) : this.staticTable(expr, ctx, scopes);
+        const column = table ? this.schema.getColumn(table, field) : undefined;
+        return column?.type.kind === 'scalar' && column.sqlName !== undefined && column.sqlName !== column.name ? column.name : undefined;
+    }
+
+    /**
+     * `*`. A row must keep Minab names as keys, so when a column has a
+     * `sqlName` the columns are listed with `AS <Minab name>`. Otherwise
+     * plain `*` is the same and shorter.
+     */
+    private star(scope: SqlScope): string {
+        const entries = [...scope.named.values()];
+        const renamed = entries.some(e => this.table(e.table).columns.some(c => c.type.kind === 'scalar' && c.sqlName !== undefined && c.sqlName !== c.name));
+        if (!renamed) return '*';
+        return entries
+            .flatMap(e =>
+                this.table(e.table).columns.flatMap(c => {
+                    if (c.type.kind === 'collection') return [];
+                    if (c.type.kind === 'ref') return c.type.foreignKey ? [`${quoteIdent(e.alias)}.${quoteIdent(c.type.foreignKey)}`] : [];
+                    return [`${quoteIdent(e.alias)}.${quoteIdent(c.sqlName ?? c.name)} AS ${quoteIdent(c.name)}`];
+                })
+            )
+            .join(', ');
     }
 
     // ---- expressions ---------------------------------------------------
@@ -398,7 +441,10 @@ export class MinabSqlCompiler {
         if (isUnaryExpression(expr)) return this.unary(expr, ctx, scopes);
         if (isCallExpression(expr)) return this.call(expr, ctx, scopes);
         if (isCastExpr(expr)) {
-            return `CAST(${this.expression(expr.value, ctx, scopes)} AS ${this.sqlType(expr.targetType)})`;
+            const operand = this.expression(expr.value, ctx, scopes);
+            // A decimal as text has no trailing zeros (D16): `2.50` is "2.5", like the interpreter.
+            const trimmed = this.isDecimalToText(expr) ? `trim_scale(${operand})` : operand;
+            return `CAST(${trimmed} AS ${this.sqlType(expr.targetType)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
         if (isIfExpr(expr)) return this.ifExpr(expr, ctx, scopes);
@@ -592,7 +638,11 @@ export class MinabSqlCompiler {
     private follow(receiver: RowRef, field: string, ctx: Ctx): RowRef | undefined {
         const table = this.tableOf(receiver);
         if (this.columnSchema(table, field).type.kind !== 'ref') return undefined;
-        return { kind: 'key', table: this.refTable(table, field), keyExpr: this.column(receiver, field, ctx) };
+        return {
+            kind: 'key',
+            table: this.refTable(table, field),
+            keyExpr: this.column(receiver, field, ctx)
+        };
     }
 
     private refTable(table: string, field: string): string {
@@ -608,7 +658,7 @@ export class MinabSqlCompiler {
         if (schema.type.kind === 'collection') {
             fail(`"${field}" is a collection — use it inside an aggregate, EXISTS, or a filter (spec §3.4)`);
         }
-        const name = schema.type.kind === 'ref' ? this.refForeignKey(table, schema) : field;
+        const name = schema.type.kind === 'ref' ? this.refForeignKey(table, schema) : (schema.sqlName ?? schema.name);
         if (row.kind === 'scope') {
             return `${quoteIdent(row.alias)}.${quoteIdent(name)}`;
         }
@@ -635,7 +685,7 @@ export class MinabSqlCompiler {
     private refSubquery(row: { table: string; keyExpr: string }, column: string, ctx: Ctx): string {
         const alias = ctx.freshAlias();
         const pk = this.primaryKey(row.table);
-        return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(row.table)} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
+        return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(this.sqlTable(row.table))} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
     }
 
     private binary(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
@@ -739,7 +789,10 @@ export class MinabSqlCompiler {
         if (isMemberAccess(arg)) {
             const receiverSource = this.tryCollectionSource(arg.receiver, ctx, scopes);
             if (receiverSource) {
-                const inner = { alias: receiverSource.alias, table: receiverSource.table };
+                const inner = {
+                    alias: receiverSource.alias,
+                    table: receiverSource.table
+                };
                 const column = this.column({ kind: 'scope', ...inner }, arg.member, ctx);
                 return this.aggregateOverSource(builtin, receiverSource, column);
             }
@@ -771,7 +824,7 @@ export class MinabSqlCompiler {
     }
 
     private aggregateOverSource(builtin: BuiltinSignature, source: CollectionSource, column: string | undefined): string {
-        const from = ` FROM ${quoteIdent(source.table)} AS ${quoteIdent(source.alias)}`;
+        const from = ` FROM ${quoteIdent(this.sqlTable(source.table))} AS ${quoteIdent(source.alias)}`;
         const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
         const form = builtin.sqlAggregate;
         if (form?.shape === 'exists') {
@@ -843,10 +896,18 @@ export class MinabSqlCompiler {
     /** The rows an expression ranges over: a whole table (`#Booking`), a relation field (`.orders`), or either of those filtered (`[...]`). */
     private collectionSource(expr: Expression, ctx: Ctx, scopes: SqlScope[]): CollectionSource {
         if (isNamedScope(expr) && !this.lookupNamed(expr.name, scopes)) {
-            return { table: this.table(expr.name).name, alias: ctx.freshAlias(), predicates: [] };
+            return {
+                table: this.table(expr.name).name,
+                alias: ctx.freshAlias(),
+                predicates: []
+            };
         }
         if (isTableRef(expr)) {
-            return { table: this.table(expr.name).name, alias: ctx.freshAlias(), predicates: [] };
+            return {
+                table: this.table(expr.name).name,
+                alias: ctx.freshAlias(),
+                predicates: []
+            };
         }
         if (isFilterAccess(expr) || isTupleAccess(expr)) {
             if (isTupleAccess(expr)) {
@@ -873,7 +934,11 @@ export class MinabSqlCompiler {
         if (!field) fail('not a relation field');
         const owner = isCurrentRecord(expr)
             ? scopes.length > 0
-                ? ({ kind: 'scope', alias: scopes[0].alias, table: scopes[0].table } as RowRef)
+                ? ({
+                      kind: 'scope',
+                      alias: scopes[0].alias,
+                      table: scopes[0].table
+                  } as RowRef)
                 : this.outerRow(0, ctx)
             : this.rowRef((expr as { receiver: Expression }).receiver, ctx, scopes);
         if (!owner) fail(`"${field}" has no owning row here`);
@@ -908,10 +973,19 @@ export class MinabSqlCompiler {
         return column;
     }
 
+    /** The table's name in the database. */
+    private sqlTable(name: string): string {
+        const table = this.table(name);
+        return table.sqlName ?? table.name;
+    }
+
+    /** The physical name of the column that identifies a row (`primaryKey` is a schema column name, so it goes through `sqlName`). */
     private primaryKey(table: string): string {
-        const key = this.table(table).primaryKey;
+        const schema = this.table(table);
+        const key = schema.primaryKey;
         if (!key) fail(`the schema does not say which column identifies a row of "${table}" (set primaryKey)`);
-        return key;
+        const column = schema.columns.find(c => c.name === key);
+        return column?.sqlName ?? key;
     }
 
     private refForeignKey(table: string, column: MinabColumnSchema): string {
@@ -931,6 +1005,16 @@ export class MinabSqlCompiler {
         return undefined;
     }
 
+    private isDecimalToText(expr: CastExpr): boolean {
+        if (!this.typeChecker || expr.targetType.array || (expr.targetType.base !== 'TEXT' && expr.targetType.base !== 'CITEXT')) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr.value);
+            return inferred.ok && inferred.type.kind === 'scalar' && inferred.type.base === 'DECIMAL' && !inferred.type.array;
+        } catch {
+            return false;
+        }
+    }
+
     private sqlType(type: TypeRef): string {
         const base = SQL_TYPES[type.base as LogicalTypeBase];
         if (!base) fail(`unknown type "${type.base}"`);
@@ -946,7 +1030,11 @@ export class MinabSqlCompiler {
     private outerRow(frameIndex: number, ctx: Ctx): RowRef {
         const resolved = ctx.outer.resolveRecord(frameIndex);
         if (!resolved.found) fail(resolved.reason);
-        return { kind: 'outer', table: resolved.record.table, keyExpr: ctx.bind(resolved.record.key) };
+        return {
+            kind: 'outer',
+            table: resolved.record.table,
+            keyExpr: ctx.bind(resolved.record.key)
+        };
     }
 }
 

@@ -26,6 +26,10 @@ import { EMPTY_HOST, type ResolvedHost, type ResolvedHostFunction } from './host
  * two kinds, which is exactly the `ref`/`collection` distinction:
  *  - `ref`: the column *on this table* holding the target row's key.
  *  - `collection`: the column *on the target table* holding this row's key.
+ * Both are *physical* column names (the name in the database), and may
+ * name a column that is not in the schema. They are never mapped through
+ * `sqlName`.
+ *
  * Optional so existing hosts/fixtures keep working; a traversal across a
  * relation that doesn't declare one fails with an explicit reason rather
  * than guessing at a naming convention.
@@ -36,12 +40,18 @@ export type ColumnType =
     | { kind: 'collection'; table: string; foreignKey?: string };
 
 export interface MinabColumnSchema {
+    /** The name Minab source and result rows use. Any text (spec §2.4). */
     name: string;
     type: ColumnType;
+    /** The column's name in the database, when it differs from `name`. The compiler writes `sqlName ?? name`. */
+    sqlName?: string;
 }
 
 export interface MinabTableSchema {
+    /** The name Minab source uses. Any text (spec §2.4). */
     name: string;
+    /** The table's name in the database, when it differs from `name`. The compiler writes `sqlName ?? name`. */
+    sqlName?: string;
     columns: MinabColumnSchema[];
     /**
      * The column identifying a row of this table. Needed by Phase 5 to
@@ -50,6 +60,9 @@ export interface MinabTableSchema {
      * that Minab source never spells out. This is the "primary-key marker
      * in the schema contract that doesn't exist yet" Phase 4 flagged when
      * it found the four `ref`-compared-to-scalar defects.
+     *
+     * It is a *schema* column name (a `name`, not a `sqlName`); the compiler
+     * maps it to the column's `sqlName` when it writes SQL.
      */
     primaryKey?: string;
 }

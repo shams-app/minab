@@ -36,7 +36,12 @@ function entry<P extends DiagnosticParams = NoParams>(value: DiagnosticEntry<P>)
 const error = 'error' as const;
 
 export const DIAGNOSTICS = {
-    'call.argumentType': entry<{ name: string; position: number; expected: string; actual: string }>({
+    'call.argumentType': entry<{
+        name: string;
+        position: number;
+        expected: string;
+        actual: string;
+    }>({
         severity: error,
         message: p => `"${p.name}" argument ${p.position}: expected ${p.expected}, got ${p.actual} (no implicit coercion)`,
         doc: 'An argument of a user function must have the declared parameter type. Pass a value of that type, or use CAST.'
@@ -61,7 +66,10 @@ export const DIAGNOSTICS = {
         message: p => `${p.name} expects a collection of INTEGER or DECIMAL, got ${p.actual}`,
         doc: 'SUM and AVG add up numbers. Pass a collection of INTEGER or DECIMAL values.'
     }),
-    'call.builtinNeedsOrderableCollection': entry<{ name: string; actual: string }>({
+    'call.builtinNeedsOrderableCollection': entry<{
+        name: string;
+        actual: string;
+    }>({
         severity: error,
         message: p => `${p.name} expects a collection of an orderable type, got ${p.actual}`,
         doc: 'MIN and MAX compare values. Pass a collection of numbers, text, dates or times.'
@@ -102,6 +110,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
         doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
+    }),
+    'eval.castFailed': entry<{ value: string; from: string; to: string }>({
+        severity: error,
+        message: p => `cannot cast ${p.value} to ${p.to}`,
+        doc: 'The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value.'
     }),
     'eval.integerOutOfRange': entry({
         severity: error,
@@ -254,7 +267,11 @@ export const DIAGNOSTICS = {
         doc: 'The text does not follow the grammar. Fix the syntax at the marked place. The message comes from the parser.'
     }),
 
-    'type.arithmeticNeedsNumeric': entry<{ operator: string; left: string; right: string }>({
+    'type.arithmeticNeedsNumeric': entry<{
+        operator: string;
+        left: string;
+        right: string;
+    }>({
         severity: error,
         message: p => `"${p.operator}" requires numeric operands, got ${p.left} and ${p.right}`,
         doc: 'Arithmetic works on INTEGER and DECIMAL. Use numbers, or CAST the operands.'
@@ -314,7 +331,11 @@ export const DIAGNOSTICS = {
         message: p => `if/else branches must agree on type (no implicit coercion) — got ${p.then} and ${p.else}`,
         doc: 'Both branches of an if/else must give the same type. Change one branch, or use CAST.'
     }),
-    'type.implicitCoercion': entry<{ operator: string; left: string; right: string }>({
+    'type.implicitCoercion': entry<{
+        operator: string;
+        left: string;
+        right: string;
+    }>({
         severity: error,
         message: p => `"${p.operator}" between ${p.left} and ${p.right} requires an explicit CAST (no implicit coercion)`,
         doc: 'Minab never converts types by itself. Make both sides the same type with CAST.'
@@ -344,7 +365,11 @@ export const DIAGNOSTICS = {
         message: p => `[${p.index}] used on a non-tuple, non-array value (${p.actual})`,
         doc: 'A position like [0] works on a tuple or an array. Use it on one of those.'
     }),
-    'type.initializerMismatch': entry<{ name: string; expected: string; actual: string }>({
+    'type.initializerMismatch': entry<{
+        name: string;
+        expected: string;
+        actual: string;
+    }>({
         severity: error,
         message: p => `can't initialize "${p.name}" (${p.expected}) with ${p.actual} (no implicit coercion)`,
         doc: 'The start value has another type than the declared type. Change one, or use CAST.'
@@ -369,7 +394,11 @@ export const DIAGNOSTICS = {
         message: p => `list literal elements must share one type (no implicit coercion) — found both ${p.first} and ${p.second}`,
         doc: 'All elements of a list must have the same type. Make them equal, or use CAST.'
     }),
-    'type.logicalNeedsBoolean': entry<{ operator: string; left: string; right: string }>({
+    'type.logicalNeedsBoolean': entry<{
+        operator: string;
+        left: string;
+        right: string;
+    }>({
         severity: error,
         message: p => `"${p.operator}" requires BOOLEAN operands, got ${p.left} and ${p.right}`,
         doc: 'AND and OR combine BOOLEAN values. Use comparisons or BOOLEAN columns on both sides.'
@@ -394,7 +423,11 @@ export const DIAGNOSTICS = {
         message: p => `"NOT" requires a BOOLEAN operand, got ${p.actual}`,
         doc: 'NOT turns a BOOLEAN into its opposite. Use a comparison or a BOOLEAN value.'
     }),
-    'type.orderingNeedsOrderable': entry<{ operator: string; left: string; right: string }>({
+    'type.orderingNeedsOrderable': entry<{
+        operator: string;
+        left: string;
+        right: string;
+    }>({
         severity: error,
         message: p => `"${p.operator}" requires orderable operands, got ${p.left} and ${p.right}`,
         doc: 'Only numbers, text, dates and times have an order. Compare values of one of those types.'
