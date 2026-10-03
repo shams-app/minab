@@ -396,7 +396,7 @@ WHERE .id IN (FROM Order WHERE .status == "flagged" SELECT .customer_id)
 
 ### 5.5 Casting
 
-Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`, or a `DECIMAL` against an `INTEGER` in an aggregate result) requires an explicit `CAST`:
+Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`) requires an explicit `CAST`. Two families are not "different types" for this rule: `INTEGER` and `DECIMAL` are one numeric family, and `TEXT` and `CITEXT` are one text family (§7.2). They compare with no `CAST`:
 
 ```
 CAST(<expr> AS <Type>)
@@ -584,6 +584,10 @@ Minab's scalar types are a small, storage-agnostic vocabulary — behavioral cat
 | `DATETIME` | An instant, like Postgres `timestamptz`. It is the same moment everywhere; it shows as a date and a time only when it is read in a time zone. |
 | `UUID` | An opaque identifier — equality only, no ordering. |
 | `JSON` | Structured data of unknown shape — test it with `is`/`isnot` (§5.6) before treating it as one kind or another. |
+
+**Text family.** `TEXT` and `CITEXT` are one family: they compare with each other, and with text literals and parameters, with no `CAST`, for `==`, `!=`, `<`, `<=`, `>`, `>=`, `IN` and `LIKE`. When either side is `CITEXT`, the comparison ignores case: `.email == "Ada@Example.COM"` is `true` for `ada@example.com`, and so is `.name == .email` when the texts differ only in case. When both sides are `TEXT`, the comparison is case-sensitive. Case is folded with Unicode lower-casing; for a few non-ASCII letters this can differ from the database (see the note under §5.3.1). The SQL compiler casts the `TEXT` side to `citext` (`$1::citext`), because Postgres would compare `citext = text` as plain text.
+
+**`LIKE`.** The pattern uses Postgres's default rules, in both runtimes: `%` matches any run of characters (also none), `_` matches exactly one character (one Persian letter is one character), and `\` makes the next character plain, so `\%` matches a percent sign. Inside a Minab string, write a backslash as `\\`: `.code LIKE "50\\%"` matches `"50%"` and not `"500"`. `LIKE` is case-sensitive for `TEXT` and ignores case when either side is `CITEXT`. A pattern that ends with an unescaped `\` is an error, as in Postgres: the error comes only when the matcher reaches that `\` (so `"Hello" LIKE "Hello\\"` is `false`, and `"Hello!" LIKE "Hello\\"` fails).
 
 Any type may be suffixed with `[]` to form an array — `INTEGER[]`, `UUID[]` — since function parameters (§8) need arrays of arbitrary element types.
 

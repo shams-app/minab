@@ -1,5 +1,5 @@
 /**
- * The registry of checker diagnostics (B1, decision D35).
+ * The registry of diagnostics and run errors (B1, R4, decision D35).
  *
  * Every diagnostic the checker makes has a stable code, a severity, an
  * English message built from parameters, and one sentence that explains the
@@ -7,7 +7,8 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule.
+ *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
  *  - After you change an entry, run `npm run docs:diagnostics`.
@@ -105,6 +106,11 @@ export const DIAGNOSTICS = {
         message: p => `${p.name} expects ${p.expected} argument(s), got ${p.actual}`,
         doc: 'A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments.'
     }),
+    cancelled: entry({
+        severity: error,
+        message: () => 'the run was cancelled',
+        doc: 'The host aborted the run with its AbortSignal. Nothing is wrong with the program.'
+    }),
 
     'compile.blockInQuery': entry({
         severity: error,
@@ -116,6 +122,31 @@ export const DIAGNOSTICS = {
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
         doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
     }),
+    'compile.notSql': entry<{ reason: string }>({
+        severity: error,
+        message: p => `this program does not compile to SQL on its own: ${p.reason}`,
+        doc: 'Part of the program has no SQL form (for example a user function or a statement). The interpreter runs it; use run instead of compile.'
+    }),
+    'compile.nothingToCompile': entry({
+        severity: error,
+        message: () => 'nothing to compile: the program has no query or expression',
+        doc: 'A program with only declarations has no value to turn into SQL. Add a query or an expression at the end.'
+    }),
+    'compile.programHasErrors': entry({
+        severity: error,
+        message: () => 'the program has errors, so it cannot be compiled',
+        doc: 'Fix the diagnostics of the program first. A program with errors is never compiled.'
+    }),
+    'data.error': entry({
+        severity: error,
+        message: () => 'the data source failed',
+        doc: 'The data port failed. params.sqlstate holds the SQLSTATE when the driver gave one. The SQL text is never part of the error: read it from the statement event.'
+    }),
+    'data.noPort': entry({
+        severity: error,
+        message: () => 'this program needs data, and no data port was given',
+        doc: 'The program reads a table, but the host gave run no data port. Give a data port, or run a program that needs no data.'
+    }),
     'eval.castFailed': entry<{ value: string; from: string; to: string }>({
         severity: error,
         message: p => `cannot cast ${p.value} to ${p.to}`,
@@ -126,10 +157,77 @@ export const DIAGNOSTICS = {
         message: () => 'division by zero',
         doc: '"/" and "%" fail when the right side is zero. Check the divisor first, for example with "if".'
     }),
+    'eval.failed': entry<{ reason: string }>({
+        severity: error,
+        message: p => p.reason,
+        doc: 'The program failed while it ran. params.reason has the English reason. Specific failures have their own code.'
+    }),
+    'eval.hostFunctionFailed': entry<{ name: string }>({
+        severity: error,
+        message: p => `the host function "${p.name}" failed`,
+        doc: 'The host function threw an error. The text of that error is not copied here. The host can log it.'
+    }),
+    'eval.hostFunctionMissing': entry<{ name: string }>({
+        severity: error,
+        message: p => `the host function "${p.name}" was called, and the host gave no implementation`,
+        doc: 'The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run.'
+    }),
     'eval.integerOutOfRange': entry({
         severity: error,
         message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
         doc: 'INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers.'
+    }),
+
+    'eval.missingInput': entry<{ name: string }>({
+        severity: error,
+        message: p => `the host input "${p.name}" has no value for this run`,
+        doc: 'The program reads a declared host input, but run got no value for it. Give a value in the hostInputs of run.'
+    }),
+    'eval.programInvalid': entry({
+        severity: error,
+        message: () => 'the program has errors, so it cannot run',
+        doc: 'Fix the diagnostics of the program first. A program with errors never runs.'
+    }),
+    'eval.writesNotSupported': entry({
+        severity: error,
+        message: () => 'this run has no write port, so the program cannot write',
+        doc: 'The program writes data, and the host gave run no write port. Give a write port, or remove the write.'
+    }),
+
+    'limit.callDepth': entry<{ limit: number }>({
+        severity: error,
+        message: p => `function calls are nested deeper than the limit of ${p.limit}`,
+        doc: 'A function calls itself, or other functions, too deeply. Remove the recursion, or ask the host for a higher callDepth limit.'
+    }),
+    'limit.sourceTooLong': entry<{ limit: number; used: number }>({
+        severity: error,
+        message: p => `the source is ${p.used} bytes, and the limit is ${p.limit}`,
+        doc: 'The program text is longer than the host allows (UTF-8 bytes). Make the program shorter.'
+    }),
+    'limit.timeout': entry<{ limit: number }>({
+        severity: error,
+        message: p => `the run took longer than the limit of ${p.limit} ms`,
+        doc: 'The run used all of its wall time. Make the program cheaper, or ask the host for a higher wallTimeMs limit.'
+    }),
+    'limit.tooDeep': entry<{ limit: number; used: number }>({
+        severity: error,
+        message: p => `expressions are nested ${p.used} levels deep, and the limit is ${p.limit}`,
+        doc: 'The expressions are nested too deeply. Split the expression into several let variables.'
+    }),
+    'limit.tooManyIterations': entry<{ limit: number }>({
+        severity: error,
+        message: p => `the run went over the limit of ${p.limit} loop iterations`,
+        doc: 'The loops ran too many times in one run. Loop over fewer items, or ask the host for a higher loopIterations limit.'
+    }),
+    'limit.tooManyRows': entry<{ limit: number }>({
+        severity: error,
+        message: p => `a statement returned more than the limit of ${p.limit} rows`,
+        doc: 'One statement returned too many rows. Filter the query, or ask the host for a higher rowsPerStatement limit.'
+    }),
+    'limit.tooManyStatements': entry<{ limit: number }>({
+        severity: error,
+        message: p => `the run went over the limit of ${p.limit} statements sent to the data source`,
+        doc: 'The run sent too many statements to the data port. Combine queries, or ask the host for a higher statements limit.'
     }),
 
     'null.likeWithNull': entry({

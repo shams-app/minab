@@ -160,10 +160,7 @@ describe('the clock of a run', () => {
             now: () => new Date(Date.parse(AT) + 1000 * reads++)
         };
         const program = await minab.prepare('NOW() == NOW()');
-        expect(await program.run({}, { clock: moving })).toEqual({
-            ok: true,
-            value: true
-        });
+        expect(await program.run({}, { clock: moving })).toMatchObject({ ok: true, value: true });
         expect(reads).toBe(1);
     });
 
@@ -232,9 +229,9 @@ describe('the SQL', () => {
         const compiled = program.compile();
         expect(compiled.ok).toBe(true);
         if (compiled.ok) {
-            expect(compiled.query.text).not.toMatch(/\bnow\s*\(/i);
-            expect(compiled.query.params).toHaveLength(2);
-            expect(compiled.query.params[1]).toBe('UTC');
+            expect(compiled.sql.text).not.toMatch(/\bnow\s*\(/i);
+            expect(compiled.sql.params).toHaveLength(2);
+            expect(compiled.sql.params[1]).toBe('UTC');
         }
     });
 
@@ -243,8 +240,8 @@ describe('the SQL', () => {
         const compiled = program.compile();
         expect(compiled.ok).toBe(true);
         if (compiled.ok) {
-            expect(compiled.query.text).toContain('weeks =>');
-            expect(compiled.query.params).toEqual([3]);
+            expect(compiled.sql.text).toContain('weeks =>');
+            expect(compiled.sql.params).toEqual([3]);
         }
     });
 });

@@ -10,6 +10,7 @@ import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 import type { SqlQuery } from '../language/minab-executor.js';
 import type { HostFunctionDeclaration, HostInputType } from '../language/host-declarations.js';
 import type { ClockPort, DataPort, EventSink, HostFunctions, WritePort } from './ports.js';
+import type { Limits } from './limits.js';
 import type { ProgramKind } from './program-kind.js';
 
 export type { ProgramKind } from './program-kind.js';
@@ -53,8 +54,11 @@ export interface MinabOptions {
     inputs?: Record<string, HostInputType>;
     /** The default rule context of `prepare`. A call can give its own. */
     ruleContext?: MinabRuleContext;
-    /** Limits for runs. Stored now, enforced by R4. */
-    limits?: Readonly<Record<string, number>>;
+    /**
+     * Limits for source and runs (D36). Each one you leave out has its default. A host may raise or
+     * lower each one. There is no "unlimited": give a large number instead.
+     */
+    limits?: Partial<Limits>;
     /** How many service sets to keep, least recently used out. Default 16. */
     serviceCacheSize?: number;
     /** `development` re-checks the grammar on every parser build and is slow. Default `production`. */
@@ -93,21 +97,39 @@ export interface RunPorts {
 }
 
 export interface RunOptions {
-    /** Reserved. R4 makes it stop a run. */
+    /**
+     * Aborts the run. The interpreter checks it between steps, and every port call gets it.
+     * An aborted run ends with the error `cancelled`. A signal that is already aborted ends it
+     * before any port is called.
+     */
     signal?: AbortSignal;
+    /** Limits for this run. Each one is the smaller of this value and the host's: a run never raises a limit. */
+    limits?: Partial<Limits>;
 }
 
 export interface MinabError {
-    /** A stable code, for example `eval.failed` or `data.noPort`. */
+    /** A stable code from the registry, for example `eval.divisionByZero` or `limit.timeout`. */
     code: string;
-    /** English text. */
+    /** English text. It never holds SQL. */
     message: string;
+    /** Where in the source, when known. */
+    range?: SourceRange;
+    /** The values the message was built from, for example `{ limit: 100 }`. A driver error gives `{ sqlstate }`. */
     params: Record<string, string | number>;
 }
 
-export type RunResult = { ok: true; value: unknown } | { ok: false; error: MinabError };
+/** What a run used. */
+export interface RunStats {
+    /** Statements sent to the data port. */
+    statements: number;
+    /** Rows read, over all statements. */
+    rows: number;
+    durationMs: number;
+}
 
-export type CompileResult = { ok: true; query: SqlQuery } | { ok: false; error: MinabError };
+export type RunResult = { ok: true; value: unknown; /** Log entries. Empty until L7. */ logs: string[]; stats: RunStats } | { ok: false; error: MinabError };
+
+export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 
 /**
  * What a program touches, found before it runs (ADR 0002, section 7).

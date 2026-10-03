@@ -93,6 +93,11 @@ import {
     type Numeric
 } from './values.js';
 import { castValue } from './casts.js';
+import { dataFailure } from '../runtime/errors.js';
+import { NO_LIMITS, RunBudget, RunStopped } from '../runtime/limits.js';
+import { PortError } from '../runtime/ports.js';
+import type { MinabError, SourceRange } from '../runtime/types.js';
+import { coded } from './diagnostics/codes.js';
 import type { LogicalTypeBase } from './minab-types.js';
 
 export type MinabValue = unknown;
@@ -107,8 +112,8 @@ export type EvalResult =
           params?: Record<string, string | number>;
       };
 
-/** Lets a data call that was never given a signal still pass one. It never aborts. */
-const NEVER_ABORTED = new AbortController().signal;
+/** The structured result of `MinabInterpreter.run` (R4). `evaluate` keeps the old shape. */
+export type InterpretResult = { ok: true; value: MinabValue } | { ok: false; error: MinabError; cause?: unknown };
 
 /** What the host supplies for one evaluation: the connection, the record under validation (spec §6), and `$` when this is a field rule (§6.2). */
 export interface EvalContext {
@@ -125,7 +130,12 @@ export interface EvalContext {
     timeZone?: string;
     /** One stream for statements, logs and timing (D33). */
     events?: EventSink;
-    /** Passed to the host's ports. R4 checks it. */
+    /**
+     * Limits, counters and the abort signal of this run. `prepare.run` makes it. When it is
+     * missing, the interpreter makes one with no limits that still honors `signal`.
+     */
+    budget?: RunBudget;
+    /** The host's abort signal. Only used when there is no `budget`. */
     signal?: AbortSignal;
     record?: Row;
     recordTable?: string;
@@ -144,12 +154,24 @@ export interface EvalContext {
 }
 
 class EvalError extends Error {
+    /** The node that failed. The innermost expression sets it. */
+    range?: SourceRange;
+
     constructor(
         reason: string,
         readonly code?: string,
-        readonly params?: Record<string, string | number>
+        readonly params?: Record<string, string | number>,
+        /** The original error, when a port failed. The old `evaluate` entry throws it again. */
+        readonly cause?: unknown
     ) {
         super(reason);
+    }
+}
+
+/** Puts the range of the innermost failing node on an error that has none yet. */
+function placeError(e: unknown, node: AstNode): void {
+    if (e instanceof EvalError || e instanceof NumberError || (e instanceof RunStopped && e.code !== 'cancelled')) {
+        e.range ??= node.$cstNode?.range;
     }
 }
 
@@ -164,6 +186,58 @@ interface Frame {
     variables: Map<string, MinabValue>;
 }
 
+/**
+ * The Postgres `LIKE` matcher (`MatchText`), on arrays of characters. It is
+ * a copy of the algorithm and not a regular expression, so a pattern that
+ * ends with `\` fails at the same moments: only when the matcher reaches the
+ * `\` (Postgres: `'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
+ */
+function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | 'false' | 'abort' {
+    const trailing = (): never => fail('LIKE pattern must not end with escape character');
+    while (ti < t.length && pi < p.length) {
+        if (p[pi] === '\\') {
+            pi++;
+            if (pi >= p.length) trailing();
+            if (p[pi] !== t[ti]) return 'false';
+        } else if (p[pi] === '%') {
+            pi++;
+            while (pi < p.length) {
+                if (p[pi] === '%') pi++;
+                else if (p[pi] === '_') {
+                    if (ti >= t.length) return 'abort';
+                    ti++;
+                    pi++;
+                } else break;
+            }
+            if (pi >= p.length) return 'true';
+            let first = p[pi];
+            if (first === '\\') {
+                if (pi + 1 >= p.length) trailing();
+                first = p[pi + 1];
+            }
+            while (ti < t.length) {
+                if (t[ti] === first) {
+                    const matched = likeMatch(t, ti, p, pi);
+                    if (matched !== 'false') return matched;
+                }
+                ti++;
+            }
+            return 'abort';
+        } else if (p[pi] === '_') {
+            ti++;
+            pi++;
+            continue;
+        } else if (p[pi] !== t[ti]) {
+            return 'false';
+        }
+        pi++;
+        ti++;
+    }
+    if (ti < t.length) return 'false';
+    while (pi < p.length && p[pi] === '%') pi++;
+    return pi >= p.length ? 'true' : 'abort';
+}
+
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
@@ -171,20 +245,39 @@ export class MinabInterpreter {
         private readonly typeChecker?: MinabTypeChecker
     ) {}
 
-    async evaluate(model: Model, given: EvalContext): Promise<EvalResult> {
+    /**
+     * The old entry, kept until R7 and R8 move the CLI and the playground to `PreparedProgram.run`.
+     * It turns the structured result of `run` into the old shape. A port failure is thrown again, as before.
+     *
+     * @deprecated Use `run` (or `PreparedProgram.run`). Remove it in R8, or in whichever of R7 and R8 merges last.
+     */
+    async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
+        const result = await this.run(model, context);
+        if (result.ok) return result;
+        if (result.cause !== undefined) throw result.cause;
+        const { error } = result;
+        // The old shape has no code for a plain failure.
+        if (error.code === 'eval.failed') return { ok: false, reason: error.message };
+        return { ok: false, reason: error.message, code: error.code, params: error.params };
+    }
+
+    /**
+     * Runs a program. A program failure, a limit and a cancel come back as `{ ok: false, error }`
+     * with a code. Only a bug in Minab throws.
+     */
+    async run(model: Model, given: EvalContext): Promise<InterpretResult> {
         // The clock is read once: every `NOW()` in this run is the same instant (D21).
-        const context: EvalContext = {
-            ...given,
-            now: given.now ?? new Date(),
-            timeZone: given.timeZone ?? 'UTC'
-        };
-        const state = new State(context, [], this.collectFunctions(model), name => this.readHostInput(name, context));
+        const context: EvalContext = { ...given, now: given.now ?? new Date(), timeZone: given.timeZone ?? 'UTC' };
+        const ownBudget = context.budget === undefined;
+        const budget = context.budget ?? new RunBudget(NO_LIMITS, context.signal);
+        const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
             state.frames.push({
                 record: this.normalizeRecord(context.record, context.recordTable),
                 table: context.recordTable,
                 variables: new Map()
             });
+            budget.check();
             for (const declaration of model.declarations) {
                 if (isVariableDecl(declaration)) {
                     const value = declaration.value ? this.coerce(declaration.type, await this.expression(declaration.value, state)) : null;
@@ -199,14 +292,35 @@ export class MinabInterpreter {
                 value: externalize(await this.mainStatement(model.tail, state))
             };
         } catch (e) {
-            if (e instanceof EvalError || e instanceof NumberError) return { ok: false, reason: e.message, code: e.code, params: e.params };
-            throw e;
+            return this.failure(e);
+        } finally {
+            if (ownBudget) budget.dispose();
         }
     }
 
     /** The run's clock, for the compiler (it binds the instant and the zone as parameters). */
     private clockOf(state: State): BuiltinClock {
         return { now: state.context.now!, timeZone: state.context.timeZone! };
+    }
+
+    /** An error thrown inside a run, as a structured result. A bug (anything else) is thrown again. */
+    private failure(e: unknown): InterpretResult {
+        if (e instanceof EvalError || e instanceof NumberError) {
+            const params = { ...e.params };
+            // `reason` carries the text of an uncoded failure, so the message can be built from the registry.
+            const code = e.code ?? 'eval.failed';
+            if (e.code === undefined) params.reason = e.message;
+            const error: MinabError = { code, message: e.message, params };
+            if (e.range) error.range = e.range;
+            return { ok: false, error, cause: e instanceof EvalError ? e.cause : undefined };
+        }
+        if (e instanceof RunStopped) {
+            const error: MinabError = { code: e.code, message: e.message, params: e.params };
+            if (e.range) error.range = e.range;
+            return { ok: false, error };
+        }
+        if (e instanceof PortError) return { ok: false, error: { code: e.code, message: e.message, params: {} }, cause: e };
+        throw e;
     }
 
     /** The record under validation, with each column read by its type: `DECIMAL` is exact, `INTEGER` is a number in range (spec §7.2). */
@@ -225,7 +339,7 @@ export class MinabInterpreter {
         if (!this.schema.getHostInput(name)) fail(`unknown name "${name}"`);
         const inputs = context.hostInputs;
         if (!inputs || !Object.hasOwn(inputs, name) || inputs[name] === undefined) {
-            fail(`the host input "${name}" has no value for this run`, 'eval.missingInput', { name });
+            fail(coded('eval.missingInput', { name }).reason, 'eval.missingInput', { name });
         }
         return inputs[name];
     }
@@ -240,9 +354,14 @@ export class MinabInterpreter {
 
     private async mainStatement(statement: MainStatement, state: State): Promise<MinabValue> {
         if (isQuery(statement)) {
-            const compiled = this.compiler.compileQuery(statement, this.outerResolver(state), this.clockOf(state));
-            if (!compiled.ok) fail(compiled.reason);
-            return await this.runStatement(compiled.query, statement, state);
+            try {
+                const compiled = this.compiler.compileQuery(statement, this.outerResolver(state), this.clockOf(state));
+                if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
+                return await this.runStatement(compiled.query, statement, state);
+            } catch (e) {
+                placeError(e, statement);
+                throw e;
+            }
         }
         return await this.expression(statement, state);
     }
@@ -254,7 +373,8 @@ export class MinabInterpreter {
      * call does.
      */
     private async runStatement(query: SqlQuery, origin: AstNode, state: State): Promise<Row[]> {
-        const { context } = state;
+        const { context, budget } = state;
+        budget.beforeStatement();
         context.onStatement?.(query, origin);
         context.events?.emit({
             kind: 'statement',
@@ -263,10 +383,15 @@ export class MinabInterpreter {
             range: origin.$cstNode?.range
         });
         const started = performance.now();
+        let rows: Row[];
         try {
-            return await context.executor.execute(query, {
-                signal: context.signal ?? NEVER_ABORTED
-            });
+            // The port gets the signal, and the run also stops waiting for a port that ignores it.
+            rows = await budget.race(Promise.resolve().then(() => context.executor.execute(query, { signal: budget.signal })));
+        } catch (e) {
+            if (e instanceof RunStopped || e instanceof PortError) throw e;
+            // Never the SQL text, and not the driver's message: only a code and the SQLSTATE.
+            const failure = dataFailure(e);
+            throw new EvalError(failure.message, failure.code, failure.params, e);
         } finally {
             context.events?.emit({
                 kind: 'timing',
@@ -274,16 +399,25 @@ export class MinabInterpreter {
                 durationMs: performance.now() - started
             });
         }
+        budget.afterStatement(rows.length);
+        return rows;
     }
 
     // ---- expressions ---------------------------------------------------
 
     private async expression(expr: Expression, state: State): Promise<MinabValue> {
-        if (this.isRelational(expr, state)) {
-            const pushed = await this.pushDown(expr, state);
-            if (pushed.pushed) return pushed.value;
+        // Every step checks the abort signal and the wall time (ADR 0002, section 6).
+        state.budget.check();
+        try {
+            if (this.isRelational(expr, state)) {
+                const pushed = await this.pushDown(expr, state);
+                if (pushed.pushed) return pushed.value;
+            }
+            return await this.interpret(expr, state);
+        } catch (e) {
+            placeError(e, expr);
+            throw e;
         }
-        return await this.interpret(expr, state);
     }
 
     /**
@@ -502,30 +636,42 @@ export class MinabInterpreter {
         for (let i = 0; i < args.length; i++) {
             variables.set(declaration.params[i].name, this.coerce(declaration.params[i].type, await this.expression(args[i], state)));
         }
-        const inner = state.push({
-            record: state.currentRecord(),
-            table: state.currentTable(),
-            variables
-        });
-        for (const statement of declaration.body) {
-            if (!isVariableDecl(statement)) {
-                fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
+        const leave = state.budget.enterCall();
+        try {
+            const inner = state.push({
+                record: state.currentRecord(),
+                table: state.currentTable(),
+                variables
+            });
+            for (const statement of declaration.body) {
+                if (!isVariableDecl(statement)) {
+                    fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
+                }
+                variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, inner)) : null);
             }
-            variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, inner)) : null);
+            if (!declaration.tail) fail(`${name} has no tail expression to return`);
+            return this.coerce(declaration.returnType, await this.mainStatement(declaration.tail, inner));
+        } finally {
+            leave();
         }
-        if (!declaration.tail) fail(`${name} has no tail expression to return`);
-        return this.coerce(declaration.returnType, await this.mainStatement(declaration.tail, inner));
     }
 
     /** A host function runs in the host, with the values of its arguments. Never in SQL. */
     private async callHostFunction(name: string, args: Expression[], state: State): Promise<MinabValue> {
-        const { hostFunctions, signal } = state.context;
-        if (!hostFunctions) fail(`the host function "${name}" was called, and the host gave no implementation`, 'eval.hostFunctionMissing', { name });
+        const { hostFunctions } = state.context;
+        const { budget } = state;
+        if (!hostFunctions) fail(coded('eval.hostFunctionMissing', { name }).reason, 'eval.hostFunctionMissing', { name });
         const values: MinabValue[] = [];
         for (const arg of args) values.push(await this.expression(arg, state));
-        return await hostFunctions.call(name, values, {
-            signal: signal ?? NEVER_ABORTED
-        });
+        budget.check();
+        try {
+            // The run stops waiting at its wall time, also when the function ignores the signal.
+            return await budget.race(Promise.resolve().then(() => hostFunctions.call(name, values, { signal: budget.signal })));
+        } catch (e) {
+            if (e instanceof RunStopped) throw e;
+            // The text of the host's error stays with the host: it may hold personal data.
+            throw new EvalError(coded('eval.hostFunctionFailed', { name }).reason, 'eval.hostFunctionFailed', { name }, e);
+        }
     }
 
     // ---- built-ins over in-memory collections ---------------------------
@@ -604,19 +750,21 @@ export class MinabInterpreter {
         }
         if (operator === 'IN') {
             const items = Array.isArray(right) ? right : fail('IN needs a collection on the right');
-            return items.some(i => this.equal(left, i, false));
+            const caseInsensitive = this.isCitextArg(expr.left, state) || this.isCitextElements(expr.right, state);
+            return items.some(i => this.equal(left, i, caseInsensitive));
         }
         if (operator === 'LIKE') {
             if (left === null || right === null) fail('LIKE is not a valid operator against null (spec §7.7)');
-            return this.like(String(left), String(right));
+            return this.like(String(left), String(right), this.isCaseInsensitive(expr, state));
         }
         if (operator === '<' || operator === '<=' || operator === '>' || operator === '>=') {
             if (left === null || right === null) {
                 fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
             }
             const exact = decimalCompare(left, right);
-            const a = exact ?? (left as number);
-            const b = exact === undefined ? (right as number) : 0;
+            const folded = exact === undefined && typeof left === 'string' && typeof right === 'string' && this.isCaseInsensitive(expr, state);
+            const a = folded ? (left as string).toLowerCase() : (exact ?? (left as number));
+            const b = folded ? (right as string).toLowerCase() : exact === undefined ? (right as number) : 0;
             switch (operator) {
                 case '<':
                     return a < b;
@@ -669,7 +817,19 @@ export class MinabInterpreter {
 
     /** True when either side of a comparison is a `CITEXT` column. */
     private isCaseInsensitive(expr: BinaryExpression, state: State): boolean {
-        return this.isCitext(expr.left, state) || this.isCitext(expr.right, state);
+        return this.isCitextArg(expr.left, state) || this.isCitextArg(expr.right, state);
+    }
+
+    /** True when the right side of `IN` is a `CITEXT` array (D15). */
+    private isCitextElements(expr: Expression, state: State): boolean {
+        if (isListLiteral(expr)) return expr.items.some(item => this.isCitextArg(item, state));
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && inferred.type.array && inferred.type.base === 'CITEXT';
+        } catch {
+            return false;
+        }
     }
 
     private isCitext(expr: Expression, state: State): boolean {
@@ -680,9 +840,15 @@ export class MinabInterpreter {
         return column?.type.kind === 'scalar' && column.type.type.base === 'CITEXT';
     }
 
-    private like(value: string, pattern: string): boolean {
-        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`^${escaped.replace(/%/g, '.*').replace(/_/g, '.')}$`).test(value);
+    /**
+     * `LIKE` as in Postgres (spec §7.2): `%` is any run, `_` is one character,
+     * `\` makes the next character plain. With `ignoreCase` (a `CITEXT` side,
+     * D15) both sides are lower-cased first.
+     */
+    private like(value: string, pattern: string, ignoreCase: boolean): boolean {
+        const text = Array.from(ignoreCase ? value.toLowerCase() : value);
+        const pat = Array.from(ignoreCase ? pattern.toLowerCase() : pattern);
+        return likeMatch(text, 0, pat, 0) === 'true';
     }
 
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */
@@ -822,13 +988,14 @@ export class MinabInterpreter {
 class State {
     constructor(
         readonly context: EvalContext,
+        readonly budget: RunBudget,
         readonly frames: Frame[],
         readonly functions: Map<string, FunctionDecl>,
         private readonly readHostInput: (name: string) => MinabValue
     ) {}
 
     push(frame: Frame): State {
-        return new State(this.context, [frame, ...this.frames], this.functions, this.readHostInput);
+        return new State(this.context, this.budget, [frame, ...this.frames], this.functions, this.readHostInput);
     }
 
     /** Frame `n` levels out, innermost first. A negative index would name a level inside a compiled statement, which this interpreter doesn't hold. */

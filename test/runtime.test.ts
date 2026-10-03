@@ -117,7 +117,7 @@ describe('compile and run', () => {
     test('compile gives SQL, or a coded refusal', async () => {
         const minab = createMinab({ schema: orderSchema() });
         const query = (await minab.prepare('FROM Order SELECT .id')).compile();
-        expect(query.ok && query.query.text).toMatch(/^SELECT /);
+        expect(query.ok && query.sql.text).toMatch(/^SELECT /);
         const broken = (await minab.prepare('FROM')).compile();
         expect(broken).toMatchObject({ ok: false, error: { code: 'compile.programHasErrors' } });
         const empty = (await minab.prepare('')).compile();
@@ -129,13 +129,13 @@ describe('compile and run', () => {
     test('run gives a value, and a program that needs data but gets no port fails with data.noPort', async () => {
         const minab = createMinab({ schema: orderSchema(), ruleContext: record });
         const pure = await minab.prepare('.total > 10');
-        expect(await pure.run({ record: { total: 25 } })).toEqual({ ok: true, value: true });
-        expect(await pure.run({ record: { total: 5 } })).toEqual({ ok: true, value: false });
+        expect(await pure.run({ record: { total: 25 } })).toMatchObject({ ok: true, value: true });
+        expect(await pure.run({ record: { total: 5 } })).toMatchObject({ ok: true, value: false });
 
         const needsData = await minab.prepare('EXISTS(#Customer[.id == ^.customer_id])');
         expect(await needsData.run({ record: { customer_id: 'c-1' } })).toMatchObject({ ok: false, error: { code: 'data.noPort' } });
         const withPort = await needsData.run({ record: { customer_id: 'c-1' } }, { data: new FixtureExecutor([{ rows: [{ value: true }] }]) });
-        expect(withPort).toEqual({ ok: true, value: true });
+        expect(withPort).toMatchObject({ ok: true, value: true });
     });
 
     test('run refuses a program with errors', async () => {
@@ -148,7 +148,7 @@ describe('compile and run', () => {
         const minab = createMinab({ schema: orderSchema(), ruleContext: record });
         const program = await minab.prepare('.total > 10');
         expect(minab.cacheStats().openDocuments).toBe(0);
-        expect(await program.run({ record: { total: 11 } })).toEqual({ ok: true, value: true });
+        expect(await program.run({ record: { total: 11 } })).toMatchObject({ ok: true, value: true });
     });
 });
 
@@ -195,7 +195,7 @@ describe('the service cache', () => {
         const program = await minab.prepare('.total > 10', { ruleContext: record });
         await minab.prepare('1'); // a second rule context: the first set is evicted
         expect(minab.cacheStats()).toMatchObject({ size: 1, created: 2 });
-        expect(await program.run({ record: { total: 11 } })).toEqual({ ok: true, value: true });
+        expect(await program.run({ record: { total: 11 } })).toMatchObject({ ok: true, value: true });
     });
 
     test('dispose frees the cache', async () => {

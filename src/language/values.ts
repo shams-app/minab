@@ -12,6 +12,7 @@
 import Big from 'big.js';
 import { normalizeDateTime } from './dates.js';
 import { coded } from './diagnostics/codes.js';
+import type { SourceRange } from '../runtime/types.js';
 import type { LogicalTypeBase } from './minab-types.js';
 
 export { Big };
@@ -19,6 +20,8 @@ export { Big };
 /** A number problem. `code` is the stable code, when the problem has one. */
 export class NumberError extends Error {
     readonly params: Record<string, string | number> = {};
+    /** Set by the interpreter: the node that failed. */
+    range?: SourceRange;
 
     constructor(
         message: string,

@@ -19,6 +19,7 @@ const fixtureSchema: MinabSchema = {
             columns: [
                 { name: 'id', type: { kind: 'scalar', type: scalarType('UUID') } },
                 { name: 'name', type: { kind: 'scalar', type: scalarType('TEXT') } },
+                { name: 'email', type: { kind: 'scalar', type: scalarType('CITEXT') } },
                 { name: 'credit_limit', type: { kind: 'scalar', type: scalarType('DECIMAL') } },
                 { name: 'tags', type: { kind: 'scalar', type: scalarType('JSON') } },
                 { name: 'orders', type: { kind: 'collection', table: 'Order' } }
@@ -86,6 +87,28 @@ describe('no-implicit-coercion (spec §5.5)', () => {
         const diagnostic = ds.find(d => d.code === 'type.implicitCoercion');
         expect(diagnostic, ds.map(messageText).join('\n')).toBeDefined();
         expect((diagnostic!.data as { params: unknown }).params).toEqual({ operator: '==', left: 'TEXT', right: 'INTEGER' });
+    });
+});
+
+describe('TEXT and CITEXT are one text family (spec §7.2, D15)', () => {
+    test('CITEXT == a text literal needs no CAST', async () => {
+        await expectClean(`FROM Customer WHERE .email == "Ada@Example.COM" SELECT .id`);
+    });
+
+    test('TEXT column vs CITEXT column, in both orders', async () => {
+        await expectClean(`FROM Customer WHERE .name == .email SELECT .id`);
+        await expectClean(`FROM Customer WHERE .email != .name SELECT .id`);
+    });
+
+    test('ordering, IN and LIKE accept the mix', async () => {
+        await expectClean(`FROM Customer WHERE .email < .name SELECT .id`);
+        await expectClean(`FROM Customer WHERE .email IN ["A@B.C", .name] SELECT .id`);
+        await expectClean(`FROM Customer WHERE .name LIKE .email SELECT .id`);
+    });
+
+    test('the family does not reach other types: CITEXT vs INTEGER and CITEXT vs UUID still need a CAST', async () => {
+        await expectError(`FROM Customer WHERE .email == 1 SELECT .id`, /explicit CAST/);
+        await expectError(`FROM Customer WHERE .email == .id SELECT .id`, /explicit CAST/);
     });
 });
 
