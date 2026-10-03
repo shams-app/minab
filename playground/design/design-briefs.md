@@ -26,7 +26,7 @@ The briefs use real content and real data from the playground, so the designs lo
 >
 > **What the site is:** a working playground. Everything runs in the visitor's browser: the Minab toolchain in a Web Worker, a real PostgreSQL compiled to WebAssembly, and a Monaco editor. Pages:
 > - Landing (`/`)
-> - Playground workbench (`/play`): editor, output tabs (Result, SQL, Execution, Problems, AST), and a host panel (Schema, Data, Record, Field)
+> - Playground workbench (`/play`): editor, output tabs (Result, SQL, Execution, Console, Problems, AST), and a host panel (Schema, Data, Record, Field)
 > - Guided tour of 12 lessons (`/learn`)
 > - Example gallery (`/examples`)
 > - Cheat sheet (`/reference`)
@@ -34,16 +34,20 @@ The briefs use real content and real data from the playground, so the designs lo
 >
 > **Audience, in order:** hiring managers skimming my portfolio (30–90 seconds, may not code); engineers evaluating my work; programming-language enthusiasts; developers who might use it.
 >
+> **Values are exact.** `DECIMAL` values (money) come back as exact strings, for example `"24.90"`, never as rounded floats. Show them with their trailing zeros, right-aligned in mono.
+>
+> **Brand direction (chosen):** "Terminal Noir": dark first, a developer-tool feel, deep charcoal surfaces, a syntax palette that glows, quiet glassy chrome. The sigil colors and the execution map make it distinct.
+>
 > **Tone:** precise, calm, confident. Let running code make the argument. Honest about what's unfinished: loops and writes "check today, run later".
 >
 > **The app is already built and working.** Your job is its visual and interaction design. It's implemented in React. Every color, size and duration comes from CSS custom properties (design tokens), and the code editor's syntax colors come from those tokens too. Please use these exact token and component names so the handoff to Claude Code maps one-to-one:
 > - Surface and text tokens: `--bg-canvas`, `--bg-surface`, `--surface-overlay`, `--surface-sunken`, `--surface-hover`, `--surface-selected`, `--text-primary`, `--text-secondary`, `--text-muted`, `--border-subtle`, `--border-default`
 > - Brand and state tokens: `--accent`, `--accent-soft`, `--focus-ring`, `--success`, `--danger`, `--warning`, `--info`, `--verdict-pass`, `--verdict-fail`, `--pushdown` (spans that reached the database), `--check-only` (constructs that don't execute yet)
 > - Editor and syntax tokens: `--editor-bg`, and the syntax palette `--syntax-keyword-pipeline`, `--syntax-keyword-dml`, `--syntax-keyword-operator`, `--syntax-keyword-control`, `--syntax-type`, `--syntax-constant`, `--syntax-builtin`, `--syntax-sigil-record`, `--syntax-sigil-field`, `--syntax-sigil-parent`, `--syntax-sigil-alias`, `--syntax-sigil-call`, `--syntax-sigil-key`, `--syntax-member`, `--syntax-string`, `--syntax-number`, `--syntax-comment`, `--syntax-operator`
-> - Components: Button, IconButton, Badge, Tabs, Kbd, Callout, EmptyState, Toggle, CodeBlock, Toast, AppShell, Wordmark, Toolbar, EngineStatusPill, RunButton, EditorStatusBar, OutputPanel, ResultView, RowsTable, VerdictCard, SqlView, ExecutionView (with TraceItem), ProblemsList, AstView, HostPanel, SchemaView, DataView, SqlConsole, RecordView, FieldView, PresetChips, Hero, HeroDemo, LayerCards, SigilGrid, HowItRuns, Comparison, FeatureGrid, CtaBand, Footer, GalleryFilters, ExampleCard, LessonList, LessonPanel, CheatSheet, CommandPalette, Drawer, EmbedFrame.
+> - Components: Button, IconButton, Badge, Tabs, Kbd, Callout, EmptyState, Toggle, CodeBlock, Toast, AppShell, Wordmark, Toolbar, EngineStatusPill, RunButton, EditorStatusBar, OutputPanel, ResultView, RowsTable, VerdictCard, SqlView, ExecutionView (with TraceItem), ConsoleView, ProblemsList, AstView, HostPanel, SchemaView, DataView, SqlConsole, RecordView, FieldView, PresetChips, Hero, HeroDemo, LayerCards, SigilGrid, HowItRuns, Comparison, FeatureGrid, CtaBand, Footer, GalleryFilters, ExampleCard, LessonList, LessonPanel, CheatSheet, CommandPalette, Drawer, EmbedFrame.
 >
 > **Hard requirements:**
-> - Light and dark themes, designed with equal care.
+> - Two themes. **Dark is the default**; light follows the OS or the manual toggle. Both get the same care and the same contrast rules.
 > - Works at 375 px wide.
 > - WCAG AA contrast, including every syntax color against `--editor-bg`.
 > - A visible focus state everywhere.
@@ -56,7 +60,7 @@ The briefs use real content and real data from the playground, so the designs lo
 
 ## 1 · Brand and design system
 
-> Let's build the design system first. Direction: **‹A "Instrument" — calm, editorial, precise: warm paper and ink, one saturated accent, typography-led, the sigils are the brand / B "Terminal Noir" — dark-first dev-tool, glowing syntax / C "Blueprint" — technical drawing, cyan grid, annotation lines›**.
+> Let's build the design system first. Direction: **"Terminal Noir"**: dark first and developer-tool native. Deep charcoal surfaces; the syntax palette glows; the chrome is subtle and a little glassy (thin borders, soft blur on overlays). The sigils are the brand. Dark is the default theme; the light theme keeps the same structure and hues, tuned for a light editor.
 >
 > 1. **Wordmark:** `.minab` in lowercase. The leading dot is Minab's current-record sigil, so it gets `--syntax-sigil-record` color. Show 3 variations of the wordmark and a square app icon built from the dot.
 > 2. **Color:** define every token listed in the primer for **light and dark**. Show them as swatches with names and hex values.
@@ -91,7 +95,7 @@ The briefs use real content and real data from the playground, so the designs lo
 > ORDERBY total_spent DESC
 > ```
 >
-> **Deliver:** a design-system page (light and dark side by side) covering tokens, the syntax palette with its contrast table, the type scale, the wordmark and icon, and the component states above.
+> **Deliver:** a design-system page (dark first, light next to it) covering tokens, the syntax palette with its contrast table, the type scale, the wordmark and icon, and the component states above.
 
 **Iterate:**
 - "Make the sigil colors more distinct from each other for color-blind users. Check with a deuteranopia simulation."
@@ -116,11 +120,13 @@ The briefs use real content and real data from the playground, so the designs lo
 >
 >      | # | customer_name | total_spent | order_count |
 >      |---|---|---|---|
->      | 1 | Ada Lovelace | 1863 | 5 |
->      | 2 | Margaret Hamilton | 1536.5 | 2 |
->      | 3 | Grace Hopper | 1467.5 | 3 |
->      | 4 | Alan Turing | 1355 | 2 |
->      | 5 | Donald Knuth | 1195.5 | 6 |
+>      | 1 | Ada Lovelace | 1863.00 | 5 |
+>      | 2 | Margaret Hamilton | 1536.50 | 2 |
+>      | 3 | Grace Hopper | 1467.50 | 3 |
+>      | 4 | Alan Turing | 1355.00 | 2 |
+>      | 5 | Donald Knuth | 1195.50 | 6 |
+>
+>      `total_spent` is an exact `DECIMAL`: shown with its trailing zeros.
 >
 >      The compiled SQL: `SELECT (SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id") AS "customer_name", SUM("Order"."total") AS "total_spent", COUNT(*) AS "order_count" FROM "Order" GROUP BY "Order"."customer_id" HAVING SUM("Order"."total") > $1 ORDER BY "total_spent" DESC`
 >    - **Rule:** the booking-overlap rule. A **VerdictCard** "Passes", then "The one statement that reached Postgres": `SELECT EXISTS (SELECT 1 FROM "Booking" AS "_r0" WHERE ((("_r0"."id" IS DISTINCT FROM $1 AND "_r0"."room_id" IS NOT DISTINCT FROM $2) AND "_r0"."start_date" < $3) AND "_r0"."end_date" > $4)) AS "value"`
@@ -144,7 +150,8 @@ The briefs use real content and real data from the playground, so the designs lo
 > 6. **Comparison:** "What you write, what runs". Minab on the left, the compiled SQL on the right, with an arrow. Caption: "compiled live — the same text `minab compile` prints".
 > 7. **FeatureGrid:** No implicit coercion · Relations without joins · Rules run next to the record · Real tooling (language server, VS Code, CLI) · Checked before it runs · Runs right here.
 > 8. **CtaBand:** "Try it on real data". Buttons: Open the playground / Browse examples.
-> 9. **Footer:** "Minab — designed and built by Hamed Zakery Miab", with links to GitHub, the language spec and the VS Code extension. "Built with Langium, PGlite, Monaco and React."
+> 9. **Footer:** "Minab — designed and built by Hamed Zakery Miab" (the name links to `https://hamcker.github.io`), with links to GitHub, the language spec and the VS Code extension. "Built with Langium, PGlite, Monaco and React."
+>    - **The name.** A quiet line above the credit: "Named for Minab, a city in southern Iran — in memory of the 168 children and their teachers who were killed when their school was bombed." It is a memorial: plain text in `--text-secondary`, no wit, no icon, no color effect, nothing animated near it.
 >
 > The top bar (**AppShell**) has the wordmark, nav (Playground · Tour · Examples · Reference), "Search ⌘K", a theme toggle and GitHub.
 >
@@ -176,7 +183,7 @@ The briefs use real content and real data from the playground, so the designs lo
 >   - PresetChips: ✓ Free slot (active) · ✗ Overlaps bkg-12 · ✗ Ends before it starts, and under them "Room 7 is free from Oct 1 to Oct 5 — the next booking starts on the 6th."
 >   - The record form: id `bkg-new`, room_id `room-7`, customer_id `cus-barbara`, purpose `Board meeting`, start_date `2026-10-01`, end_date `2026-10-05`.
 >
-> **Right column (45%):** the **OutputPanel**, with tabs Result · SQL · Execution (badge 1, pushdown tone) · Problems · AST. **Execution** is active:
+> **Right column (45%):** the **OutputPanel**, with tabs Result · SQL · Execution (badge 1, pushdown tone) · Console · Problems · AST. **Execution** is active:
 > - Summary: "1 statement reached Postgres; everything else was answered from the record in memory." Timings: parse 1.2 ms · check 0.8 ms · run 2.1 ms.
 > - One **TraceItem**:
 >   - "Statement 1" badge; "1 row · 2.1 ms"
@@ -208,17 +215,17 @@ The briefs use real content and real data from the playground, so the designs lo
 >
 >    | id | total | customer_name |
 >    |---|---|---|
->    | ord-190 | 1302.5 | Margaret Hamilton |
->    | ord-104 | 980 | Ada Lovelace |
->    | ord-87 | 412.5 | Grace Hopper |
->    | ord-171 | 190 | Barbara Liskov |
+>    | ord-190 | 1302.50 | Margaret Hamilton |
+>    | ord-104 | 980.00 | Ada Lovelace |
+>    | ord-87 | 412.50 | Grace Hopper |
+>    | ord-171 | 190.00 | Barbara Liskov |
 >
->    Numbers right-aligned in mono; a null cell; a JSON cell `{"weight_kg":12.5,"voltage":230}`. Footer meta: "4 rows · 1 statement · 3.4 ms".
+>    Numbers right-aligned in mono; `total` is an exact `DECIMAL`, so it keeps its trailing zeros; a null cell; a JSON cell `{"weight_kg":12.5,"voltage":230}`. Footer meta: "4 rows · 1 statement · 3.4 ms".
 > 4. No rows: "No rows — the query ran and matched nothing. Columns: name, country."
 > 5. VerdictCard **Passes**: "The Booking under validation passes this rule." plus "1 statement reached the database — see how →".
 > 6. VerdictCard **Fails**: "Answered entirely from the record — nothing reached the database."
 > 7. Field-rule verdict: "The value `-5` is rejected for Order."
-> 8. Value: `1302.5` with a `DECIMAL` badge.
+> 8. Value: `"24.90"` (an exact decimal, from `.price * .quantity`) with a `DECIMAL` badge. Show it as `24.90`; the badge says it is exact.
 > 9. Problems to fix first: "1 problem to fix first — Minab checks everything before it runs anything; nothing was sent to the database." with a "Show problems" button.
 > 10. Check-only Callout: "Checked ✓ — loops aren't executed yet". Body: "This program parses, resolves and type-checks. The evaluator doesn't run **loops** (spec §9.4) yet, and says so rather than guessing." Plus the evaluator's words in muted text: `"LoopStatement" is not executed yet`.
 > 11. Database error Callout: "The database refused a statement", with a message and the SQL.
@@ -232,15 +239,21 @@ The briefs use real content and real data from the playground, so the designs lo
 > - 0 statements: "The rule was settled from the record alone."
 > - Nothing ran: fix problems first.
 >
-> **ProblemsList:**
+> **ConsoleView** (the Console tab, next to Execution; `LOG(value, label?)` prints a value while the program runs):
+> - Lines in order. Each line: an optional label, the value in mono with its type color, and the source position (`line:col`). Clicking a line highlights its source range in the editor, like a TraceItem.
+> - Example lines: `subtotal  "24.90"  · 3:5`, then `lines  3  · 4:9`, then `true  · 6:1`.
+> - Empty: "No log lines — `LOG(value)` prints a value here while the program runs."
+> - The tab badge shows the line count (neutral tone).
+>
+> **ProblemsList:** every row shows the stable **error code**, so it can be searched and translated.
 > - 2 problems:
->   - error `"==" between TEXT and INTEGER requires an explicit CAST (no implicit coercion)` · minab · 2:7
->   - error `Expecting: one of these possible Token sequences…` · syntax · 1:17
+>   - error `"==" between TEXT and INTEGER requires an explicit CAST (no implicit coercion)` · `type.implicitCoercion` · 2:7
+>   - error `Expecting: one of these possible Token sequences…` · `syntax.parser` · 1:17
 > - Plus the empty state: "No problems".
 >
 > **AstView:** a tree for `FROM Order WHERE .total > 5 SELECT .id`, with inferred-type badges (DECIMAL, BOOLEAN, UUID) and one row hovered.
 >
-> **Deliver:** a component sheet with every state above, light and dark.
+> **Deliver:** a component sheet with every state above (including ConsoleView), light and dark.
 
 ---
 
@@ -310,8 +323,8 @@ The briefs use real content and real data from the playground, so the designs lo
 
 > Design **`/examples`** at 1440 and 375, light and dark.
 >
-> - **Header:** "Examples" — "29 programs, every one verified against the engine. The first eleven are the repository's own `examples/`."
-> - **GalleryFilters:** a search input; topic chips with counts (Query 15 · Record rule 6 · Field rule 2 · Aggregates 8 · Joins 1 · Functions 3 · Control flow 4 · Types 5 · JSON 2 · Check-only 4); a level select; "29 of 29".
+> - **Header:** "Examples" — "30 programs, every one verified against the engine. The first eleven are the repository's own `examples/`."
+> - **GalleryFilters:** a search input; topic chips with counts (Query 16 · Record rule 6 · Field rule 2 · Aggregates 8 · Joins 1 · Functions 3 · Control flow 4 · Types 5 · JSON 2 · Names 1 · Check-only 4); a level select; "30 of 30".
 > - **ExampleCard grid.** Cards: title, a one-liner (inline code allowed), a code preview (5–7 lines), tags, "beginner · §4 · from the repo". Use these:
 >   - "A first pipeline query": Filter, walk a relation, sort and limit — no JOIN written.
 >   - "Top customers": `GROUPBY` a relation, filter groups with `HAVING`, read the group through `KEY`.
@@ -319,6 +332,13 @@ The briefs use real content and real data from the playground, so the designs lo
 >   - "The customer must exist": A field-level rule: `$` is the value being validated.
 >   - "Case-insensitive lookup": A `CITEXT` column and an explicit `CAST` — no implicit coercion.
 >   - "Loops": A `for-in` loop over a table, with a guard. Checks today; runs later. (check-only)
+>   - "Persian names": Tables and fields named in Persian. The code still reads left to right; only the names are Persian. Preview:
+>     ```
+>     FROM سفارش
+>     WHERE .وضعیت == "ارسال‌شده"
+>     SELECT .مبلغ AS مبلغ_کل
+>     ```
+>     Tags: Query · Names. Make sure the Persian names render in the code font's fallback without breaking the line's left-to-right order.
 > - Hover and focus states for a card, the active chip state, and the "No examples match" empty state.
 >
 > **Deliver:** the gallery in its default, filtered and empty states, at desktop and mobile, light and dark.

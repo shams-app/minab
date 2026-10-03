@@ -25,8 +25,7 @@ const fixtureSchema: MinabSchema = {
             name: 'Customer',
             columns: [{ name: 'id', type: { kind: 'scalar', type: scalarType('INTEGER') } }]
         }
-    ],
-    functions: []
+    ]
 };
 
 let parse: ReturnType<typeof parseHelper<Model>>;

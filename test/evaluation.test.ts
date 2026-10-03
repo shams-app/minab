@@ -49,8 +49,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'total', type: { kind: 'scalar', type: scalarType('DECIMAL') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 class RecordingExecutor implements QueryExecutor {

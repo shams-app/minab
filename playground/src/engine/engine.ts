@@ -46,7 +46,7 @@ import type {
     TraceEntry
 } from './protocol.js';
 
-const EMPTY_SCHEMA: MinabSchema = { tables: [], functions: [] };
+const EMPTY_SCHEMA: MinabSchema = { tables: [] };
 const DEFAULT_RULE: MinabRuleContext = { isFieldRule: false };
 const EMPTY_CONTENTS: DatabaseContents = { schema: EMPTY_SCHEMA, seed: {}, script: '' };
 const PREVIEW_ROWS = 5;

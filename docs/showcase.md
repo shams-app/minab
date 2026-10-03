@@ -542,6 +542,13 @@ SET { activate: true };
 A function that queries, branches, loops, mutates via `UPDATE`, and calls another function — combining nearly every construct in the language in one place.
 
 ```
+fn daysSincePayment(customerId: UUID): INTEGER {
+    let days: INTEGER = (
+        FROM Payment WHERE .customer_id == customerId SELECT .days_ago AS d ORDERBY d LIMIT 1
+    );
+    days
+}
+
 fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
     let flaggedCount: INTEGER = 0;
 
@@ -585,6 +592,22 @@ This one example alone touches: functions with typed params/return, `let`, `for-
 Two things worth calling out about *why* it's written this way, not just what it does:
 - **No `switch` here, deliberately.** `switch` case values must be literals (§9.2) — they can't be computed conditions like `daysLate > 90`. An `if`/`else if`/`else` chain is the correct tool whenever the branches depend on a computed comparison rather than matching a value against a fixed set.
 - **The `if!`s inside the loop (§9.1.1) are genuine statements**, not the value-producing `if` — that's why they need no trailing `null` tail and no `else` at all when there's nothing to fall back to. Only `newStatus` itself, which produces a real `TEXT` value used right after, is built with the value-producing `if`/`else if`/`else` chain — the two forms coexist in the same function, each used where it actually fits.
+
+---
+
+## 15. Host inputs and host functions
+
+*Spec §8.7.* The host (for example Shamsine) declares typed names that a program can use. They are not declared in Minab source. Here the host declared the input `currentUser` (a record with `id`, `email` and `roles`) and the function `fxRate(from: TEXT, to: TEXT): DECIMAL`.
+
+```
+.owner_id == currentUser.id OR "admin" IN currentUser.roles OR .total * fxRate("EUR", .currency) > 1000
+```
+
+`currentUser` is read-only and the host gives its value for each run. `fxRate` is the host's code: it runs in the interpreter and is never turned into SQL. A user `fn`, a `let` or a parameter cannot use these names:
+
+```
+let currentUser: TEXT = "x";      // error: "currentUser" is a host input
+```
 
 ---
 

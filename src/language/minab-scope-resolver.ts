@@ -48,13 +48,16 @@ import {
     type VariableDecl
 } from './generated/ast.js';
 import { coded, type CodedMessage } from './diagnostics/codes.js';
-import { DEFAULT_RULE_CONTEXT, type MinabRuleContext, type SchemaProvider } from './schema.js';
+import type { MinabType } from './minab-types.js';
+import type { SchemaProvider } from './schema.js';
 
 export interface ResolvedScope {
     /** The AST node that establishes this scope/declaration (a Query, JoinClause, FilterAccess, LoopStatement, VariableDecl, Param, or — for a schema-external table — the referencing node itself). */
     owner: AstNode;
     /** The table this scope's rows come from, when statically known. Absent when it would require the Phase 4 type system to determine (e.g. traversal through a relation column). */
     tableName?: string;
+    /** Set when the name is a host input (D27): its declared type. */
+    hostInput?: MinabType;
 }
 
 export type ScopeResolution = { found: true; scope: ResolvedScope } | ({ found: false } & CodedMessage);
@@ -83,9 +86,13 @@ interface RawLevel {
 }
 
 export class MinabScopeResolver {
+    /**
+     * `rootTable` is the host's `ruleContext.recordTable`: the table of the record under
+     * validation. It is the table of a top-level `.` and `^` (spec §6).
+     */
     constructor(
         private readonly schema: SchemaProvider,
-        private readonly ruleContext: MinabRuleContext = DEFAULT_RULE_CONTEXT
+        private readonly rootTable?: string
     ) {}
 
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
@@ -175,6 +182,10 @@ export class MinabScopeResolver {
         if (decl) {
             return { found: true, scope: { owner: decl } };
         }
+        const input = this.schema.getHostInput(node.name);
+        if (input) {
+            return { found: true, scope: { owner: node, tableName: input.kind === 'record' ? input.table : undefined, hostInput: input } };
+        }
         return { found: false, ...coded('scope.unknownName', { name: node.name }) };
     }
 
@@ -261,7 +272,7 @@ export class MinabScopeResolver {
         // unknown when the host gave none. This is deliberately permissive — whether `.`/`^` are legal in a given
         // position at all is Phase 3's (the Validator's) job, not this
         // one's.
-        const root: ScopeLevel = { owner: child, tableName: this.rootTable(), aliases: new Map() };
+        const root: ScopeLevel = { owner: child, tableName: this.rootTableName(), aliases: new Map() };
 
         // `raw` is innermost-first. A receiver can only refer to an outer
         // scope (e.g. `FROM .orders`, or a bare alias from further out), so
@@ -283,9 +294,8 @@ export class MinabScopeResolver {
     }
 
     /** The table of the record under validation (spec §6), when the host named one and the schema has it. */
-    private rootTable(): string | undefined {
-        const name = this.ruleContext.recordTable;
-        return name === undefined ? undefined : this.schema.getTable(name)?.name;
+    private rootTableName(): string | undefined {
+        return this.rootTable === undefined ? undefined : this.schema.getTable(this.rootTable)?.name;
     }
 
     private receiverTableName(receiver: Expression | undefined, outerLevels: ScopeLevel[]): string | undefined {
@@ -326,8 +336,10 @@ export class MinabScopeResolver {
     private tableOfExpression(expr: Expression): string | undefined {
         if (isCurrentRecord(expr)) {
             const base = this.resolveCurrentRecordBase(expr);
-            if (!base.found || !base.scope.tableName) return undefined;
-            return expr.field ? this.followRelationColumn(base.scope.tableName, expr.field) : base.scope.tableName;
+            if (!base.found) return undefined;
+            const baseTable = base.scope.tableName ?? (isModel(base.scope.owner) ? this.rootTable : undefined);
+            if (!baseTable) return undefined;
+            return expr.field ? this.followRelationColumn(baseTable, expr.field) : baseTable;
         }
         if (isParentRecord(expr)) {
             const res = this.resolveParentRecord(expr);
@@ -341,6 +353,8 @@ export class MinabScopeResolver {
             const res = this.resolveNameRef(expr);
             return res.found ? res.scope.tableName : undefined;
         }
+        // `FROM .orders[...]`: the filter narrows rows, the table stays the receiver's.
+        if (isFilterAccess(expr)) return this.tableOfExpression(expr.receiver);
         if (isMemberAccess(expr)) {
             const receiverTable = this.tableOfExpression(expr.receiver);
             return receiverTable ? this.followRelationColumn(receiverTable, expr.member) : undefined;

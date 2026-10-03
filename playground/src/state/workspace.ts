@@ -17,7 +17,7 @@ export interface WorkspaceHost {
     /** The dataset the schema and seed come from, or `null` for a schema written by hand. */
     dataset: string | null;
     /** A hand-written or edited schema; overrides the dataset's when set. */
-    schema?: { tables: unknown[]; functions?: unknown[] };
+    schema?: { tables: unknown[] };
     /** Rows for a hand-written schema; overrides the dataset's when set. */
     seed?: Record<string, Row[]>;
     rule: { recordTable?: string; fieldType?: string };

@@ -65,8 +65,7 @@ const fixtureSchema: MinabSchema = {
                 { name: 'owner', type: { kind: 'ref', table: 'Customer', nullable: true } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let parse: ReturnType<typeof parseHelper<Model>>;
@@ -184,6 +183,20 @@ describe('an aggregate GROUPBY/HAVING query (spec §4.3)', () => {
         expect(params).toEqual([1000]);
     });
 
+    test('groups by a field behind a relation with one LEFT JOIN, so GROUP BY and SELECT agree', async () => {
+        const { text } = await compile(`
+            FROM Order
+            GROUPBY .customer.country
+            SELECT KEY AS country, SUM(.total) AS revenue
+        `);
+        expect(text).toBe(
+            'SELECT "_g0"."country" AS "country", SUM("Order"."total") AS "revenue"' +
+                ' FROM "Order"' +
+                ' LEFT JOIN "Customer" AS "_g0" ON "_g0"."id" = "Order"."customer_id"' +
+                ' GROUP BY "_g0"."country"'
+        );
+    });
+
     test('an aggregate over a related collection becomes a correlated subquery', async () => {
         const { text, params } = await compile(`
             FROM Customer
@@ -245,9 +258,14 @@ describe('what the compiler refuses, so the interpreter takes it (ADR 0001)', ()
         expect(reason).not.toContain('discounted(');
     });
 
-    test('an if expression has no SQL form', async () => {
-        const reason = await compileError(`FROM Order WHERE if .total > 5 { true } else { false } SELECT .id`);
-        expect(reason).toMatch(/interpreted layer/);
+    test('a switch arm with a statement is refused with compile.blockInQuery', async () => {
+        const result = compiler.compileQuery(await queryOf(`FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s`));
+        expect(result).toMatchObject({ ok: false, code: 'compile.blockInQuery' });
+    });
+
+    test('an if branch with a statement is refused with compile.blockInQuery', async () => {
+        const result = compiler.compileQuery(await queryOf(`FROM Order SELECT if .total > 5 { let x: INTEGER = 1; "big" } else { "small" } AS s`));
+        expect(result).toMatchObject({ ok: false, code: 'compile.blockInQuery' });
     });
 
     test('a relation with no declared foreign key says so instead of guessing', async () => {
@@ -263,5 +281,100 @@ describe('what the compiler refuses, so the interpreter takes it (ADR 0001)', ()
     test('a collection used as a plain value is refused (spec §3.4)', async () => {
         const reason = await compileError(`FROM Customer WHERE .orders == 1 SELECT .id`);
         expect(reason).toMatch(/collection/);
+    });
+});
+
+describe('switch and if become CASE (spec §9.1, §9.2)', () => {
+    test('a switch with several values in one arm', async () => {
+        const { text, params } = await compile(`FROM Order SELECT switch .status { "a", "b" => 1, _ => 3 } AS s`);
+        expect(text).toBe('SELECT CASE "Order"."status" WHEN $1 THEN $2::numeric WHEN $3 THEN $4::numeric ELSE $5::numeric END AS "s" FROM "Order"');
+        expect(params).toEqual(['a', 1, 'b', 1, 3]);
+    });
+
+    test('a null case value makes every arm a searched CASE, and `= NULL` is never written', async () => {
+        const { text, params } = await compile(`FROM Order SELECT switch .tracking_code { null => "none", "x" => "x", _ => "other" } AS s`);
+        expect(text).toBe(
+            'SELECT CASE WHEN "Order"."tracking_code" IS NULL THEN $1::text WHEN "Order"."tracking_code" = $2 THEN $3::text ELSE $4::text END AS "s" FROM "Order"'
+        );
+        expect(params).toEqual(['none', 'x', 'x', 'other']);
+    });
+
+    test('a block with only a tail is its tail', async () => {
+        const { text } = await compile(`FROM Order SELECT switch .status { "a" => { 1 }, _ => { 2 } } AS s`);
+        expect(text).toBe('SELECT CASE "Order"."status" WHEN $1 THEN $2::numeric ELSE $3::numeric END AS "s" FROM "Order"');
+    });
+
+    test('if and else if', async () => {
+        const { text, params } = await compile(`FROM Order SELECT if .total > 100 { "big" } else if .total > 10 { "mid" } else { "small" } AS s`);
+        expect(text).toBe(
+            'SELECT CASE WHEN "Order"."total" > $1 THEN $2::text ELSE CASE WHEN "Order"."total" > $3 THEN $4::text ELSE $5::text END END AS "s" FROM "Order"'
+        );
+        expect(params).toEqual([100, 'big', 10, 'mid', 'small']);
+    });
+
+    test('an if with no else answers NULL', async () => {
+        const { text } = await compile(`FROM Order SELECT if .total > 100 { "big" } AS s`);
+        expect(text).toBe('SELECT CASE WHEN "Order"."total" > $1 THEN $2::text ELSE NULL END AS "s" FROM "Order"');
+    });
+});
+
+describe('is and isnot (spec §5.6)', () => {
+    test('is null and isnot null', async () => {
+        expect((await compile(`FROM Order WHERE .customer is null SELECT .id`)).text).toBe(
+            'SELECT "Order"."id" FROM "Order" WHERE ("Order"."customer_id" IS NULL)'
+        );
+        expect((await compile(`FROM Order WHERE .tracking_code isnot null SELECT .id`)).text).toBe(
+            'SELECT "Order"."id" FROM "Order" WHERE ("Order"."tracking_code" IS NOT NULL)'
+        );
+    });
+
+    test.each([
+        ['object', 'ObjectKind'],
+        ['array', 'ArrayKind'],
+        ['string', 'StringKind'],
+        ['number', 'NumberKind'],
+        ['boolean', 'BooleanKind']
+    ])('is %s reads jsonb_typeof, and null counts as "not that kind"', async kind => {
+        const is = (await compile(`FROM Order WHERE .tracking_code is ${kind} SELECT .id`)).text;
+        expect(is).toBe(`SELECT "Order"."id" FROM "Order" WHERE (jsonb_typeof("Order"."tracking_code") IS NOT DISTINCT FROM '${kind}')`);
+        const isnot = (await compile(`FROM Order WHERE .tracking_code isnot ${kind} SELECT .id`)).text;
+        expect(isnot).toBe(`SELECT "Order"."id" FROM "Order" WHERE (jsonb_typeof("Order"."tracking_code") IS DISTINCT FROM '${kind}')`);
+    });
+});
+
+describe('JSON literals (spec §7.3)', () => {
+    test('an object and a list, nested, with every value bound', async () => {
+        const { text, params } = await compile(`FROM Order SELECT { id: .id, tags: ["a", 2], meta: { ok: true } } AS o`);
+        expect(text).toBe(
+            'SELECT jsonb_build_object($1::text, "Order"."id", $2::text, jsonb_build_array($3::text, $4::numeric), $5::text, jsonb_build_object($6::text, TRUE)) AS "o" FROM "Order"'
+        );
+        expect(params).toEqual(['id', 'tags', 'a', 2, 'meta', 'ok']);
+    });
+
+    test('an empty object', async () => {
+        expect((await compile(`FROM Order SELECT { } AS o`)).text).toBe('SELECT jsonb_build_object() AS "o" FROM "Order"');
+    });
+});
+
+describe('FROM a related collection (spec §3.2)', () => {
+    const outer = (key: unknown) => ({
+        resolve: () => ({ found: false as const, reason: 'none' }),
+        resolveRecord: (frame: number) =>
+            frame === 0 ? { found: true as const, record: { table: 'Customer', key } } : { found: false as const, reason: 'none' }
+    });
+
+    test('FROM .orders[filter] reads the child table, linked to the outer row, with the filter', async () => {
+        const result = compiler.compileQuery(await queryOf(`FROM .orders[.status == "paid"] SELECT .id AS id`), outer('ada'));
+        if (!result.ok) throw new Error(result.reason);
+        expect(result.query.text).toBe(
+            'SELECT "_r0"."id" AS "id" FROM "Order" AS "_r0" WHERE "_r0"."customer_id" = $1 AND "_r0"."status" IS NOT DISTINCT FROM $2'
+        );
+        expect(result.query.params).toEqual(['ada', 'paid']);
+    });
+
+    test('FROM .orders, then the user WHERE', async () => {
+        const result = compiler.compileQuery(await queryOf(`FROM .orders AS o WHERE o.total > 5 SELECT o.id AS id`), outer('ada'));
+        if (!result.ok) throw new Error(result.reason);
+        expect(result.query.text).toBe('SELECT "_r0"."id" AS "id" FROM "Order" AS "_r0" WHERE "_r0"."customer_id" = $1 AND "_r0"."total" > $2');
     });
 });

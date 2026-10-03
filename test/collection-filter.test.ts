@@ -39,8 +39,7 @@ const schema: MinabSchema = {
                 { name: 'qty', type: { kind: 'scalar', type: scalarType('INTEGER') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 function messageText(d: Diagnostic): string {

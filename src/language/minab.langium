@@ -20,8 +20,8 @@ Query:
     (orderByClause=OrderByClause)?
     (limitClause=LimitClause)?;
 
-FromSource:
-    TableRef | NamedScope | CurrentRecord;
+FromSource infers Expression:
+    TableRef | NamedScope | CurrentRecord ({infer FilterAccess.receiver=current} '[' filter=Expression ']')?;
 
 TableRef infers Expression:
     {infer TableRef} name=QualifiedName;
