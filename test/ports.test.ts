@@ -60,9 +60,9 @@ describe('host inputs (D27)', () => {
         expect(program.diagnostics).toEqual([]);
         expect(program.resultType).toBe('BOOLEAN');
         const yes = await program.run({ record: { status: 'u-1' }, hostInputs: { currentUser: { id: 'u-1' } } });
-        expect(yes).toEqual({ ok: true, value: true });
+        expect(yes).toMatchObject({ ok: true, value: true });
         const no = await program.run({ record: { status: 'u-2' }, hostInputs: { currentUser: { id: 'u-1' } } });
-        expect(no).toEqual({ ok: true, value: false });
+        expect(no).toMatchObject({ ok: true, value: false });
     });
 
     test('a run without the input is eval.missingInput', async () => {
@@ -82,13 +82,13 @@ describe('host inputs (D27)', () => {
         const bad = await minab.prepare('limit == "x"');
         expect(bad.diagnostics.map(d => d.code)).toContain('type.implicitCoercion');
         const run = await (await minab.prepare('limit + 1')).run({ hostInputs: { limit: 4 } });
-        expect(run).toEqual({ ok: true, value: 5 });
+        expect(run).toMatchObject({ ok: true, value: 5 });
     });
 
     test('an input may be null when its type says so', async () => {
         const minab = createMinab({ schema: orderSchema(), inputs: { note: 'TEXT?' } });
         const program = await minab.prepare('note == null');
-        expect(await program.run({ hostInputs: { note: null } })).toEqual({ ok: true, value: true });
+        expect(await program.run({ hostInputs: { note: null } })).toMatchObject({ ok: true, value: true });
     });
 
     test('an unknown field of a record input is a scope error', async () => {
@@ -101,14 +101,14 @@ describe('host inputs (D27)', () => {
         const program = await host().prepare('currentUser.email == CAST("ADA@example.com" AS CITEXT)');
         expect(program.ok).toBe(true);
         const result = await program.run({ hostInputs: { currentUser: { email: 'ada@example.com' } } });
-        expect(result).toEqual({ ok: true, value: true });
+        expect(result).toMatchObject({ ok: true, value: true });
     });
 
     test('a roles array works with IN', async () => {
         const program = await host().prepare('"admin" IN currentUser.roles');
         expect(program.diagnostics).toEqual([]);
-        expect(await program.run({ hostInputs: { currentUser: { roles: ['admin'] } } })).toEqual({ ok: true, value: true });
-        expect(await program.run({ hostInputs: { currentUser: { roles: ['staff'] } } })).toEqual({ ok: true, value: false });
+        expect(await program.run({ hostInputs: { currentUser: { roles: ['admin'] } } })).toMatchObject({ ok: true, value: true });
+        expect(await program.run({ hostInputs: { currentUser: { roles: ['staff'] } } })).toMatchObject({ ok: true, value: false });
     });
 
     test('a host input reaches SQL as a bound parameter', async () => {
@@ -116,7 +116,7 @@ describe('host inputs (D27)', () => {
         const program = await host().prepare('FROM Order WHERE .status == currentUser.id SELECT .id');
         expect(program.diagnostics).toEqual([]);
         const result = await program.run({ hostInputs: { currentUser: { id: 'u-7' } } }, { data: port });
-        expect(result).toEqual({ ok: true, value: [{ id: 'o-1' }] });
+        expect(result).toMatchObject({ ok: true, value: [{ id: 'o-1' }] });
         expect(calls[0].params).toEqual(['u-7']);
     });
 
@@ -143,9 +143,9 @@ describe('host functions (D27)', () => {
         const program = await host().prepare('.total * fxRate("EUR", .status) > 1000');
         expect(program.diagnostics).toEqual([]);
         const same = await program.run({ record: { total: 600, status: 'USD' } }, { hostFunctions: rates });
-        expect(same).toEqual({ ok: true, value: false });
+        expect(same).toMatchObject({ ok: true, value: false });
         const converted = await program.run({ record: { total: 600, status: 'TRY' } }, { hostFunctions: rates });
-        expect(converted).toEqual({ ok: true, value: true });
+        expect(converted).toMatchObject({ ok: true, value: true });
     });
 
     test('the implementation gets the argument values and a signal, and may be async', async () => {
@@ -166,9 +166,11 @@ describe('host functions (D27)', () => {
             },
             { signal: controller.signal }
         );
-        expect(result).toEqual({ ok: true, value: 4 });
+        expect(result).toMatchObject({ ok: true, value: 4 });
         expect(seen).toEqual([['EUR', 'USD']]);
-        expect(signals[0]).toBe(controller.signal);
+        // R4: the port gets one signal that joins the host's signal and the wall-time timer.
+        expect(signals[0]).toBeInstanceOf(AbortSignal);
+        expect(signals[0].aborted).toBe(false);
     });
 
     test('a call with no implementation is eval.hostFunctionMissing', async () => {
@@ -203,7 +205,7 @@ describe('host functions (D27)', () => {
         const program = await host().prepare('fxRate("EUR", "TRY") * COUNT(#Order[.status == "open"]) == 6');
         expect(program.diagnostics).toEqual([]);
         const result = await program.run({}, { data: port, hostFunctions: rates });
-        expect(result).toEqual({ ok: true, value: true });
+        expect(result).toMatchObject({ ok: true, value: true });
         expect(calls).toHaveLength(1);
         expect(calls[0].text).not.toContain('fxRate');
     });
@@ -268,7 +270,7 @@ describe('names (D10, D11)', () => {
     test('without the declaration, the same names are fine', async () => {
         const program = await createMinab({ schema: orderSchema() }).prepare('let currentUser: TEXT = "x";\ncurrentUser');
         expect(program.ok).toBe(true);
-        expect(await program.run()).toEqual({ ok: true, value: 'x' });
+        expect(await program.run()).toMatchObject({ ok: true, value: 'x' });
     });
 
     test('a name resolves for the checker only when the host declared it', async () => {
@@ -337,7 +339,10 @@ describe('events (D33)', () => {
         const events: MinabEvent[] = [];
         const failing: DataPort = { execute: () => Promise.reject(new Error('down')) };
         const program = await createMinab({ schema: orderSchema() }).prepare('FROM Order SELECT .id');
-        await expect(program.run({}, { data: failing, events: { emit: e => events.push(e) } })).rejects.toThrow('down');
+        // R4: a data port failure is a coded result. The driver's text is not copied into it.
+        const failed = await program.run({}, { data: failing, events: { emit: e => events.push(e) } });
+        expect(failed).toMatchObject({ ok: false, error: { code: 'data.error' } });
+        expect(JSON.stringify(failed)).not.toContain('down');
         expect(events.map(e => e.kind)).toEqual(['statement', 'timing', 'timing']);
 
         const { port } = fakeData([]);
@@ -352,7 +357,7 @@ describe('events (D33)', () => {
                 }
             }
         );
-        expect(result).toEqual({ ok: true, value: [] });
+        expect(result).toMatchObject({ ok: true, value: [] });
     });
 
     test('a rule settled from the record sends no statement event', async () => {
@@ -370,7 +375,8 @@ describe('data port', () => {
         const controller = new AbortController();
         await program.run({}, { data: port }, { signal: controller.signal });
         await program.run({}, { data: port });
-        expect(calls[0].signal).toBe(controller.signal);
+        // R4: the port gets one signal that joins the host's signal and the wall-time timer.
+        expect(calls[0].signal).toBeInstanceOf(AbortSignal);
         expect(calls[1].signal).toBeInstanceOf(AbortSignal);
         expect(calls[1].signal.aborted).toBe(false);
     });
@@ -378,7 +384,7 @@ describe('data port', () => {
     test('a plain QueryExecutor (one argument) still works as the data port', async () => {
         const legacy = { execute: () => Promise.resolve([{ id: 'o-2' }]) };
         const program = await createMinab({ schema: orderSchema() }).prepare('FROM Order SELECT .id');
-        expect(await program.run({}, { data: legacy })).toEqual({ ok: true, value: [{ id: 'o-2' }] });
+        expect(await program.run({}, { data: legacy })).toMatchObject({ ok: true, value: [{ id: 'o-2' }] });
     });
 
     test('no data port is data.noPort', async () => {
@@ -417,16 +423,16 @@ describe('clock', () => {
         const minab = createMinab({ schema: orderSchema(), functions: [{ name: 'probe', params: [], returns: 'INTEGER' }] });
         const program = await minab.prepare('probe() + probe()');
         // The interpreter holds the instant of the run; L6's NOW() will return it. Here we read it through the evaluation context.
-        const services = (program as unknown as { interpreter: { evaluate: (...a: unknown[]) => Promise<unknown> } }).interpreter;
-        const original = services.evaluate.bind(services);
-        services.evaluate = (model: unknown, context: unknown) => {
+        const services = (program as unknown as { interpreter: { run: (...a: unknown[]) => Promise<unknown> } }).interpreter;
+        const original = services.run.bind(services);
+        services.run = (model: unknown, context: unknown) => {
             const ctx = context as { now?: Date; timeZone?: string };
             seen.push(ctx.now);
             expect(ctx.timeZone).toBe('Europe/Istanbul');
             return original(model, context);
         };
         const result = await program.run({}, { clock: { now: () => fixed, timeZone: 'Europe/Istanbul' }, hostFunctions: { call: () => 1 } });
-        expect(result).toEqual({ ok: true, value: 2 });
+        expect(result).toMatchObject({ ok: true, value: 2 });
         expect(seen).toEqual([fixed]);
     });
 });

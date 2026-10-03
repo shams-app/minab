@@ -94,12 +94,36 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
     'call.wrongArgumentCount': { via: 'validator', program: 'ROUND()' },
 
+    cancelled: { via: 'runtime' }, // needs an AbortSignal: test/limits.test.ts
+
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'compile.nothingToCompile': { via: 'runtime' }, // test/runtime.test.ts
+    'compile.notSql': { via: 'runtime' }, // test/run-errors.test.ts
+    'compile.programHasErrors': { via: 'runtime' }, // test/runtime.test.ts
+
+    'data.error': { via: 'runtime' }, // needs a failing data port: test/run-errors.test.ts
+    'data.noPort': { via: 'runtime' }, // test/runtime.test.ts
+
     'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
+    'eval.failed': { via: 'runtime' }, // test/run-errors.test.ts
+    'eval.hostFunctionFailed': { via: 'runtime' }, // needs host declarations: test/run-errors.test.ts
+    'eval.hostFunctionMissing': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
+    'eval.missingInput': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.programInvalid': { via: 'runtime' }, // test/runtime.test.ts
+    'eval.writesNotSupported': { via: 'runtime' }, // test/ports.test.ts
+
+    'limit.callDepth': { via: 'runtime' }, // test/limits.test.ts
+    'limit.sourceTooLong': { via: 'runtime' }, // test/limits.test.ts
+    'limit.timeout': { via: 'runtime' }, // test/limits.test.ts
+    'limit.tooDeep': { via: 'runtime' }, // test/limits.test.ts
+    'limit.tooManyIterations': { via: 'runtime' }, // test/limits.test.ts
+    'limit.tooManyRows': { via: 'runtime' }, // test/limits.test.ts
+    'limit.tooManyStatements': { via: 'runtime' }, // test/limits.test.ts
+
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
@@ -196,7 +220,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^(syntax|scope|type|null|call|compile|eval|query|rule)\.[a-z][A-Za-z0-9]*$/);
+        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule)\.[a-z][A-Za-z0-9]*|cancelled)$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);

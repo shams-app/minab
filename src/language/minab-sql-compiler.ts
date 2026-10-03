@@ -80,14 +80,17 @@ import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
-/** A refusal has an English `reason`. When the refusal has a stable code (see the registry), `code` and `params` come with it. */
+/**
+ * A refusal has an English `reason` and a stable code from the registry. A refusal with no
+ * specific code is `compile.notSql`, and `params.reason` repeats the reason.
+ */
 export type SqlResult =
     | { ok: true; query: SqlQuery }
     | {
           ok: false;
           reason: string;
-          code?: DiagnosticCode;
-          params?: DiagnosticParams;
+          code: DiagnosticCode;
+          params: DiagnosticParams;
       };
 
 /** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
@@ -274,7 +277,9 @@ export class MinabSqlCompiler {
             return { ok: true, query: { text, params: ctx.params } };
         } catch (e) {
             if (e instanceof CompileError) {
-                return e.code ? { ok: false, reason: e.message, code: e.code, params: e.params } : { ok: false, reason: e.message };
+                return e.code
+                    ? { ok: false, reason: e.message, code: e.code, params: e.params ?? {} }
+                    : { ok: false, reason: e.message, code: 'compile.notSql', params: { reason: e.message } };
             }
             throw e;
         }
