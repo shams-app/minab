@@ -25,12 +25,12 @@ export interface Loaded {
 const cache = new Map<string, Loaded>();
 
 /** Services are built once for each distinct schema. */
-export function loadSchema(spec: SchemaSpec): Loaded {
-    const key = JSON.stringify(spec);
+export function loadSchema(spec: SchemaSpec, recordTable?: string): Loaded {
+    const key = JSON.stringify([spec, recordTable]);
     const cached = cache.get(key);
     if (cached) return cached;
     const schema = parseConfig({ schema: spec }).schema;
-    const services = createMinabServices(EmptyFileSystem, schema);
+    const services = createMinabServices(EmptyFileSystem, schema, recordTable ? { isFieldRule: false, recordTable } : undefined);
     const parse = parseHelper<Model>(services.Minab);
     const loaded: Loaded = {
         schema,
@@ -81,7 +81,7 @@ export function sameValue(a: unknown, b: unknown): boolean {
     if (Array.isArray(a) || Array.isArray(b)) {
         return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
     }
-    if (typeof a === 'object' && typeof b === 'object') return JSON.stringify(a) === JSON.stringify(b);
+    if (typeof a === 'object' && typeof b === 'object') return JSON.stringify(sortedJson(a)) === JSON.stringify(sortedJson(b));
     return a === b;
 }
 
@@ -96,6 +96,17 @@ export function showOutcome(o: Outcome): string {
     return JSON.stringify(o.value, (_key, v) => (typeof v === 'bigint' ? Number(v) : v)) ?? 'undefined';
 }
 
+/** A JSON value with its object keys sorted: jsonb does not keep key order. */
+function sortedJson(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(sortedJson);
+    if (typeof value !== 'object' || value === null || value instanceof Decimal) return value;
+    return Object.fromEntries(
+        Object.keys(value)
+            .sort()
+            .map(k => [k, sortedJson((value as Record<string, unknown>)[k])])
+    );
+}
+
 /** A row as plain JSON, so rows compare by value. */
 export function plainRow(row: Row): string {
     return JSON.stringify(
@@ -103,7 +114,11 @@ export function plainRow(row: Row): string {
             .sort()
             .map(k => [
                 k,
-                row[k] instanceof Decimal ? canonicalDecimal((row[k] as Decimal).text) : typeof row[k] === 'number' ? canonicalDecimal(String(row[k])) : row[k]
+                row[k] instanceof Decimal
+                    ? canonicalDecimal((row[k] as Decimal).text)
+                    : typeof row[k] === 'number'
+                      ? canonicalDecimal(String(row[k]))
+                      : sortedJson(row[k])
             ])
     );
 }

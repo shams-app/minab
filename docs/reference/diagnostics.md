@@ -112,6 +112,15 @@ A function call is wrong.
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
 
+## compile
+
+A program cannot become SQL.
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `compile.blockInQuery` | error | a block with statements cannot run inside a query (a statement cannot become SQL) | none | A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query. |
+| `compile.hostFunctionInSql` | error | "{name}" is a host function — it runs in the host, never in SQL | `name` | A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query. |
+
 ## query
 
 A query is used in a way its shape does not allow.

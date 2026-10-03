@@ -33,9 +33,11 @@ import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, t
 import {
     isFilterAccess,
     isFunctionDecl,
+    isCallExpression,
     isMemberAccess,
     isModel,
     isNameRef,
+    isOrderByClause,
     isQuery,
     isTupleAccess,
     isTypeRef,
@@ -57,7 +59,9 @@ import {
     type NamedScope,
     type NameRef,
     type Param,
+    type ParentRecord,
     type SwitchExpr,
+    type Subquery,
     type TupleAccess,
     type UnaryExpression,
     type VariableDecl,
@@ -94,6 +98,9 @@ export function registerValidationChecks(services: MinabServices): void {
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
         CurrentRecord: validator.checkExpressionTypeChecks,
+        ParentRecord: validator.checkExpressionTypeChecks,
+        NameRef: validator.checkNameRefTypeChecks,
+        Subquery: validator.checkExpressionTypeChecks,
         WhereClause: validator.checkConditionIsBoolean,
         HavingClause: validator.checkConditionIsBoolean,
         GroupByClause: validator.checkGroupKeysNotCollection,
@@ -149,13 +156,35 @@ export class MinabValidator {
             | ListLiteral
             | IfExpr
             | SwitchExpr
-            | CurrentRecord,
+            | CurrentRecord
+            | ParentRecord
+            | NameRef
+            | Subquery,
         accept: ValidationAcceptor
     ): void {
         const result = this.services.typeChecker.inferType(node);
         if (!result.ok && result.origin === node) {
             report(accept, result, { node });
         }
+    }
+
+    /**
+     * Two kinds of `NameRef` are not values, so they are skipped here:
+     *  - the callee of a call is a function name. The call itself reports
+     *    an unknown function;
+     *  - in `ORDERBY`, a name that is a `SELECT` alias (spec §4.1).
+     */
+    checkNameRefTypeChecks(node: NameRef, accept: ValidationAcceptor): void {
+        if (isCallExpression(node.$container) && node.$containerProperty === 'callee') return;
+        if (this.isSelectAliasInOrderBy(node)) return;
+        this.checkExpressionTypeChecks(node, accept);
+    }
+
+    private isSelectAliasInOrderBy(node: NameRef): boolean {
+        const orderBy = AstUtils.getContainerOfType(node, isOrderByClause);
+        const query = orderBy?.$container;
+        if (!orderBy || !isQuery(query)) return false;
+        return query.selectClause?.items.some(item => item.alias === node.name) ?? false;
     }
 
     checkConditionIsBoolean(node: WhereClause | HavingClause, accept: ValidationAcceptor): void {
