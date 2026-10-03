@@ -156,6 +156,8 @@ const NO_RECORD_VARIABLE =
     'uses `customer` as a record variable (`customer.id`), and no `let` can declare one yet: a record value only comes from a relation field';
 const NO_RECORD_TABLE = 'needs a record table with relations (doctor, customers) that the fixture does not have';
 
+const HOST_NAMES = 'uses a host input and a host function, which the host declares at createMinab (R3 tests them in test/ports.test.ts)';
+
 const CHECK: Record<string, CheckSetup> = {
     'spec §5.5 #2': { prelude: () => RAW_ID },
     'spec §7.3 #3': { prelude: () => 'let config: JSON = {};' },
@@ -182,10 +184,11 @@ const CHECK: Record<string, CheckSetup> = {
     'spec §7.4 #2': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §8.4 #1': { context: 'customer', prelude: () => STUBS },
     'spec §8.4 #2': { prelude: block => block('spec §8.2 #1') },
+    'spec §8.7 #1': { parseOnly: HOST_NAMES },
+    'spec §8.7 #2': { parseOnly: HOST_NAMES },
     'spec §9.1 #4': { prelude: () => STUBS + '\n' + TOTAL },
     'spec §9.1 #5': {
-        prelude: block =>
-            block('spec §8.2 #2') + '\nlet shouldProcess: BOOLEAN = true;\nlet result: BOOLEAN = false;\nlet orderId: UUID? = null;'
+        prelude: block => block('spec §8.2 #2') + '\nlet shouldProcess: BOOLEAN = true;\nlet result: BOOLEAN = false;\nlet orderId: UUID? = null;'
     },
     'spec §9.2 #4': { context: 'customer' },
     'spec §9.3 #3': { parseOnly: NO_RECORD_TABLE },
@@ -212,7 +215,9 @@ const CHECK: Record<string, CheckSetup> = {
     'showcase §13 #2': { parseOnly: NO_RECORD_TABLE },
     'showcase §13 #3': { parseOnly: NO_RECORD_TABLE },
     'showcase §13 #4': { parseOnly: NO_RECORD_TABLE },
-    'showcase §13 #5': { parseOnly: NO_RECORD_TABLE }
+    'showcase §13 #5': { parseOnly: NO_RECORD_TABLE },
+    'showcase §15 #1': { parseOnly: HOST_NAMES },
+    'showcase §15 #2': { parseOnly: HOST_NAMES }
 };
 
 /**

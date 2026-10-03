@@ -15,7 +15,8 @@
  * Two entries are guards that the current grammar cannot reach; they are
  * tested with a hand-made node (`via: 'guard'`).
  * `type.unexpectedResultType` is made by the runtime's `expect` option, not by
- * the checker; `test/runtime.test.ts` tests it (`via: 'runtime'`).
+ * the checker; `test/runtime.test.ts` tests it (`via: 'runtime'`). The two host
+ * name codes need host declarations; `test/ports.test.ts` tests them.
  */
 
 import { AstUtils, EmptyFileSystem, type AstNode } from 'langium';
@@ -51,8 +52,7 @@ const schema: MinabSchema = {
                 { name: 'status', type: { kind: 'scalar', type: scalarType('TEXT') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 type Setting = 'record' | 'plain' | 'fieldWithoutType';
@@ -93,6 +93,7 @@ const CASES: Record<DiagnosticCode, Case> = {
 
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
+    'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
@@ -104,6 +105,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'rule.fieldTypeMissing': { via: 'checker', program: '$', target: ofType('FieldValue'), setting: 'fieldWithoutType' },
     'rule.fieldValueOutsideFieldRule': { via: 'validator', program: '$ == 1' },
 
+    'scope.assignToInput': { via: 'runtime' }, // needs host inputs: test/ports.test.ts
     'scope.columnNeedsTable': {
         via: 'resolver',
         program: 'EXISTS(#Order[^.id == .id])',
@@ -116,6 +118,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.keyOutsideQuery': { via: 'validator', program: 'KEY' },
     'scope.keyWithoutGroupBy': { via: 'validator', program: 'FROM Order SELECT KEY' },
     'scope.nameIsFunction': { via: 'validator', program: 'fn total(a: INTEGER): INTEGER { a }\nlet total: INTEGER = 5;' },
+    'scope.nameIsHostName': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'scope.noActiveScope': { via: 'guard' },
     'scope.noParentScope': { via: 'checker', program: '^', target: ofType('ParentRecord') },
     'scope.noStaticTable': { via: 'checker', program: 'FROM Order SELECT ^', target: ofType('ParentRecord'), setting: 'plain' },

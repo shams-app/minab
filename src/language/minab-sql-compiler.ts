@@ -695,6 +695,10 @@ export class MinabSqlCompiler {
 
     private call(expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         const callee = expr.callee;
+        if (isNameRef(callee) && this.schema.getHostFunction(callee.name)) {
+            // A host function is the host's code. Emitting `name(...)` would call a database function of that name.
+            failCoded('compile.hostFunctionInSql', { name: callee.name });
+        }
         if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
             // A user `fn` runs in the interpreter. Emitting `name(...)` would call a database function of that name: a wrong answer.
             fail(

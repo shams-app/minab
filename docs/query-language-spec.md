@@ -715,6 +715,23 @@ fn recentOrders(customerId: UUID): JSON {
 
 A function whose tail is a plain `Expression` (not a `Query`) is unaffected by this rule — it's scalar-valued exactly as declared, same as always. Because the result is `JSON`, consuming it further needs the ordinary `is`/`isnot` shape-testing rules (§5.6) — e.g. `is array` — the same as any other `JSON` value; there's no separate "query-result" type the checker treats specially beyond this.
 
+### 8.7 Host functions and host inputs
+
+A program can use names that **the host** gives it. The host declares them once, with types, when it creates the runtime (`createMinab`). Minab source never declares them.
+
+- **A host input** is a typed, read-only name, such as `currentUser` or `url`. Its type is a scalar, an array, or a record of typed fields (no relations). A program reads it by its bare name, and the host gives the value for each run. A declared input with no value is a run error (`eval.missingInput`).
+- **A host function** is a typed function that the host implements, such as `fxRate(from: TEXT, to: TEXT): DECIMAL`. A program calls it like any other function: `fxRate("EUR", .currency)`. It runs in the interpreter only. The SQL compiler never turns a call to it into SQL (`compile.hostFunctionInSql`). The host may mark a function `local` when it is safe to run in a browser. A program that uses a function that is not `local` needs the server.
+
+```
+.owner_id == currentUser.id OR "admin" IN currentUser.roles OR .total * fxRate("EUR", .currency) > 1000
+```
+
+**Names.** A host function name needs at least one lowercase letter, like a user `fn` (§5.3, decision D10). The same rule holds for a host input name. The runtime checks this when the host declares them, and the host developer gets a clear error. A `fn`, a `let` or a parameter may not reuse a host input name or a host function name (`scope.nameIsHostName`, decision D11). A host input is read-only: assigning to it, or to a field of it, is an error (`scope.assignToInput`).
+
+```
+let currentUser: TEXT = "x";      // error: "currentUser" is a host input
+```
+
 ---
 
 ## 9. Flow Control

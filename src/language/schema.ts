@@ -13,6 +13,7 @@
  */
 
 import { scalarType, type MinabType, type ScalarType } from './minab-types.js';
+import { EMPTY_HOST, type ResolvedHost, type ResolvedHostFunction } from './host-declarations.js';
 
 /**
  * A schema column's relational shape (spec §3).
@@ -53,20 +54,6 @@ export interface MinabTableSchema {
     primaryKey?: string;
 }
 
-/**
- * `paramTypes`/`returnType` use the same structured `MinabType` as
- * everything else, for consistency — this field predates Phase 4 and its
- * actual purpose (beyond the built-in/user-`fn` split, both of which are
- * resolved without consulting it — see `minab-builtins.ts` and
- * `FunctionDecl` resolution in `minab-type-checker.ts`) is unclear; it's
- * left structurally upgraded but unconsumed until a real need surfaces.
- */
-export interface MinabFunctionSchema {
-    name: string;
-    paramTypes: MinabType[];
-    returnType: MinabType;
-}
-
 export interface MinabSchema {
     /**
      * Names this schema for caches (runtime D29). Two schemas with the same
@@ -75,10 +62,9 @@ export interface MinabSchema {
      */
     version?: string;
     tables: MinabTableSchema[];
-    functions: MinabFunctionSchema[];
 }
 
-export const EMPTY_SCHEMA: MinabSchema = { tables: [], functions: [] };
+export const EMPTY_SCHEMA: MinabSchema = { tables: [] };
 
 /**
  * Host-supplied context distinguishing a field-level rule from a record-
@@ -121,23 +107,36 @@ export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };
 export { scalarType };
 
 /**
- * Thin lookup wrapper around a host-supplied `MinabSchema`. Kept as its own
- * service (rather than folding lookups into the scope resolver) so a host
- * can swap in a live/async-backed implementation later without touching
- * resolution logic.
+ * Thin lookup wrapper around a host-supplied `MinabSchema`, plus the host's
+ * declared inputs and functions (D27). Kept as its own service (rather than
+ * folding lookups into the scope resolver) so a host can swap in a
+ * live/async-backed implementation later without touching resolution logic.
  */
 export class SchemaProvider {
-    constructor(private readonly schema: MinabSchema) {}
+    constructor(
+        private readonly schema: MinabSchema,
+        private readonly host: ResolvedHost = EMPTY_HOST
+    ) {}
 
     getTable(name: string): MinabTableSchema | undefined {
-        return this.schema.tables.find(t => t.name === name);
+        return this.schema.tables.find(t => t.name === name) ?? this.host.inputTables.get(name);
     }
 
     getColumn(tableName: string, columnName: string): MinabColumnSchema | undefined {
         return this.getTable(tableName)?.columns.find(c => c.name === columnName);
     }
 
-    getFunction(name: string): MinabFunctionSchema | undefined {
-        return this.schema.functions.find(f => f.name === name);
+    /** The type of a host input, or `undefined` when the host declared no input of this name. */
+    getHostInput(name: string): MinabType | undefined {
+        return this.host.inputs.get(name);
+    }
+
+    getHostFunction(name: string): ResolvedHostFunction | undefined {
+        return this.host.functions.get(name);
+    }
+
+    /** True when the name belongs to the host: an input or a function (D11). */
+    isHostName(name: string): boolean {
+        return this.host.inputs.has(name) || this.host.functions.has(name);
     }
 }

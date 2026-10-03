@@ -28,8 +28,7 @@ const schema: MinabSchema = {
                 }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 let validate: ReturnType<typeof validationHelper<Model>>;

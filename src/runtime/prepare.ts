@@ -10,10 +10,11 @@ import { URI, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { coded } from '../language/diagnostics/codes.js';
 import { isQuery, type Model } from '../language/generated/ast.js';
-import type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
+import type { Row, SqlQuery } from '../language/minab-executor.js';
 import type { MinabInterpreter } from '../language/minab-interpreter.js';
 import type { MinabSqlCompiler } from '../language/minab-sql-compiler.js';
 import { formatType, type MinabType } from '../language/minab-types.js';
+import { PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK, type DataPort, type EventSink } from './ports.js';
 import { classifyProgram, type ProgramKind } from './program-kind.js';
 import type { ServiceSet } from './service-cache.js';
 import type {
@@ -75,7 +76,7 @@ function error(code: string, message: string, params: MinabError['params'] = {})
 /** Thrown by the stand-in data port when a program needs data and the host gave none. */
 class NoDataPort extends Error {}
 
-const NO_DATA_PORT: QueryExecutor = {
+const NO_DATA_PORT: DataPort = {
     execute(_query: SqlQuery): Promise<Row[]> {
         return Promise.reject(new NoDataPort('this program needs data, and no data port was given'));
     }
@@ -102,28 +103,54 @@ class Prepared implements PreparedProgram {
         if (!tail) return { ok: false, error: error('compile.nothingToCompile', 'nothing to compile: the program has no query or expression') };
         const compiled = isQuery(tail) ? this.compiler.compileQuery(tail) : this.compiler.compileValue(tail);
         if (compiled.ok) return compiled;
-        return {
-            ok: false,
-            error: error('compile.notSql', `this program does not compile to SQL on its own: ${compiled.reason}`, { reason: compiled.reason })
-        };
+        const code = compiled.code ?? 'compile.notSql';
+        return { ok: false, error: error(code, `this program does not compile to SQL on its own: ${compiled.reason}`, { reason: compiled.reason }) };
     }
 
-    async run(inputs: RunInputs = {}, ports: RunPorts = {}, _options: RunOptions = {}): Promise<RunResult> {
+    async run(inputs: RunInputs = {}, ports: RunPorts = {}, options: RunOptions = {}): Promise<RunResult> {
         if (!this.ok) return { ok: false, error: error('eval.programInvalid', 'the program has errors, so it cannot run') };
+        const events = safeSink(ports.events);
+        // Read once: every read of the time in this run sees the same instant (D21).
+        const clock = ports.clock ?? SYSTEM_CLOCK;
+        const started = performance.now();
         try {
             const result = await this.interpreter.evaluate(this.model, {
                 executor: ports.data ?? NO_DATA_PORT,
+                write: ports.write ?? REFUSING_WRITE_PORT,
+                hostInputs: inputs.hostInputs as Record<string, unknown> | undefined,
+                hostFunctions: ports.hostFunctions,
+                now: clock.now(),
+                timeZone: clock.timeZone,
+                events,
+                signal: options.signal,
                 record: inputs.record,
                 recordTable: this.recordTable,
                 fieldValue: inputs.fieldValue
             });
             if (result.ok) return result;
-            return { ok: false, error: error('eval.failed', result.reason, { reason: result.reason }) };
+            return { ok: false, error: error(result.code ?? 'eval.failed', result.reason, { ...result.params, reason: result.reason }) };
         } catch (e) {
             if (e instanceof NoDataPort) return { ok: false, error: error('data.noPort', e.message) };
+            if (e instanceof PortError) return { ok: false, error: error(e.code, e.message) };
             throw e;
+        } finally {
+            events?.emit({ kind: 'timing', phase: 'run', durationMs: performance.now() - started });
         }
     }
+}
+
+/** A sink that must not throw: if the host's sink throws, the runtime drops the error (ADR 0002, 4.5). */
+function safeSink(sink: EventSink | undefined): EventSink | undefined {
+    if (!sink) return undefined;
+    return {
+        emit(event) {
+            try {
+                sink.emit(event);
+            } catch {
+                // dropped on purpose
+            }
+        }
+    };
 }
 
 export async function prepareProgram(

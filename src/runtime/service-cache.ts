@@ -3,13 +3,15 @@
  *
  * A service set holds the schema and rule context it was built for, and its
  * first `prepare` is the slow one (the parser builds lazily). So one set is
- * kept for each schema version and rule context, with a least-recently-used
+ * kept for each schema version, rule context and set of host
+ * declarations, with a least-recently-used
  * cap. A run that still uses an evicted set keeps it alive by reference.
  */
 
 import { EmptyFileSystem } from 'langium';
 import type { LangiumSharedServices } from 'langium/lsp';
 import { createMinabServices, type MinabServices } from '../language/minab-module.js';
+import type { ResolvedHost } from '../language/host-declarations.js';
 import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 
 export interface ServiceSet {
@@ -57,8 +59,8 @@ export class ServiceCache {
         return this.entries.size;
     }
 
-    get(schema: MinabSchema, ruleContext: MinabRuleContext): ServiceSet {
-        const key = `${schemaKey(schema)}|${ruleContextKey(ruleContext)}`;
+    get(schema: MinabSchema, ruleContext: MinabRuleContext, host: ResolvedHost): ServiceSet {
+        const key = `${schemaKey(schema)}|${ruleContextKey(ruleContext)}|${host.key}`;
         const found = this.entries.get(key);
         if (found) {
             this.hits++;
@@ -67,7 +69,7 @@ export class ServiceCache {
             this.entries.set(key, found);
             return found;
         }
-        const { shared, Minab } = createMinabServices(EmptyFileSystem, schema, ruleContext, { mode: this.mode });
+        const { shared, Minab } = createMinabServices(EmptyFileSystem, schema, ruleContext, { mode: this.mode, host });
         const created: ServiceSet = { services: Minab, shared };
         this.created++;
         this.entries.set(key, created);
