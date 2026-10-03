@@ -9,7 +9,7 @@ This file is written by phase W1, one section per approved round. Phases W2 and 
 | Round | Briefs | Status |
 |---|---|---|
 | 1 · Design system | 0, 1 | Approved 2026-10-03 |
-| 2 · The app | 2–5 | — |
+| 2 · The app | 2–5 | Approved 2026-10-03 |
 | 3 · The other pages | 6–13 | — |
 | 4 · Check and hand off | 14 | — |
 
@@ -188,3 +188,114 @@ Both themes. Focus everywhere: a 2 px `--focus-ring` outline, offset 2 px.
 
 - **The name line** (landing, above the footer credit; the exact wording is checked in round 2): "Named for Minab, a city in southern Iran — in memory of the 168 children and their teachers who were killed when their school was bombed." It is plain `--text-secondary` text: no icon, no wit, no motion near it.
 - The footer credit links "Hamed Zakery Miab" to `https://hamcker.github.io`.
+
+---
+
+## Round 2 · The app (approved 2026-10-03)
+
+Canvas page "Round 2 · The app", boards 06–11. Every board shows dark and light.
+
+### Shared shell
+
+- **Top bar** (`AppShell`): 52–56 px on `--bg-surface` with a `--border-subtle` bottom line.
+  - Left: the lockup (mark B, then `.minab`).
+  - Nav: Playground · Tour · Examples · Reference. The active item uses `--surface-selected` and weight 600, with `aria-current="page"`.
+  - Right: a Search button (200–220 px wide, "Search" with a `⌘K` kbd), the theme IconButton, and the GitHub IconButton.
+- **Mobile top bar:** the lockup, then Search and Menu IconButtons. Tap targets are 44 px.
+- **Background texture:** the hero and the CtaBand carry a faint 32 px (24 px in the CtaBand) grid of `--grid-line` lines. This is a new token: dark `rgb(73 194 255 / .05)`, light `rgb(10 108 194 / .05)`. Nothing else has a texture.
+
+### Landing (`/`, boards 06–08)
+
+1. **Hero:** two columns, 5fr | 6fr, 64 px gap, padding 88/80.
+   - Eyebrow in `--accent`, uppercase, 0.1em tracking.
+   - H1 at 60 px, weight 600, −0.035em tracking, leading 1.04. Mobile: 38 px.
+   - Subhead at 19 px in `--text-secondary`.
+   - CTAs: primary "Open the playground" (play icon) and secondary "Take the tour · 10 min". Both lg; on mobile they are full width, 48 px tall.
+   - A muted note with a database icon.
+2. **HeroDemo:** a card with `--shadow-lg` and a tab bar on `--surface-sunken` (Query · Rule · Types), plus a "Postgres ready" dot on the right.
+   - Under the tabs: a caption, the code (with gutter) on `--editor-bg`, the "Compiled to" SQL block on `--surface-sunken` (SQL keywords in `--syntax-keyword-pipeline`, params in `--syntax-sigil-field`), and the RowsTable.
+   - The footer meta "5 rows · 1 statement · 3.4 ms" and "Open in the playground →".
+   - **Rule:** the code with the pushdown underline, a Passes verdict, and "⇣ The one statement that reached Postgres" with the SQL.
+   - **Types:** a wavy `--danger` underline under `.status == 5`, an error callout with the code `type.implicitCoercion · line 2, col 7`, and "Nothing was sent to the database."
+   - **Loading:** the program shows as static code; a spinner with "Starting PostgreSQL in your browser…", a progress bar, "About 3.5 MB, once. Later runs are instant.", and shimmer lines.
+   - Switching tabs cross-fades the body in `--duration-normal`. The card height animates, so the page does not jump.
+   - Mobile: the Rule tab is shown first, because the verdict is the clearest result on a small screen.
+3. **LayerCards:** two cards, Query and Validate. Each has an h3, a badge (pipeline / record rule), one line, a code block and "Run it →".
+4. **SigilGrid:** 5 cards on `--editor-bg`, each with a 76 px glyph (44 px on mobile) in its sigil color. In dark, the glyph carries `text-shadow: 0 0 28px currentColor`; in light, nothing. The section sits on `--bg-surface`. Mobile: a 2-column grid.
+5. **HowItRuns:** 4 numbered step cards (`01`–`04` in mono `--accent`) joined by → arrows. Below them, a dashed diagram:
+   - the rule's code;
+   - two branches: "In memory" (neutral) and "⇣ Pushed down" (`--pushdown-soft` with a `--pushdown` border);
+   - the one SQL statement, with "returned false → Passes ✓".
+   - Mobile: a numbered list; no diagram.
+6. **Comparison:** Minab (left) → PostgreSQL (right, 1.25 times as wide). Both have a caption bar; the SQL caption says "compiled live — the same text `minab compile` prints". On mobile it stacks with ↓.
+7. **FeatureGrid:** 3 × 2. A 36 px `--accent-soft` icon tile, a title and one line each. Mobile: a plain list.
+8. **CtaBand:** a bordered card with the grid texture; title and body left, the two lg buttons right. Mobile: stacked and full width.
+9. **The name:** its own band above the footer: centered, at most 680 px wide, 15 px, `--text-secondary`. The wording is approved as written in round 1. No icon, no motion.
+10. **Footer:** the small mark (no middle petal), "Minab — designed and built by Hamed Zakery Miab" (the name links to the portfolio), then the nav (GitHub · Language spec · VS Code extension), then the "Built with…" note in muted text. Mobile: stacked, links 44 px tall.
+
+### Workbench (`/play`, board 09)
+
+1440×900, a full-height app.
+
+- **Toolbar** (48 px, `--bg-surface`):
+  - Left: the ExamplePicker (a secondary button, at least 230 px, with a chevron), the `§6.1` badge and the Reset IconButton.
+  - Right: the EngineStatusPill, the Auto-run toggle, a divider, IconButtons (Cheat sheet, Download for the CLI, Copy embed code), Share (secondary), and Run (primary, with a play icon and `⌘↵`).
+- **EngineStatusPill:** a pill with a 1 px border. "Postgres ready" has a `--success` dot with a soft glow. The other states come in round 3.
+- **Layout:** the left column is 784 px (55%) and the output 45%. The separators are 9 px hit areas with a 1 px line and a 5×28 px `--border-strong` grip. Editor/host is 62/38.
+- **Editor:** the gutter is 30 px, and the current line uses `--editor-line-highlight`.
+  - Pushdown spans are underlined.
+  - **While a TraceItem is hovered, its span gets `--pushdown-soft` behind it, plus a 1 px `--pushdown` ring and a soft lime glow in dark (`--glow-pd`).** This is the showcase effect.
+- **EditorStatusBar** (28 px, `--surface-sunken`): "Record rule → BOOLEAN" (the type in `--syntax-type`) on the left; the "✓ No problems" button in `--success` on the right.
+- **HostPanel:** tabs with a sigil badge on Record (`.`) and on Field (`$`), and a collapse IconButton on the right.
+  - Record tab: a "Rule table" select (mono), a Form/JSON segmented control, PresetChips (pills, ✓/✕ marks in the pass/fail colors, active = `--accent-soft` with an `--accent` border and `aria-pressed`), the preset's note in muted text, then a 2-column form with mono labels (110 px) and mono inputs on `--editor-bg`.
+- **OutputPanel tabs:** Result · SQL · Execution (pushdown badge) · Console · Problems · AST.
+- **Execution tab:**
+  - a summary callout ("⇣ 1 statement reached Postgres; …");
+  - mono timings;
+  - **TraceItem**: a "Statement 1" pushdown badge with "1 row · 2.1 ms"; "from" plus the Minab span as a button (pushdown-soft, mono, highlighted) and its line range; the formatted SQL on `--editor-bg`; the params table (`$n` in field color, value, muted type); "returned `false`".
+  - When hovered, the TraceItem gets a `--pushdown` border, the `--surface-hover` fill and the glow.
+  - The legend has a lime underline swatch.
+- **Result tab, verdict:** a large VerdictCard: a 44 px round icon (✓ or ✕) on the verdict color, the word "Passes" or "Fails" at 30 px in the verdict color, the sentence, and the "1 statement reached the database — see how →" link. Footer meta: "verdict · 1 statement · 2.1 ms".
+  - The Fails variant follows the "Overlaps bkg-12" preset. Its dates are 2026-10-04 → 2026-10-07. Its note is "bkg-12 holds room 7 from Oct 6 to Oct 8 — this one runs into it."
+
+### Output states (board 10)
+
+All at 620 px wide.
+
+- **Result:**
+  - Nothing run (`.` glyph, Run).
+  - Running (spinner), with the stale variant: the old rows at 45% opacity and a dashed warning badge "edited since this run".
+  - Rows: index column, `DECIMAL` with trailing zeros, `null` in muted italic, JSON wrapping in `--text-secondary`.
+  - No rows (∅).
+  - Passes, and Fails "answered entirely from the record".
+  - Field verdict: the word is **"Rejected"**, with "The value `-5` is rejected for Order."
+  - Value: `24.90` at 34 px in number color, with a "DECIMAL · exact" badge.
+  - Problems first: a danger-bordered empty state with "Show problems".
+  - Check-only callout (dashed), with the evaluator's words in muted mono.
+  - Database error: a callout with the SQL.
+- **SQL:** the compiles view (the explanation, the SQL with a Copy button in the top right, the params table) and the no-single-statement view (a pushdown callout, then "What the last run sent:" with statement badges, then the link).
+- **Execution:** 0 statements (glyph `0` in pushdown color, with a hint to try "Free slot"), and nothing ran.
+- **Console (new):**
+  - Rows: label (muted, 90 px), value (type-colored mono), `line:col` (muted).
+  - The selected row: `--surface-hover` with a 2 px `--accent` inset on the left.
+  - Meta: "3 lines, in evaluation order". Empty: `LOG()` glyph, "No log lines", one line of help.
+- **Problems:** button rows (✕ icon, the message, then the **error code** on its own line in muted mono, `line:col` on the right). The hovered row uses `--surface-hover`. Empty: a success-bordered "No problems".
+- **AST:** mono, 26 px rows, ▾/▸ toggles, muted `feature:` labels, values in syntax colors, inferred-type badges (outlined in `--syntax-type`) on the right. The hovered row uses `--highlight-soft` with a `--warning` outline.
+
+### Host panel (board 11)
+
+All at 780×340.
+
+- **Schema:**
+  - Header: the title, an "edited" dashed badge, a one-line description with an ellipsis, then Edit as JSON and Reset.
+  - The note line.
+  - A 4-column grid of table cards (mono 11.5 px): name and row count in the header on `--surface-sunken`; columns as name | type, where types use `--syntax-type` and relations use `--syntax-sigil-alias` (`→ Customer`, `⇉ Order[]`), and 🔑 marks the key. Small tables collapse to a header-only card.
+  - JSON mode: Show tables plus Apply schema (primary), and a JSON editor.
+- **Data:**
+  - Table chips (overflow "+4"), the SQL console toggle (pressed = accent-soft), and Reset data.
+  - Rows on the left, the console on the right: an editor with an `--accent` focus border, "⌘↵ runs", Run SQL, and the result table.
+- **Record:**
+  - Not a rule: an empty state with the `.` glyph and an example rule.
+  - JSON toggle: the presets stay above, the JSON editor below, then the related-rows footnote.
+- **Field:** "Type of `$`" with a DECIMAL select, presets 500 ✓ · 950 ✕ · −5 ✕ (active), "Fails locally — the database is never asked.", and a labelled value input.
+- **Collapsed host panel:** one 36 px bar, "Host — schema, data, record ›".
