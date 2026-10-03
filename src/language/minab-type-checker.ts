@@ -82,6 +82,7 @@ import { checkBuiltin, getBuiltin } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
+    comparableTypes,
     formatType,
     isNumeric,
     isOrderable,
@@ -601,7 +602,7 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') return ok(scalarType('BOOLEAN'));
-        if (!baseTypesEqual(left.type, right.type)) {
+        if (!comparableTypes(left.type, right.type)) {
             return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
@@ -618,7 +619,7 @@ export class MinabTypeChecker {
         if (!isOrderable(left.type) || !isOrderable(right.type)) {
             return err('type.orderingNeedsOrderable', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
-        if (!baseTypesEqual(left.type, right.type)) {
+        if (!comparableTypes(left.type, right.type)) {
             return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
@@ -647,7 +648,7 @@ export class MinabTypeChecker {
             }
             const itemType = this.inferType(q.selectClause.items[0].expression);
             if (!itemType.ok) return itemType;
-            if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !baseTypesEqual(left.type, itemType.type)) {
+            if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !comparableTypes(left.type, itemType.type)) {
                 return err('type.inSubqueryMismatch', { left: formatType(left.type), right: formatType(itemType.type) });
             }
             return ok(scalarType('BOOLEAN'));
@@ -659,7 +660,7 @@ export class MinabTypeChecker {
         if (!rightElement) {
             return err('type.inNeedsCollection', { actual: formatType(right.type) });
         }
-        if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !baseTypesEqual(left.type, rightElement)) {
+        if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !comparableTypes(left.type, rightElement)) {
             return err('type.inCollectionMismatch', { left: formatType(left.type), right: formatType(rightElement) });
         }
         return ok(scalarType('BOOLEAN'));

@@ -164,6 +164,58 @@ interface Frame {
     variables: Map<string, MinabValue>;
 }
 
+/**
+ * The Postgres `LIKE` matcher (`MatchText`), on arrays of characters. It is
+ * a copy of the algorithm and not a regular expression, so a pattern that
+ * ends with `\` fails at the same moments: only when the matcher reaches the
+ * `\` (Postgres: `'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
+ */
+function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | 'false' | 'abort' {
+    const trailing = (): never => fail('LIKE pattern must not end with escape character');
+    while (ti < t.length && pi < p.length) {
+        if (p[pi] === '\\') {
+            pi++;
+            if (pi >= p.length) trailing();
+            if (p[pi] !== t[ti]) return 'false';
+        } else if (p[pi] === '%') {
+            pi++;
+            while (pi < p.length) {
+                if (p[pi] === '%') pi++;
+                else if (p[pi] === '_') {
+                    if (ti >= t.length) return 'abort';
+                    ti++;
+                    pi++;
+                } else break;
+            }
+            if (pi >= p.length) return 'true';
+            let first = p[pi];
+            if (first === '\\') {
+                if (pi + 1 >= p.length) trailing();
+                first = p[pi + 1];
+            }
+            while (ti < t.length) {
+                if (t[ti] === first) {
+                    const matched = likeMatch(t, ti, p, pi);
+                    if (matched !== 'false') return matched;
+                }
+                ti++;
+            }
+            return 'abort';
+        } else if (p[pi] === '_') {
+            ti++;
+            pi++;
+            continue;
+        } else if (p[pi] !== t[ti]) {
+            return 'false';
+        }
+        pi++;
+        ti++;
+    }
+    if (ti < t.length) return 'false';
+    while (pi < p.length && p[pi] === '%') pi++;
+    return pi >= p.length ? 'true' : 'abort';
+}
+
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
@@ -585,19 +637,21 @@ export class MinabInterpreter {
         }
         if (operator === 'IN') {
             const items = Array.isArray(right) ? right : fail('IN needs a collection on the right');
-            return items.some(i => this.equal(left, i, false));
+            const caseInsensitive = this.isCitextArg(expr.left, state) || this.isCitextElements(expr.right, state);
+            return items.some(i => this.equal(left, i, caseInsensitive));
         }
         if (operator === 'LIKE') {
             if (left === null || right === null) fail('LIKE is not a valid operator against null (spec §7.7)');
-            return this.like(String(left), String(right));
+            return this.like(String(left), String(right), this.isCaseInsensitive(expr, state));
         }
         if (operator === '<' || operator === '<=' || operator === '>' || operator === '>=') {
             if (left === null || right === null) {
                 fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
             }
             const exact = decimalCompare(left, right);
-            const a = exact ?? (left as number);
-            const b = exact === undefined ? (right as number) : 0;
+            const folded = exact === undefined && typeof left === 'string' && typeof right === 'string' && this.isCaseInsensitive(expr, state);
+            const a = folded ? (left as string).toLowerCase() : (exact ?? (left as number));
+            const b = folded ? (right as string).toLowerCase() : exact === undefined ? (right as number) : 0;
             switch (operator) {
                 case '<':
                     return a < b;
@@ -650,7 +704,19 @@ export class MinabInterpreter {
 
     /** True when either side of a comparison is a `CITEXT` column. */
     private isCaseInsensitive(expr: BinaryExpression, state: State): boolean {
-        return this.isCitext(expr.left, state) || this.isCitext(expr.right, state);
+        return this.isCitextArg(expr.left, state) || this.isCitextArg(expr.right, state);
+    }
+
+    /** True when the right side of `IN` is a `CITEXT` array (D15). */
+    private isCitextElements(expr: Expression, state: State): boolean {
+        if (isListLiteral(expr)) return expr.items.some(item => this.isCitextArg(item, state));
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && inferred.type.array && inferred.type.base === 'CITEXT';
+        } catch {
+            return false;
+        }
     }
 
     private isCitext(expr: Expression, state: State): boolean {
@@ -661,9 +727,15 @@ export class MinabInterpreter {
         return column?.type.kind === 'scalar' && column.type.type.base === 'CITEXT';
     }
 
-    private like(value: string, pattern: string): boolean {
-        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`^${escaped.replace(/%/g, '.*').replace(/_/g, '.')}$`).test(value);
+    /**
+     * `LIKE` as in Postgres (spec §7.2): `%` is any run, `_` is one character,
+     * `\` makes the next character plain. With `ignoreCase` (a `CITEXT` side,
+     * D15) both sides are lower-cased first.
+     */
+    private like(value: string, pattern: string, ignoreCase: boolean): boolean {
+        const text = Array.from(ignoreCase ? value.toLowerCase() : value);
+        const pat = Array.from(ignoreCase ? pattern.toLowerCase() : pattern);
+        return likeMatch(text, 0, pat, 0) === 'true';
     }
 
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */
