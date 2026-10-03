@@ -384,7 +384,7 @@ Here `#Booking` opens every row of `Booking` as a scope; `.` inside `[...]` is e
 Use `$` for the value of whichever field the rule is validating. `.` is still available and still refers to the enclosing record, so a field-level rule can reference sibling fields:
 
 ```
-$ IN ("pending", "shipped", "cancelled")
+$ IN ["pending", "shipped", "cancelled"]
 ```
 
 ```
@@ -706,9 +706,9 @@ fn cancelledOrdersFor(customerId: UUID): JSON {
 fn recentOrders(customerId: UUID): JSON {
     FROM Order
     WHERE .customer.id == customerId
+    SELECT *
     ORDERBY .placed_at DESC
     LIMIT 10
-    SELECT *
 }
 // recentOrders(x) : JSON — a JSON array of order objects
 ```
@@ -893,7 +893,7 @@ If a step marked `!` genuinely can't be created (some other required field has n
 // same effect as:
 UPDATE .doctor.patients
 WHERE .city == 'istanbul'
-SET { activate: true }
+SET { activate: true };
 ```
 
 The `[filter]` is optional — `.doctor.patients.activate = true;` (no filter at all) sets `.activate` across *every* patient, the unfiltered case of the same mechanism.

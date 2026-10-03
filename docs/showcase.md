@@ -542,6 +542,13 @@ SET { activate: true };
 A function that queries, branches, loops, mutates via `UPDATE`, and calls another function — combining nearly every construct in the language in one place.
 
 ```
+fn daysSincePayment(customerId: UUID): INTEGER {
+    let days: INTEGER = (
+        FROM Payment WHERE .customer_id == customerId SELECT .days_ago AS d ORDERBY d LIMIT 1
+    );
+    days
+}
+
 fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
     let flaggedCount: INTEGER = 0;
 

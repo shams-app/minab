@@ -80,6 +80,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.switchArmsDiffer` | error | switch arms must agree on type (no implicit coercion) — got {first} and {second} | `first`, `second` | All arms of a switch must give the same type. Change an arm, or use CAST. |
 | `type.tupleIndexOutOfBounds` | error | tuple index {index} out of bounds (tuple has {count} element(s)) | `index`, `count` | The position is larger than the tuple. Use a position from 0 to the last element. |
 | `type.unaryNeedsNumeric` | error | unary "{operator}" requires a numeric operand, got {actual} | `operator`, `actual` | A sign works on INTEGER and DECIMAL. Use a number, or CAST. |
+| `type.unexpectedResultType` | error | the program gives {actual}, but the host expects {expected} | `actual`, `expected` | The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST. |
 | `type.unsupportedOperator` | error | unsupported operator "{operator}" | `operator` | The checker does not know this operator. Report it as a Minab bug. |
 
 ## null

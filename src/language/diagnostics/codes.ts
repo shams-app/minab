@@ -392,6 +392,11 @@ export const DIAGNOSTICS = {
         message: p => `unary "${p.operator}" requires a numeric operand, got ${p.actual}`,
         doc: 'A sign works on INTEGER and DECIMAL. Use a number, or CAST.'
     }),
+    'type.unexpectedResultType': entry<{ expected: string; actual: string }>({
+        severity: error,
+        message: p => `the program gives ${p.actual}, but the host expects ${p.expected}`,
+        doc: 'The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST.'
+    }),
     'type.unsupportedOperator': entry<{ operator: string }>({
         severity: error,
         message: p => `unsupported operator "${p.operator}"`,

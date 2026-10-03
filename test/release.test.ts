@@ -63,6 +63,41 @@ describe.skipIf(!existsSync(resolve(root, 'out/src/cli/bin.js')))('npm tarball c
         expect(files).toContain(bin);
     });
 
+    test('every exports target is in the tarball (R2)', () => {
+        const pkg = readJson('package.json');
+        const targets = (value: unknown): string[] => (typeof value === 'string' ? [value] : Object.values(value as object).flatMap(targets));
+        const wanted = targets(pkg.exports).map(t => t.replace(/^\.\//, ''));
+        expect(wanted.length).toBeGreaterThan(10);
+        for (const target of wanted) expect(files, target).toContain(target);
+        // The same entries for old TypeScript projects (`moduleResolution: node`).
+        for (const target of targets(pkg.typesVersions)) expect(files, target).toContain(target);
+        for (const field of ['main', 'types']) expect(files, field).toContain(pkg[field].replace(/^\.\//, ''));
+    });
+
+    test('the exports map has every entry point of D31', () => {
+        const pkg = readJson('package.json');
+        expect(Object.keys(pkg.exports).sort()).toEqual([
+            '.',
+            './browser',
+            './browser/pglite',
+            './browser/worker',
+            './host',
+            './lsp',
+            './monaco',
+            './nestjs',
+            './node',
+            './package.json'
+        ]);
+        expect(Object.keys(pkg.typesVersions['*']).sort()).toEqual(['browser', 'browser/pglite', 'browser/worker', 'host', 'lsp', 'monaco', 'nestjs', 'node']);
+    });
+
+    test('the optional peers are declared optional', () => {
+        const pkg = readJson('package.json');
+        const peers = Object.keys(pkg.peerDependencies).sort();
+        expect(peers).toEqual(['@electric-sql/pglite', '@nestjs/common', '@nestjs/core', 'monaco-editor', 'pg', 'reflect-metadata', 'rxjs']);
+        for (const peer of peers) expect(pkg.peerDependenciesMeta[peer]).toEqual({ optional: true });
+    });
+
     test('leaves out tests, source maps, and the extension', () => {
         const stray = files.filter(f => f.startsWith('out/test/') || f.endsWith('.map') || f.startsWith('vscode-extension/'));
         expect(stray).toEqual([]);
