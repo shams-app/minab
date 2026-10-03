@@ -138,6 +138,10 @@ const DEFAULT_CONTEXT: Context = 'order';
 /** Functions the spec calls but never declares. */
 const STUBS = 'fn cumulativeAdd(inputs: INTEGER[]): INTEGER { 0 }\nfn notifyManager(customerId: UUID): BOOLEAN { true }';
 
+/** Variables the spec's fragments use but never declare. */
+const RAW_ID = 'let rawIdParam: TEXT = "";';
+const TOTAL = 'let total: DECIMAL = 0;';
+
 interface CheckSetup {
     context?: Context;
     /** Declarations put in front: `STUBS`, or another block's text. */
@@ -148,9 +152,20 @@ interface CheckSetup {
 
 const COLLECTION_FILTER_BUG =
     'a filter on a to-many column at the top of a rule does not type-check yet ("needs a statically known table"; see docs/status.md, "Next job")';
+const NO_RECORD_VARIABLE =
+    'uses `customer` as a record variable (`customer.id`), and no `let` can declare one yet: a record value only comes from a relation field';
 const NO_RECORD_TABLE = 'needs a record table with relations (doctor, customers) that the fixture does not have';
 
 const CHECK: Record<string, CheckSetup> = {
+    'spec §5.5 #2': { prelude: () => RAW_ID },
+    'spec §7.3 #3': { prelude: () => 'let config: JSON = {};' },
+    'spec §7.6 #3': { prelude: () => 'let point: (INTEGER, INTEGER) = (3, 4);' },
+    'spec §9.1.1 #2': {
+        prelude: () => 'let v: INTEGER = 0;\nlet seen: INTEGER = 0;\nlet threshold: INTEGER = 0;\nlet result: INTEGER = 0;'
+    },
+    'spec §9.1.1 #3': { parseOnly: NO_RECORD_VARIABLE },
+    'showcase §7 #1': { prelude: () => RAW_ID },
+    'showcase §9 #3': { prelude: () => 'let tags: JSON = ["alpha", "beta", "gamma"];' },
     'spec §3.1 #1': { context: 'customer' },
     'spec §3.2 #1': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §3.2 #2': { parseOnly: COLLECTION_FILTER_BUG },
@@ -167,8 +182,11 @@ const CHECK: Record<string, CheckSetup> = {
     'spec §7.4 #2': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §8.4 #1': { context: 'customer', prelude: () => STUBS },
     'spec §8.4 #2': { prelude: block => block('spec §8.2 #1') },
-    'spec §9.1 #4': { prelude: () => STUBS },
-    'spec §9.1 #5': { prelude: block => block('spec §8.2 #2') },
+    'spec §9.1 #4': { prelude: () => STUBS + '\n' + TOTAL },
+    'spec §9.1 #5': {
+        prelude: block =>
+            block('spec §8.2 #2') + '\nlet shouldProcess: BOOLEAN = true;\nlet result: BOOLEAN = false;\nlet orderId: UUID? = null;'
+    },
     'spec §9.2 #4': { context: 'customer' },
     'spec §9.3 #3': { parseOnly: NO_RECORD_TABLE },
     'spec §9.3 #4': { parseOnly: NO_RECORD_TABLE },
@@ -188,7 +206,7 @@ const CHECK: Record<string, CheckSetup> = {
     'showcase §10 #4': { context: 'customer', prelude: block => block('showcase §10 #1') },
     'showcase §11 #2': { context: 'customer' },
     'showcase §11 #4': { prelude: () => STUBS },
-    'showcase §11 #6': { prelude: () => STUBS },
+    'showcase §11 #6': { prelude: () => STUBS + '\n' + TOTAL },
     'showcase §12 #3': { parseOnly: COLLECTION_FILTER_BUG },
     'showcase §13 #1': { parseOnly: NO_RECORD_TABLE },
     'showcase §13 #2': { parseOnly: NO_RECORD_TABLE },
