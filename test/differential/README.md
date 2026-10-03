@@ -18,9 +18,17 @@ The test fails when the two answers differ.
 2. Export `cases`:
 
 ```ts
-import { ITEM_SCHEMA as schema, type DifferentialCase } from '../harness.js';
+import { ITEM_SCHEMA as schema, type DifferentialCase } from "../harness.js";
 
-export const cases: DifferentialCase[] = [{ name: 'integer addition', schema, record: { a: 7, b: 3 }, expr: '.a + .b', expect: 10 }];
+export const cases: DifferentialCase[] = [
+  {
+    name: "integer addition",
+    schema,
+    record: { a: 7, b: 3 },
+    expr: ".a + .b",
+    expect: 10,
+  },
+];
 ```
 
 ## Case fields
@@ -29,7 +37,7 @@ export const cases: DifferentialCase[] = [{ name: 'integer addition', schema, re
 - `schema`, `record`, `table`: the table and the one row that `.` means.
   A column you leave out gets a neutral value (`null` if it may be null).
   Without `schema`, the case has one table `One` and no record.
-- `expect`: the answer both runtimes must give. For an error use `{ error: 'division-by-zero' }`.
+- `expect`: the answer both runtimes must give. For an error use `{ error: 'division-by-zero' } or { error: 'cast-failed' }`.
 - `knownGap: { card, note }`: a bug we know. The test asserts the two answers **differ**.
   The card that fixes the bug removes `knownGap` and adds `expect`.
   When a gap case starts to agree, the test fails with "gap fixed? remove knownGap".
