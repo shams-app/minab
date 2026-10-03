@@ -14,11 +14,48 @@ database driver. A test checks the imports.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
   (interface only), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
-  `kind`, `resultType`, `compile()`, `run()`. Also the `expect` check.
+  `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `run()`. Also the `expect` check.
+- `analyze.ts`: program analysis (R5). `analyzeProgram` builds `PreparedProgram.analysis`
+  from the AST and the schema. It never runs the program.
 - `service-cache.ts`: Langium services, cached by schema version, rule context and host declarations.
 - `program-kind.ts`: tells a query from a rule from a value, and finds the result
   type. The playground uses it too.
 - `types.ts`: the public types.
+
+## Analysis (`prepared.analysis`)
+
+Found at prepare time. Every list is sorted and has no duplicates.
+
+| Field | Meaning |
+|---|---|
+| `tables` | Tables the program can read: `#T`, `FROM T`, joins, and the target of every relation column it uses. |
+| `recordFields` | First step of each path read from the record under validation. `.a` gives `a`. `.customer.name` gives `customer`. |
+| `dependencies` | `recordFields` plus the foreign key of each `ref` relation read (`customer` also depends on `customer_id`). |
+| `readsWholeRecord` | `.` or `^` alone is read, so any field can matter. |
+| `readsFieldValue` | `$` is read. |
+| `inputs` | Names that are not a variable, parameter, alias or loop variable. The host must give them. |
+| `hostFunctions` | Called names that are not built-ins and not declared in the program. One that is not declared `local` makes `needsData` true. |
+| `userFunctions` | Functions declared in the program and called, also through other functions. |
+| `builtins` | Built-in functions called. |
+| `needsData` | The program can reach the data port: a table read, a relation column, a query, DML, a host function that is not local. |
+| `writes` | `INSERT`, `UPDATE`, `DELETE`, or an assignment to a record path (not to a local variable). |
+| `tier` | `local` when `needsData` and `writes` are both false. Otherwise `data`. |
+
+`prepared.dependsOn(field)` tells if a change of that record field can change the result. Use it to
+re-run only the rules a change affects. It is true for every field when the program reads the whole
+record. It does not look at other tables: a rule that reads data may change when the data changes.
+
+**The conservative rule.** When the analysis cannot be sure, it says `data`, never `local`. A wrong
+`data` costs a network call. A wrong `local` gives a wrong answer. In detail:
+
+- Both branches of `if` and `switch` count, even the one a run does not take.
+- Analysis follows calls into user functions. A call inside its own body adds nothing new.
+- A program with a syntax error gets the safe answer: `data`, `writes`, whole record.
+- A field read with no record table is `data`: it cannot be told from a relation.
+- Any query (`FROM ...`) and any DML is `data`.
+- A call whose callee is not a plain name is `data`.
+- A test runs every spec, showcase and example program that is called `local` with a data port
+  that fails when it is called.
 
 ## Rules
 
@@ -55,4 +92,4 @@ database driver. A test checks the imports.
 - `AbortSignal` is passed to the ports, but nothing checks it yet. R4 does.
 - The write port is an interface. No statement uses it until X5.
 - `limits` are stored, not enforced. R4 enforces them.
-- Analysis (R5) and the wire format (R6) come later.
+- The wire format (R6) comes later.

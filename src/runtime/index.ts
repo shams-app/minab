@@ -12,6 +12,7 @@ export type {
     MinabSeverity,
     PrepareOptions,
     PreparedProgram,
+    ProgramAnalysis,
     ProgramKind,
     RunInputs,
     RunOptions,

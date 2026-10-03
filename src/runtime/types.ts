@@ -109,6 +109,38 @@ export type RunResult = { ok: true; value: unknown } | { ok: false; error: Minab
 
 export type CompileResult = { ok: true; query: SqlQuery } | { ok: false; error: MinabError };
 
+/**
+ * What a program touches, found before it runs (ADR 0002, section 7).
+ * It is conservative: when unsure it says `needsData` and tier `data`.
+ * Every list is sorted and has no duplicates.
+ */
+export interface ProgramAnalysis {
+    /** Tables the program can read: `#T`, `FROM T`, joins, relation columns. */
+    tables: string[];
+    /** First steps of the paths read from the record under validation (`.a`, `.customer.name` gives `customer`). */
+    recordFields: string[];
+    /** `recordFields` plus the foreign key columns of the relations read. A change to one of these can change the result. */
+    dependencies: string[];
+    /** The program reads the whole record (`.` or `^` alone), so any field can matter. */
+    readsWholeRecord: boolean;
+    /** The program reads `$`. */
+    readsFieldValue: boolean;
+    /** Names the host must give: names that are not a local variable, parameter, alias or loop variable. */
+    inputs: string[];
+    /** Called names that are not built-ins and not declared in the program. */
+    hostFunctions: string[];
+    /** Functions declared in the program and called (also through other functions). */
+    userFunctions: string[];
+    /** Built-in functions called. */
+    builtins: string[];
+    /** The program can reach the data port. `false`: a run never calls it. */
+    needsData: boolean;
+    /** The program has INSERT, UPDATE or DELETE, or assigns to a record path. */
+    writes: boolean;
+    /** `local`: safe to run in the browser with no data. `data`: needs the server. */
+    tier: 'local' | 'data';
+}
+
 export interface PreparedProgram {
     /** Syntax errors, type errors, warnings, and `expect` mismatches. Empty when the program is valid. */
     readonly diagnostics: readonly MinabDiagnostic[];
@@ -117,6 +149,10 @@ export interface PreparedProgram {
     readonly kind: ProgramKind;
     /** The type of the last expression, for example `BOOLEAN`, when it has one. */
     readonly resultType?: string;
+    /** What the program touches, and where it can run. Found at prepare time. */
+    readonly analysis: ProgramAnalysis;
+    /** Does a change of this record field change the result? Use it to re-run only the rules a change affects. */
+    dependsOn(field: string): boolean;
     /** The whole program as one SQL statement, or the reason it is not one. */
     compile(): CompileResult;
     /** Never throws for a failed program: the answer says `ok: false`. */

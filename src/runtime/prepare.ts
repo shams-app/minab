@@ -14,6 +14,7 @@ import type { Row, SqlQuery } from '../language/minab-executor.js';
 import type { MinabInterpreter } from '../language/minab-interpreter.js';
 import type { MinabSqlCompiler } from '../language/minab-sql-compiler.js';
 import { formatType, type MinabType } from '../language/minab-types.js';
+import { analyzeProgram, conservativeAnalysis, dependsOnField } from './analyze.js';
 import { PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK, type DataPort, type EventSink } from './ports.js';
 import { classifyProgram, type ProgramKind } from './program-kind.js';
 import type { ServiceSet } from './service-cache.js';
@@ -24,6 +25,7 @@ import type {
     MinabError,
     MinabSeverity,
     PreparedProgram,
+    ProgramAnalysis,
     RunInputs,
     RunOptions,
     RunPorts,
@@ -87,11 +89,16 @@ class Prepared implements PreparedProgram {
         readonly diagnostics: readonly MinabDiagnostic[],
         readonly kind: ProgramKind,
         readonly resultType: string | undefined,
+        readonly analysis: ProgramAnalysis,
         private readonly model: Model,
         private readonly interpreter: MinabInterpreter,
         private readonly compiler: MinabSqlCompiler,
         private readonly recordTable: string | undefined
     ) {}
+
+    dependsOn(field: string): boolean {
+        return dependsOnField(this.analysis, field);
+    }
 
     get ok(): boolean {
         return !this.diagnostics.some(d => d.severity === 'error');
@@ -158,7 +165,8 @@ export async function prepareProgram(
     uri: string,
     source: string,
     expect: ExpectedType | undefined,
-    recordTable: string | undefined
+    recordTable: string | undefined,
+    localHostFunctions: ReadonlySet<string> | undefined
 ): Promise<PreparedProgram> {
     const { shared, services } = set;
     const documents = shared.workspace.LangiumDocuments;
@@ -190,5 +198,12 @@ export async function prepareProgram(
             params: message.params
         });
     }
-    return new Prepared(diagnostics, classified.kind, classified.resultType, model, services.interpreter, services.sqlCompiler, recordTable);
+    // A half-parsed tree can miss parts, so a syntax error gets the safe answer. A type error leaves
+    // the tree whole (an undeclared host function is one until R3), so it is analyzed as usual.
+    const { lexerErrors, parserErrors } = document.parseResult;
+    const analysis =
+        lexerErrors.length > 0 || parserErrors.length > 0
+            ? conservativeAnalysis()
+            : analyzeProgram(model, services.schema, recordTable, { localHostFunctions });
+    return new Prepared(diagnostics, classified.kind, classified.resultType, analysis, model, services.interpreter, services.sqlCompiler, recordTable);
 }
