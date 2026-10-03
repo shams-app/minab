@@ -91,6 +91,7 @@
   },
   "files": [
     "out/src",
+    "schemas",
     "!out/src/**/*.map",
     "README.md",
     "LICENSE",

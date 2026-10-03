@@ -197,7 +197,12 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
     'type.unexpectedResultType': { via: 'runtime' },
-    'type.unsupportedOperator': { via: 'guard' }
+    'type.unsupportedOperator': { via: 'guard' },
+    'wire.invalidRequest': { via: 'runtime' }, // test/wire.test.ts
+    'wire.invalidResponse': { via: 'runtime' }, // test/wire.test.ts
+    'wire.invalidValue': { via: 'runtime' }, // test/wire.test.ts
+    'wire.tooManyRuns': { via: 'runtime' }, // test/wire.test.ts
+    'wire.unsupportedVersion': { via: 'runtime' } // test/wire.test.ts
 };
 
 let services: Record<Setting, MinabServices>;
@@ -220,7 +225,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule)\.[a-z][A-Za-z0-9]*|cancelled)$/);
+        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);

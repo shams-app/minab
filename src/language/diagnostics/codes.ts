@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule, wire.
  *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
@@ -570,6 +570,32 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `unsupported operator "${p.operator}"`,
         doc: 'The checker does not know this operator. Report it as a Minab bug.'
+    }),
+
+    'wire.invalidRequest': entry<{ path: string; reason: string }>({
+        severity: error,
+        message: p => `the request is not valid at ${p.path}: ${p.reason}`,
+        doc: 'The wire request does not have the shape of wire format v1. params.path says where. Fix the request; the value itself is never copied into the error.'
+    }),
+    'wire.invalidResponse': entry<{ path: string; reason: string }>({
+        severity: error,
+        message: p => `the response is not valid at ${p.path}: ${p.reason}`,
+        doc: 'The wire response does not have the shape of wire format v1. params.path says where. A client should treat the server as broken.'
+    }),
+    'wire.invalidValue': entry<{ path: string; expected: string }>({
+        severity: error,
+        message: p => `the value at ${p.path} is not a valid ${p.expected}`,
+        doc: 'A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error.'
+    }),
+    'wire.tooManyRuns': entry<{ limit: number; used: number }>({
+        severity: error,
+        message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,
+        doc: 'One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests.'
+    }),
+    'wire.unsupportedVersion': entry<{ version: string; supported: string }>({
+        severity: error,
+        message: p => `wire format version ${p.version} is not supported (supported: ${p.supported})`,
+        doc: 'The "v" field of the request names a wire format this server does not know. Use one of the supported versions.'
     })
 } as const;
 

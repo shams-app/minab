@@ -23,6 +23,8 @@ database driver. A test checks the imports.
 - `service-cache.ts`: Langium services, cached by schema version, rule context and host declarations.
 - `program-kind.ts`: tells a query from a rule from a value, and finds the result
   type. The playground uses it too.
+- `wire.ts`: wire format v1 (R6): request and response types, `parseRequest`, `parseResponse`,
+  `encodeValue`, `decodeValue`. See `docs/reference/wire-format.md`. The JSON Schema files are in `schemas/`.
 - `types.ts`: the public types.
 
 ## Analysis (`prepared.analysis`)
@@ -157,4 +159,4 @@ to its driver. The timer is cleared when the run ends.
 - The write port is an interface. No statement uses it until X5.
 - `MinabInterpreter.evaluate` is the old entry (CLI and playground). It is `@deprecated`, has no
   limits, and throws a data port failure again. Remove it in R8, or in whichever of R7 and R8 merges last.
-- The wire format (R6) comes later.
+- The HTTP endpoint (H2) and the browser client (H5) use the wire format. They are not built yet.
