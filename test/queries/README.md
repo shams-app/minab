@@ -17,6 +17,7 @@ Make a file `cases/<ID>-<topic>.cases.ts` (one file for each phase and topic) an
 export const cases: QueryCase[] = [{ name, schema, rows, program, expectRows, ordered? }];
 ```
 
+- `record`: the record that `.` means, for a program such as `FROM .orders[...]`.
 - `schema`: the host schema, as a JSON config writes it.
 - `rows`: rows to insert, by table name. A `ref` column is filled through its `foreignKey` name (for example `customer_id`).
 - `expectRows`: the rows the program must return. Column order does not matter.

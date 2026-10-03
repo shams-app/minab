@@ -28,8 +28,7 @@ const schema: MinabSchema = {
                 { name: 'big', type: { kind: 'scalar', type: scalarType('INTEGER', { nullable: true }) } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 class Recorder implements QueryExecutor {
@@ -142,12 +141,12 @@ describe('aggregates', () => {
 });
 
 describe('the INTEGER range', () => {
-    const outOfRange = (reason: string) => expect(reason).toMatch(/^eval\.integerOutOfRange: /);
+    const outOfRange = (result: { code?: string }) => expect(result.code).toBe('eval.integerOutOfRange');
 
     test('9007199254740991 + 1 is an error with a stable code', async () => {
         const result = await run('9007199254740991 + 1');
         expect(result.ok).toBe(false);
-        if (!result.ok) outOfRange(result.reason);
+        if (!result.ok) outOfRange(result);
     });
 
     test('the largest integer is fine, and so is a result back inside the range', async () => {
@@ -159,7 +158,7 @@ describe('the INTEGER range', () => {
         for (const source of ['9007199254740991 * 2', '-9007199254740991 - 1', '9007199254740992']) {
             const result = await run(source);
             expect(result.ok, source).toBe(false);
-            if (!result.ok) outOfRange(result.reason);
+            if (!result.ok) outOfRange(result);
         }
     });
 
@@ -168,7 +167,7 @@ describe('the INTEGER range', () => {
         expect(await value('.big + 1', order({ id: 1, price: '1', quantity: 1, big: 41n }))).toBe(42);
         const result = await run('.big', order({ id: 1, price: '1', quantity: 1, big: 9007199254740993n }));
         expect(result.ok).toBe(false);
-        if (!result.ok) outOfRange(result.reason);
+        if (!result.ok) outOfRange(result);
     });
 
     test('a DECIMAL may be larger than an INTEGER can be', async () => {

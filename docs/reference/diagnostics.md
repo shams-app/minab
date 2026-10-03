@@ -24,6 +24,7 @@ A name, table, column or sigil cannot be found.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `scope.assignToInput` | error | "{name}" is a host input — it is read-only | `name` | A host input can be read but not changed. Copy it into a let first, and change the copy. |
 | `scope.columnNeedsTable` | error | column "{column}" needs a statically known table (requires the Phase 4 type system) | `column` | The scope has no known table, so the column cannot be looked up. Open a table first, for example with FROM. |
 | `scope.computedReceiver` | error | member access on a computed receiver requires the Phase 4 type system | none | The scope resolver cannot follow a member access on a computed value. Use the type checker for this case. |
 | `scope.currentRecordNoTable` | error | "." has no statically known table here | none | The current record has no known table. Use "." inside a query, or give the host a record table. |
@@ -32,6 +33,7 @@ A name, table, column or sigil cannot be found.
 | `scope.keyOutsideQuery` | error | KEY used outside any query | none | KEY is the group key of a query. Use it inside a query with GROUPBY. |
 | `scope.keyWithoutGroupBy` | error | KEY is only valid after a GROUPBY clause | none | This query has no GROUPBY. Add a GROUPBY clause, or remove KEY. |
 | `scope.nameIsFunction` | error | "{name}" is the name of a function — a variable or parameter may not reuse it | `name` | A let or a parameter may not have the name of a function declared in the program. Rename it. |
+| `scope.nameIsHostName` | error | "{name}" is the name of a host input or host function — a function, variable or parameter may not reuse it | `name` | The host declared this name. A fn, a let or a parameter may not use it. Rename yours. |
 | `scope.noActiveScope` | error | no active scope for "." | none | There is no current record here. Use "." inside a query, a filter or a loop. |
 | `scope.noParentScope` | error | "^" has no enclosing parent scope here | none | The "^" sigil means the record one level up. Use it only inside a nested scope. |
 | `scope.noStaticTable` | error | no statically known table at this point | none | The checker cannot tell which table this refers to. Open the table explicitly, for example with #Table. |
@@ -80,6 +82,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.switchArmsDiffer` | error | switch arms must agree on type (no implicit coercion) — got {first} and {second} | `first`, `second` | All arms of a switch must give the same type. Change an arm, or use CAST. |
 | `type.tupleIndexOutOfBounds` | error | tuple index {index} out of bounds (tuple has {count} element(s)) | `index`, `count` | The position is larger than the tuple. Use a position from 0 to the last element. |
 | `type.unaryNeedsNumeric` | error | unary "{operator}" requires a numeric operand, got {actual} | `operator`, `actual` | A sign works on INTEGER and DECIMAL. Use a number, or CAST. |
+| `type.unexpectedResultType` | error | the program gives {actual}, but the host expects {expected} | `actual`, `expected` | The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST. |
 | `type.unsupportedOperator` | error | unsupported operator "{operator}" | `operator` | The checker does not know this operator. Report it as a Minab bug. |
 
 ## null
@@ -108,6 +111,15 @@ A function call is wrong.
 | `call.functionNameCase` | error | "{name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins | `name` | Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it. |
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
+
+## compile
+
+A program cannot become SQL.
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `compile.blockInQuery` | error | a block with statements cannot run inside a query (a statement cannot become SQL) | none | A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query. |
+| `compile.hostFunctionInSql` | error | "{name}" is a host function — it runs in the host, never in SQL | `name` | A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query. |
 
 ## eval
 

@@ -15,8 +15,17 @@ import type { LogicalTypeBase } from './minab-types.js';
 
 export { Big };
 
-/** A number problem. The message already holds the stable code. */
-export class NumberError extends Error {}
+/** A number problem. `code` is the stable code, when the problem has one. */
+export class NumberError extends Error {
+    readonly params: Record<string, string | number> = {};
+
+    constructor(
+        message: string,
+        readonly code?: string
+    ) {
+        super(message);
+    }
+}
 
 export const MAX_INTEGER = Number.MAX_SAFE_INTEGER;
 
@@ -24,7 +33,7 @@ export type Numeric = number | Big;
 
 export function integerOutOfRange(): NumberError {
     const { code, reason } = coded('eval.integerOutOfRange');
-    return new NumberError(`${code}: ${reason}`);
+    return new NumberError(reason, code);
 }
 
 /** An `INTEGER` result must be a whole number in the safe range. */

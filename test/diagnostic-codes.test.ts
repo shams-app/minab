@@ -11,9 +11,13 @@
  * a node that has no check of its own (a `Block`, a `Subquery`, a bare name).
  * Those are tested at the type checker (`via: 'checker'`). Two scope
  * messages come only from the scope resolver (`via: 'resolver'`).
- * One entry is a run-time error (`via: 'runtime'`): the program runs in the interpreter.
+ * A compile refusal is tested at the SQL compiler (`via: 'compiler'`).
+ * One entry is an evaluation error (`via: 'evaluation'`): the program runs in the interpreter.
  * Two entries are guards that the current grammar cannot reach; they are
  * tested with a hand-made node (`via: 'guard'`).
+ * `type.unexpectedResultType` is made by the runtime's `expect` option, not by
+ * the checker; `test/runtime.test.ts` tests it (`via: 'runtime'`). The two host
+ * name codes need host declarations; `test/ports.test.ts` tests them.
  */
 
 import { AstUtils, EmptyFileSystem, type AstNode } from 'langium';
@@ -49,8 +53,7 @@ const schema: MinabSchema = {
                 { name: 'status', type: { kind: 'scalar', type: scalarType('TEXT') } }
             ]
         }
-    ],
-    functions: []
+    ]
 };
 
 type Setting = 'record' | 'plain' | 'fieldWithoutType';
@@ -72,7 +75,9 @@ type Case =
     | { via: 'validator'; program: string; setting?: Setting }
     | { via: 'checker'; program: string; target: Pick; setting?: Setting }
     | { via: 'resolver'; program: string; target: Pick }
-    | { via: 'runtime'; program: string }
+    | { via: 'compiler'; program: string }
+    | { via: 'runtime' }
+    | { via: 'evaluation'; program: string }
     | { via: 'guard' };
 
 /** One program per code. Keep it in the same order as the registry. */
@@ -88,7 +93,10 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
 
-    'eval.integerOutOfRange': { via: 'runtime', program: '9007199254740991 + 1' },
+    'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
+
+    'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'null.likeWithNull': { via: 'validator', program: '.status LIKE null' },
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
@@ -100,6 +108,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'rule.fieldTypeMissing': { via: 'checker', program: '$', target: ofType('FieldValue'), setting: 'fieldWithoutType' },
     'rule.fieldValueOutsideFieldRule': { via: 'validator', program: '$ == 1' },
 
+    'scope.assignToInput': { via: 'runtime' }, // needs host inputs: test/ports.test.ts
     'scope.columnNeedsTable': {
         via: 'resolver',
         program: 'EXISTS(#Order[^.id == .id])',
@@ -112,6 +121,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.keyOutsideQuery': { via: 'validator', program: 'KEY' },
     'scope.keyWithoutGroupBy': { via: 'validator', program: 'FROM Order SELECT KEY' },
     'scope.nameIsFunction': { via: 'validator', program: 'fn total(a: INTEGER): INTEGER { a }\nlet total: INTEGER = 5;' },
+    'scope.nameIsHostName': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'scope.noActiveScope': { via: 'guard' },
     'scope.noParentScope': { via: 'checker', program: '^', target: ofType('ParentRecord') },
     'scope.noStaticTable': { via: 'checker', program: 'FROM Order SELECT ^', target: ofType('ParentRecord'), setting: 'plain' },
@@ -158,6 +168,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.switchArmsDiffer': { via: 'validator', program: 'switch .status { "a" => 1, _ => "x" }' },
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
+    'type.unexpectedResultType': { via: 'runtime' },
     'type.unsupportedOperator': { via: 'guard' }
 };
 
@@ -181,7 +192,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^(syntax|scope|type|null|call|eval|query|rule)\.[a-z][A-Za-z0-9]*$/);
+        expect(code).toMatch(/^(syntax|scope|type|null|call|compile|eval|query|rule)\.[a-z][A-Za-z0-9]*$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);
@@ -233,11 +244,25 @@ describe('every code is reported by a program', () => {
                 }
                 break;
             }
-            case 'runtime': {
-                // Run-time errors do not carry a code field yet (R4). The code leads the message.
+            case 'compiler': {
+                const { document } = await validate.record(testCase.program);
+                const query = AstUtils.streamAst(document.parseResult.value).find(node => node.$type === 'Query');
+                expect(query, 'the program has a query to compile').toBeDefined();
+                const result = services.record.sqlCompiler.compileQuery(query as never);
+                expect(result.ok).toBe(false);
+                if (!result.ok) {
+                    expect(result.code).toBe(expected);
+                    expect(result.reason).toBe(DIAGNOSTICS[expected].message(result.params as never));
+                }
+                break;
+            }
+            case 'runtime':
+                break; // tested in test/runtime.test.ts
+            case 'evaluation': {
+                // The error carries its code and the English message.
                 const { document } = await validate.record(testCase.program);
                 const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
-                expect(result).toEqual({ ok: false, reason: `${expected}: ${DIAGNOSTICS[expected].message({} as never)}` });
+                expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message({} as never) });
                 break;
             }
             case 'guard':

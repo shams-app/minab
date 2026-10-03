@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, eval, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, query, rule.
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
  *  - After you change an entry, run `npm run docs:diagnostics`.
@@ -87,6 +87,16 @@ export const DIAGNOSTICS = {
         doc: 'A user function needs one argument for each declared parameter. Add or remove arguments.'
     }),
 
+    'compile.blockInQuery': entry({
+        severity: error,
+        message: () => 'a block with statements cannot run inside a query (a statement cannot become SQL)',
+        doc: 'A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query.'
+    }),
+    'compile.hostFunctionInSql': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
+        doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
+    }),
     'eval.integerOutOfRange': entry({
         severity: error,
         message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',
@@ -136,6 +146,11 @@ export const DIAGNOSTICS = {
         doc: 'The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule.'
     }),
 
+    'scope.assignToInput': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is a host input — it is read-only`,
+        doc: 'A host input can be read but not changed. Copy it into a let first, and change the copy.'
+    }),
     'scope.columnNeedsTable': entry<{ column: string }>({
         severity: error,
         message: p => `column "${p.column}" needs a statically known table (requires the Phase 4 type system)`,
@@ -175,6 +190,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" is the name of a function — a variable or parameter may not reuse it`,
         doc: 'A let or a parameter may not have the name of a function declared in the program. Rename it.'
+    }),
+    'scope.nameIsHostName': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is the name of a host input or host function — a function, variable or parameter may not reuse it`,
+        doc: 'The host declared this name. A fn, a let or a parameter may not use it. Rename yours.'
     }),
     'scope.noActiveScope': entry({
         severity: error,
@@ -397,6 +417,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `unary "${p.operator}" requires a numeric operand, got ${p.actual}`,
         doc: 'A sign works on INTEGER and DECIMAL. Use a number, or CAST.'
+    }),
+    'type.unexpectedResultType': entry<{ expected: string; actual: string }>({
+        severity: error,
+        message: p => `the program gives ${p.actual}, but the host expects ${p.expected}`,
+        doc: 'The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST.'
     }),
     'type.unsupportedOperator': entry<{ operator: string }>({
         severity: error,
