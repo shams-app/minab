@@ -84,9 +84,30 @@ export const CONSTANT_KEYWORDS = ['true', 'false', 'null', 'NULL'] as const;
 
 /** Built-in names, ALL CAPS (`minab-builtins.ts`). Not grammar keywords — plain identifiers the checker knows. */
 export const BUILTINS = [
-    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'EXISTS', 'ALL', 'ANY',
-    'LOWER', 'UPPER', 'TRIM', 'LENGTH', 'SUBSTRING', 'REPLACE', 'STARTS_WITH', 'ENDS_WITH',
-    'CONTAINS', 'COALESCE', 'ROUND', 'ABS', 'FLOOR', 'CEIL', 'GREATEST', 'LEAST'
+    'COUNT',
+    'SUM',
+    'AVG',
+    'MIN',
+    'MAX',
+    'EXISTS',
+    'ALL',
+    'ANY',
+    'LOWER',
+    'UPPER',
+    'TRIM',
+    'LENGTH',
+    'SUBSTRING',
+    'REPLACE',
+    'STARTS_WITH',
+    'ENDS_WITH',
+    'CONTAINS',
+    'COALESCE',
+    'ROUND',
+    'ABS',
+    'FLOOR',
+    'CEIL',
+    'GREATEST',
+    'LEAST'
 ] as const;
 
 const WORD_TYPES = new Map<string, TokenType>();
