@@ -124,6 +124,7 @@
     "format:check": "oxfmt --check src test scripts vscode-extension/src"
   },
   "dependencies": {
+    "big.js": "^6.2.2",
     "langium": "~4.4.0",
     "vscode-languageserver": "^10.1.1",
     "vscode-languageserver-textdocument": "^1.0.14",
@@ -163,6 +164,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@types/big.js": "^7.0.0",
     "@types/node": "^22.20.3",
     "@types/pg": "^8.23.1",
     "concurrently": "^9.0.0",

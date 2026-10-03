@@ -5,7 +5,8 @@
  * Compiles the parts of Minab that *are* relational algebra: a `Query`
  * pipeline (spec §4), an ad-hoc `#Table` scope (§3.3), a relation
  * traversal (§3.1), and the built-in aggregates/predicates over either
- * (§5.3.1). Everything else — `&fn`, `if`/`switch`, loops, tuples — is
+ * (§5.3.1), plus `if`/`switch` (as `CASE`), `is`/`isnot` and JSON literals.
+ * Everything else — user functions, loops, tuples, statements in a block — is
  * deliberately *not* compiled here; it belongs to `MinabInterpreter`, and
  * this compiler answers `{ok:false, reason}` for it rather than inventing
  * a SQL encoding. That refusal is load-bearing: it's how the interpreter
@@ -31,6 +32,7 @@
 
 import {
     isBinaryExpression,
+    isBlock,
     isBooleanLiteral,
     isCallExpression,
     isCastExpr,
@@ -38,6 +40,8 @@ import {
     isFieldValue,
     isFilterAccess,
     isGroupKeyRef,
+    isIfExpr,
+    isJsonObjectLiteral,
     isListLiteral,
     isMemberAccess,
     isNamedScope,
@@ -45,24 +49,37 @@ import {
     isNullLiteral,
     isNumberLiteral,
     isParentRecord,
+    isQuery,
     isStringLiteral,
     isSubquery,
+    isSwitchExpr,
     isTableRef,
     isTupleAccess,
+    isTypeTestExpression,
     isUnaryExpression,
     type BinaryExpression,
     type CallExpression,
     type Expression,
+    type IfExpr,
+    type JsonObjectLiteral,
+    type ListLiteral,
+    type NameRef,
+    type NumberLiteral,
     type Query,
+    type SwitchExpr,
     type TypeRef,
+    type TypeTestExpression,
     type UnaryExpression
 } from './generated/ast.js';
+import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { isBuiltinName } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
+import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 
-export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string };
+/** A refusal has an English `reason`. When the refusal has a stable code (see the registry), `code` and `params` come with it. */
+export type SqlResult = { ok: true; query: SqlQuery } | { ok: false; reason: string; code?: DiagnosticCode; params?: DiagnosticParams };
 
 /** A row held outside the statement being compiled: its identity (all SQL can compare against — see spec §6.1's `. != ^`) plus the table it belongs to, so its relations can still be followed. */
 export interface OuterRecord {
@@ -98,10 +115,24 @@ export const NO_OUTER_SCOPE: OuterResolver = {
     resolveRecord: () => ({ found: false, reason: NO_OUTER_REASON })
 };
 
-class CompileError extends Error {}
+class CompileError extends Error {
+    constructor(
+        reason: string,
+        readonly code?: DiagnosticCode,
+        readonly params?: DiagnosticParams
+    ) {
+        super(reason);
+    }
+}
 
 function fail(reason: string): never {
     throw new CompileError(reason);
+}
+
+/** A refusal with a stable code from the registry. */
+function failCoded<C extends DiagnosticCode>(code: C, ...args: ParamsArgs<C>): never {
+    const message = coded(code, ...args);
+    throw new CompileError(message.reason, code, message.params);
 }
 
 interface NamedEntry {
@@ -117,6 +148,10 @@ interface SqlScope {
     named: Map<string, NamedEntry>;
     /** Set once a `GROUPBY` is in effect, so `KEY` has something to resolve to. */
     groupKeys?: Expression[];
+    /** For each group key that walks a relation: the SQL of the joined column it groups by. */
+    groupKeySql?: Map<Expression, string>;
+    /** The `LEFT JOIN` clauses those keys need, in order. */
+    groupJoins?: string[];
     /** `SELECT ... AS n` names, which `ORDERBY` may reference by name. */
     selectAliases?: Set<string>;
 }
@@ -157,6 +192,15 @@ const COMPARISONS: Record<string, string> = {
     LIKE: 'LIKE'
 };
 
+/** The `jsonb_typeof` name of each kind that `is` / `isnot` can test, besides `null` (spec §5.6). */
+const JSON_KINDS: Record<string, string> = {
+    ArrayKind: 'array',
+    ObjectKind: 'object',
+    StringKind: 'string',
+    NumberKind: 'number',
+    BooleanKind: 'boolean'
+};
+
 const ARITHMETIC: Record<string, string> = {
     '+': '+',
     '-': '-',
@@ -194,7 +238,7 @@ export class MinabSqlCompiler {
             return { ok: true, query: { text, params: ctx.params } };
         } catch (e) {
             if (e instanceof CompileError) {
-                return { ok: false, reason: e.message };
+                return e.code ? { ok: false, reason: e.message, code: e.code, params: e.params } : { ok: false, reason: e.message };
             }
             throw e;
         }
@@ -203,15 +247,19 @@ export class MinabSqlCompiler {
     // ---- query ---------------------------------------------------------
 
     private query(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
-        const scope = this.scopeOf(query, ctx, outerScopes);
+        const source = this.querySource(query, ctx, outerScopes);
+        const scope = this.scopeOf(query, source);
         const scopes = [scope, ...outerScopes];
+        this.joinGroupKeys(query, scope, ctx, scopes);
 
         // Compiled in SQL's own textual order so `$1`, `$2`, ... read left
         // to right in the emitted statement.
         const select = this.selectClause(query, ctx, scopes);
         const from = this.fromClause(query, scope, ctx, scopes);
-        const where = query.whereClause ? ` WHERE ${this.expression(query.whereClause.condition, ctx, scopes)}` : '';
-        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.expression(k, ctx, scopes)).join(', ')}` : '';
+        // A related collection brings its own predicates (`<fk> = <outer key>`, `[filter]`). The user's WHERE follows them.
+        const predicates = [...source.predicates, ...(query.whereClause ? [this.expression(query.whereClause.condition, ctx, scopes)] : [])];
+        const where = predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '';
+        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k, ctx, scopes)).join(', ')}` : '';
         const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
             ? ` ORDER BY ${query.orderByClause.items
@@ -225,10 +273,11 @@ export class MinabSqlCompiler {
         return `${select}${from}${where}${groupBy}${having}${orderBy}${limit}`;
     }
 
-    private scopeOf(query: Query, ctx: Ctx, outerScopes: SqlScope[]): SqlScope {
-        const table = this.sourceTable(query, ctx, outerScopes);
-        const alias = query.alias ?? table;
+    private scopeOf(query: Query, source: CollectionSource): SqlScope {
+        const { table, alias } = source;
         const named = new Map<string, NamedEntry>([[alias, { alias, table }]]);
+        // `FROM .orders[...] AS o`: the user's name and the generated alias are the same row.
+        if (query.alias) named.set(query.alias, { alias, table });
         for (const join of query.joins) {
             const joinTable = this.table(join.source).name;
             named.set(join.alias, { alias: join.alias, table: joinTable });
@@ -241,16 +290,19 @@ export class MinabSqlCompiler {
         return scope;
     }
 
-    private sourceTable(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
+    /**
+     * The table a query reads, the alias that names its rows, and the predicates that narrow them
+     * (none for a plain table). The predicates of a related collection bind their parameters here,
+     * before the SELECT list, so in that one form `$n` does not follow the text order.
+     */
+    private querySource(query: Query, ctx: Ctx, outerScopes: SqlScope[]): CollectionSource {
         const source = query.source;
-        if (isTableRef(source)) return this.table(source.name).name;
-        if (isNamedScope(source)) return this.table(source.name).name;
-        // `FROM .orders` — a collection field on an enclosing record.
-        const collection = this.collectionSource(source, ctx, outerScopes);
-        if (collection.predicates.length > 0) {
-            fail('FROM over a related collection is not compiled yet — reach it through an aggregate or EXISTS instead');
+        if (isTableRef(source) || isNamedScope(source)) {
+            const table = this.table(source.name).name;
+            return { table, alias: query.alias ?? table, predicates: [] };
         }
-        return collection.table;
+        // `FROM .orders` or `FROM .orders[.status == "x"]` — a collection field on an enclosing record.
+        return this.collectionSource(source, ctx, outerScopes);
     }
 
     private fromClause(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): string {
@@ -262,7 +314,55 @@ export class MinabSqlCompiler {
             if (!join.condition) fail(`"${join.alias}" is joined without an ON condition`);
             return ` ${keyword} ${target} ON ${this.expression(join.condition, ctx, scopes)}`;
         });
-        return source + joins.join('');
+        return source + joins.join('') + (scope.groupJoins ?? []).join('');
+    }
+
+    /**
+     * A `GROUPBY` key such as `.customer.country` walks a relation. A
+     * subquery per use would not match the `GROUP BY` expression (Postgres
+     * rejects it as an ungrouped column), so each hop becomes one `LEFT JOIN`
+     * and the key is the joined column. `LEFT` keeps rows whose relation is
+     * null: they form one `null` group (spec §7.7 rule 1).
+     */
+    private joinGroupKeys(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): void {
+        for (const key of query.groupByClause?.keys ?? []) {
+            const path: string[] = [];
+            let base: Expression = key;
+            while (isMemberAccess(base)) {
+                path.unshift(base.member);
+                base = base.receiver;
+            }
+            let row: { alias: string; table: string } | undefined;
+            if (isCurrentRecord(base) && base.field && scopes.length > 0) {
+                path.unshift(base.field);
+                row = { alias: scope.alias, table: scope.table };
+            } else if (isNameRef(base) || isNamedScope(base)) {
+                row = this.lookupNamed(base.name, [scope]);
+            }
+            if (!row || path.length < 2) continue;
+            let current = row;
+            const joins: string[] = [];
+            for (const field of path.slice(0, -1)) {
+                const column = this.columnSchema(current.table, field);
+                if (column.type.kind !== 'ref') break;
+                const target = this.table(column.type.table).name;
+                const alias = ctx.freshGroupAlias();
+                joins.push(
+                    ` LEFT JOIN ${quoteIdent(target)} AS ${quoteIdent(alias)} ON ${quoteIdent(alias)}.${quoteIdent(this.primaryKey(target))} = ${quoteIdent(current.alias)}.${quoteIdent(this.refForeignKey(current.table, column))}`
+                );
+                current = { alias, table: target };
+            }
+            if (joins.length !== path.length - 1) continue;
+            const last = this.columnSchema(current.table, path[path.length - 1]);
+            if (last.type.kind !== 'scalar') continue;
+            (scope.groupJoins ??= []).push(...joins);
+            (scope.groupKeySql ??= new Map()).set(key, `${quoteIdent(current.alias)}.${quoteIdent(path[path.length - 1])}`);
+        }
+    }
+
+    /** A `GROUPBY` key as SQL: the joined column when `joinGroupKeys` made one, else the plain expression. */
+    private groupKey(key: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        return scopes[0]?.groupKeySql?.get(key) ?? this.expression(key, ctx, scopes);
     }
 
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
@@ -279,9 +379,15 @@ export class MinabSqlCompiler {
 
     // ---- expressions ---------------------------------------------------
 
+    /** A literal with a fraction is a `DECIMAL`: it is bound as its own text, so Postgres reads it exactly (D17). */
+    private numberLiteralValue(expr: NumberLiteral): number | string {
+        const text = expr.$cstNode?.text;
+        return text?.includes('.') ? text : expr.value;
+    }
+
     private expression(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
-        if (isNumberLiteral(expr)) return ctx.bind(expr.value);
+        if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr));
         if (isBooleanLiteral(expr)) return expr.value === 'true' ? 'TRUE' : 'FALSE';
         if (isNullLiteral(expr)) return 'NULL';
         if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes);
@@ -291,6 +397,12 @@ export class MinabSqlCompiler {
             return `CAST(${this.expression(expr.value, ctx, scopes)} AS ${this.sqlType(expr.targetType)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
+        if (isIfExpr(expr)) return this.ifExpr(expr, ctx, scopes);
+        if (isSwitchExpr(expr)) return this.switchExpr(expr, ctx, scopes);
+        if (isBlock(expr)) return this.branch(expr, ctx, scopes);
+        if (isTypeTestExpression(expr)) return this.typeTest(expr, ctx, scopes);
+        if (isJsonObjectLiteral(expr)) return this.jsonObject(expr, ctx, scopes);
+        if (isListLiteral(expr)) return this.jsonArray(expr, ctx, scopes);
         // `$` (spec §6.2) is always the host's, never a column: the value
         // of the field under validation, bound as a parameter.
         if (isFieldValue(expr)) return this.outerScalar(expr, ctx, scopes.length);
@@ -301,6 +413,87 @@ export class MinabSqlCompiler {
             fail(`"${expr.$type}" refers to a record, not a value — use one of its fields`);
         }
         fail(`"${expr.$type}" has no SQL form (it belongs to the interpreted layer)`);
+    }
+
+    // ---- if, switch, is, JSON literals (spec §5.6, §7.3, §9) -------------
+
+    /** `if c { a } else { b }` is `CASE WHEN c THEN a ELSE b END`. Without `else`, the answer is `NULL`. */
+    private ifExpr(expr: IfExpr, ctx: Ctx, scopes: SqlScope[]): string {
+        const condition = this.expression(expr.condition, ctx, scopes);
+        const then = this.branch(expr.thenBranch, ctx, scopes);
+        const otherwise = expr.elseIf ?? expr.elseBranch;
+        const fallback = otherwise ? this.branch(otherwise, ctx, scopes) : 'NULL';
+        return `CASE WHEN ${condition} THEN ${then} ELSE ${fallback} END`;
+    }
+
+    /**
+     * `switch s { a => x, _ => d }` is `CASE s WHEN a THEN x ELSE d END`.
+     * A `null` case value cannot use that form (`= NULL` never matches),
+     * so a switch with one uses `CASE WHEN s IS NULL THEN …` for every arm.
+     * An arm with several values becomes several `WHEN`s with one result.
+     */
+    private switchExpr(expr: SwitchExpr, ctx: Ctx, scopes: SqlScope[]): string {
+        const subject = this.expression(expr.subject, ctx, scopes);
+        const searched = expr.cases.some(arm => arm.values.some(isNullLiteral));
+        const arms: string[] = [];
+        for (const arm of expr.cases) {
+            for (const value of arm.values) {
+                const when = !searched
+                    ? this.expression(value, ctx, scopes)
+                    : isNullLiteral(value)
+                      ? `${subject} IS NULL`
+                      : `${subject} = ${this.expression(value, ctx, scopes)}`;
+                // The result is compiled again for each value, so `$n` follows the text order.
+                arms.push(`WHEN ${when} THEN ${this.branch(arm.result, ctx, scopes)}`);
+            }
+        }
+        const fallback = this.branch(expr.defaultResult, ctx, scopes);
+        return `CASE${searched ? '' : ` ${subject}`} ${arms.join(' ')} ELSE ${fallback} END`;
+    }
+
+    /**
+     * The result of an `if` or `switch` arm. A block with statements has no SQL
+     * form: a statement cannot run inside a query. A block with only a tail is its tail.
+     * A literal result gets its type (`$1::text`), because `CASE` over bare parameters
+     * would read them as text.
+     */
+    private branch(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isBlock(expr)) {
+            if (expr.statements.length > 0) failCoded('compile.blockInQuery');
+            if (!expr.tail) fail('a block with no tail expression has no value');
+            return isQuery(expr.tail) ? `(${this.query(expr.tail, ctx, scopes)})` : this.branch(expr.tail, ctx, scopes);
+        }
+        return this.typedValue(expr, ctx, scopes);
+    }
+
+    /** Text and number literals carry their type; everything else compiles as usual. */
+    private typedValue(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        if (isStringLiteral(expr)) return `${ctx.bind(expr.value)}::text`;
+        if (isNumberLiteral(expr)) return `${ctx.bind(expr.value)}::numeric`;
+        return this.expression(expr, ctx, scopes);
+    }
+
+    /** `x is null` is `x IS NULL`. The other kinds read `jsonb_typeof`, and a `null` answers `false` (`isnot`: `true`), as in the interpreter. */
+    private typeTest(expr: TypeTestExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const value = this.expression(expr.value, ctx, scopes);
+        const is = expr.operator === 'is';
+        if (isNullLiteral(expr.test)) return `(${value} IS ${is ? '' : 'NOT '}NULL)`;
+        const kind = JSON_KINDS[expr.test.$type];
+        if (!kind) fail(`"${expr.test.$type}" is not a JSON kind`);
+        return `(jsonb_typeof(${value}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
+    }
+
+    private jsonObject(expr: JsonObjectLiteral, ctx: Ctx, scopes: SqlScope[]): string {
+        const pairs = expr.properties.flatMap(property => {
+            // `{ id }` is `{ id: id }`: the value is the variable of that name.
+            const value = property.value ?? ({ $type: 'NameRef', name: property.key } as NameRef);
+            return [`${ctx.bind(property.key)}::text`, this.typedValue(value, ctx, scopes)];
+        });
+        return `jsonb_build_object(${pairs.join(', ')})`;
+    }
+
+    private jsonArray(expr: ListLiteral, ctx: Ctx, scopes: SqlScope[]): string {
+        return `jsonb_build_array(${expr.items.map(item => this.typedValue(item, ctx, scopes)).join(', ')})`;
     }
 
     /**
@@ -326,7 +519,7 @@ export class MinabSqlCompiler {
             const keys = scopes[0]?.groupKeys;
             if (!keys) fail('KEY is only valid after a GROUPBY clause');
             if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
-            return this.expression(keys[0], ctx, scopes);
+            return this.groupKey(keys[0], ctx, scopes);
         }
         if (isMemberAccess(expr)) {
             const mark = ctx.mark();
@@ -510,6 +703,10 @@ export class MinabSqlCompiler {
 
     private call(expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         const callee = expr.callee;
+        if (isNameRef(callee) && this.schema.getHostFunction(callee.name)) {
+            // A host function is the host's code. Emitting `name(...)` would call a database function of that name.
+            failCoded('compile.hostFunctionInSql', { name: callee.name });
+        }
         if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
             // A user `fn` runs in the interpreter. Emitting `name(...)` would call a database function of that name: a wrong answer.
             fail(
@@ -727,12 +924,17 @@ export class MinabSqlCompiler {
 class Ctx {
     readonly params: unknown[] = [];
     private aliasCount = 0;
+    private groupCount = 0;
 
     constructor(readonly outer: OuterResolver) {}
 
     bind(value: unknown): string {
-        this.params.push(value);
+        this.params.push(sqlParameter(value));
         return `$${this.params.length}`;
+    }
+
+    freshGroupAlias(): string {
+        return `_g${this.groupCount++}`;
     }
 
     freshAlias(): string {

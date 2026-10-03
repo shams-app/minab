@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { loadConfigFile } from '../src/cli/config.js';
 import { parseConfig } from '../src/host/config.js';
+import type { HostFunctionDeclaration } from '../src/language/host-declarations.js';
 import type { QueryExecutor } from '../src/language/minab-executor.js';
 import type { MinabRuleContext } from '../src/language/schema.js';
 import { createMinab } from '../src/runtime/index.js';
@@ -24,8 +25,10 @@ const { schema } = parseConfig({ schema: spec });
 const order: MinabRuleContext = { isFieldRule: false, recordTable: 'Order' };
 const customer: MinabRuleContext = { isFieldRule: false, recordTable: 'Customer' };
 
-async function analyze(source: string, ruleContext: MinabRuleContext = order, localHostFunctions: string[] = []) {
-    const minab = createMinab({ schema: { ...schema, version: 'analysis' }, ruleContext, localHostFunctions });
+const slugify = (local: boolean) => ({ name: 'slugify', params: [{ name: 's', type: 'TEXT' }], returns: 'TEXT', local });
+
+async function analyze(source: string, ruleContext: MinabRuleContext = order, functions: HostFunctionDeclaration[] = []) {
+    const minab = createMinab({ schema: { ...schema, version: 'analysis' }, ruleContext, functions, inputs: { currentUser: { id: 'UUID' } } });
     const program = await minab.prepare(source);
     minab.dispose();
     return program;
@@ -65,10 +68,11 @@ describe('analysis: the cases of the card', () => {
     });
 
     test('a local host function stays local, another one needs data', async () => {
-        const local = await analyze('slugify(.status) == "x"', order, ['slugify']);
+        const local = await analyze('slugify(.status) == "x"', order, [slugify(true)]);
+        expect(local.ok).toBe(true);
         expect(local.analysis.hostFunctions).toEqual(['slugify']);
         expect(local.analysis.tier).toBe('local');
-        const remote = await analyze('slugify(.status) == "x"');
+        const remote = await analyze('slugify(.status) == "x"', order, [slugify(false)]);
         expect(remote.analysis.hostFunctions).toEqual(['slugify']);
         expect(remote.analysis.needsData).toBe(true);
         expect(remote.analysis.tier).toBe('data');
@@ -170,10 +174,10 @@ describe('analysis: construct families', () => {
         expect(broken.analysis).toMatchObject({ tier: 'data', needsData: true, writes: true, readsWholeRecord: true });
     });
 
-    test('a type error is still analyzed', async () => {
-        const unknown = await analyze('slugify(.status) == "x"', order, ['slugify']);
+    test('a type error is still analyzed, and an undeclared function is not local', async () => {
+        const unknown = await analyze('slugify(.status) == "x"');
         expect(unknown.ok).toBe(false);
-        expect(unknown.analysis).toMatchObject({ tier: 'local', hostFunctions: ['slugify'] });
+        expect(unknown.analysis).toMatchObject({ tier: 'data', hostFunctions: ['slugify'] });
     });
 });
 

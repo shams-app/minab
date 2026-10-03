@@ -5,6 +5,7 @@
  * checks the import graph.
  */
 
+import { resolveHostDeclarations } from '../language/host-declarations.js';
 import { DEFAULT_RULE_CONTEXT } from '../language/schema.js';
 import { prepareProgram } from './prepare.js';
 import { DEFAULT_SERVICE_CACHE_SIZE, ServiceCache } from './service-cache.js';
@@ -12,8 +13,10 @@ import type { CacheStats, Minab, MinabOptions, PrepareOptions, PreparedProgram }
 
 export function createMinab(options: MinabOptions): Minab {
     const cache = new ServiceCache(options.serviceCacheSize ?? DEFAULT_SERVICE_CACHE_SIZE, options.mode ?? 'production');
+    // Checks the names and the type words now, so a host developer sees a mistake at startup.
+    const host = resolveHostDeclarations({ functions: options.functions, inputs: options.inputs }, options.schema);
     const defaultContext = options.ruleContext ?? DEFAULT_RULE_CONTEXT;
-    const localHostFunctions = new Set(options.localHostFunctions ?? []);
+    const localHostFunctions = new Set([...host.functions.values()].filter(f => f.local).map(f => f.name));
     let disposed = false;
     let counter = 0;
 
@@ -22,7 +25,7 @@ export function createMinab(options: MinabOptions): Minab {
             if (disposed) throw new Error('this Minab runtime was disposed');
             if (typeof source !== 'string') throw new TypeError('prepare needs the program source as a string');
             const ruleContext = prepareOptions.ruleContext ?? defaultContext;
-            const set = cache.get(options.schema, ruleContext);
+            const set = cache.get(options.schema, ruleContext, host);
             // One URI for each call: calls may overlap, and a shared URI would make them fight.
             const uri = `minab:///prepared/${counter++}.minab`;
             return prepareProgram(set, uri, source, prepareOptions.expect, ruleContext.recordTable, localHostFunctions);

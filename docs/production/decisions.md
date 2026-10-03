@@ -781,6 +781,8 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 
 **Answer:** 1. The name's story: ask at phase W1. 2. Domain: **`minab-lang.org`**. 3–4. Portfolio URL and social handles: ask at phase W1. 5. Brand direction: **(B) "Terminal Noir"** — dark, IDE-like (differs from the brief's recommendation A). 6. Languages: English for 1.0 plus one Persian example program (L3); a full Persian site post-1.0 — 2026-10-02
 
+**Answer (W1, the questions moved to W1):** 1. The name's story: Minab is a city in southern Iran. A school there with 168 students and a few teachers was bombed, and all the children and their teachers were killed. The language is named to remember them. Landing line (draft, the owner checks it in round 2): "Named for Minab, a city in southern Iran — in memory of the 168 children and their teachers who were killed when their school was bombed." 2. Portfolio URL: **`https://hamcker.github.io`**. 3. Social handles: none. 4. Light theme: **yes**, keep a light theme next to the dark one; **dark is the default**, light follows the OS or the manual toggle — 2026-10-02
+
 <a id="d41"></a>
 ### D41 — Where the website is hosted
 
