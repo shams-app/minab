@@ -48,6 +48,12 @@ import {
 } from './protocol.js';
 
 export type { BridgeEndpoint } from './protocol.js';
+export { consoleEventSink, emitLogs } from './console.js';
+export type { ConsoleLike, ConsoleSinkOptions } from './console.js';
+export { createRemoteMinab } from './remote.js';
+export type { FetchLike, FetchResponse, RemoteMinab, RemoteMinabOptions, RemoteProgramRef, RemoteRunOptions } from './remote.js';
+export { routeByTier } from './route.js';
+export type { LocalMinab, RoutedProgram, RouteOptions, StoredProgram, TierRouter } from './route.js';
 
 export interface WorkerMinabOptions extends Pick<MinabOptions, 'schema' | 'functions' | 'inputs' | 'ruleContext' | 'limits' | 'serviceCacheSize' | 'mode'> {
     /**

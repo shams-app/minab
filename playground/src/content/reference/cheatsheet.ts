@@ -442,11 +442,21 @@ export const cheatsheet: CheatSection[] = [
             {
                 id: 'if-statement',
                 title: 'if! (statement form)',
-                syntax: 'if! count > 0 { flagged = flagged + 1; }',
+                syntax: 'if! count > 0 { flagged += 1; }',
                 description: 'Runs statements for their effect rather than producing a value.',
                 specRef: '§9.1.1',
                 keywords: ['if!'],
-                status: 'check-only'
+                exampleId: 'statements-in-function'
+            },
+            {
+                id: 'assignment',
+                title: 'Assignment',
+                syntax: 'total += 5;\nlabel += "-42";\ndiscount ?= 0.10;\nextra |= { b: 2 };',
+                description:
+                    'Changes a local name: `=` `+=` `-=` `*=` `/=`, `?=` only when it is `null`, `|=` merges into a `JSON` value. `+=` also joins text. A block has its own scope.',
+                specRef: '§9.3',
+                keywords: ['+=', '-=', '*=', '/=', '?=', '|='],
+                exampleId: 'statements-in-function'
             },
             {
                 id: 'loops',

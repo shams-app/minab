@@ -55,9 +55,19 @@ describe('analysis', () => {
 
     test('flags check-only constructs statically', async () => {
         await engine.setHost(demo());
-        const report = await engine.analyze('let n: INTEGER = 0;\nloop i from 1 to 3 { n = n + i; }\nn');
+        const report = await engine.analyze('fn f(): INTEGER { let n: INTEGER = 0; loop i from 1 to 3 { n = n + i; } n }\nf()');
         expect(report.program.checkOnly).toBe(true);
-        expect(report.program.checkOnlyConstructs.map(c => c.type)).toEqual(expect.arrayContaining(['LoopStatement', 'AssignmentStatement']));
+        expect(report.program.checkOnlyConstructs.map(c => c.type)).toEqual(['LoopStatement']);
+    });
+
+    test('assignment and if! are not check-only any more (X3)', async () => {
+        await engine.setHost(demo());
+        const report = await engine.analyze('fn f(n: INTEGER): INTEGER { n += 1; if! n > 1 { n *= 2; } n }\nf(1)');
+        expect(report.diagnostics).toEqual([]);
+        expect(report.program.checkOnly).toBe(false);
+        const run = await engine.run('fn f(n: INTEGER): INTEGER { n += 1; if! n > 1 { n *= 2; } n }\nf(1)', 5);
+        expect(run.stage).toBe('done');
+        expect(run.result).toMatchObject({ kind: 'value', value: 4 });
     });
 
     test('lists declared symbols', async () => {

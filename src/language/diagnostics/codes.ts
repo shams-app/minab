@@ -632,6 +632,11 @@ export const DIAGNOSTICS = {
         message: p => `no stored program with id "${p.id}" and version "${p.version}"`,
         doc: 'The run endpoint runs stored programs by id and version, and the host program store has none with this id and version. Check the ref of the run. A server never runs program text sent by a client unless it is in development mode.'
     }),
+    'wire.remoteFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => `the remote run failed: ${p.reason}`,
+        doc: 'The browser could not get an answer from the server: the network failed, the server answered with an HTTP error that is not a Minab error, or its answer was missing a result. Try again. params.reason says which.'
+    }),
     'wire.tooManyRuns': entry<{ limit: number; used: number }>({
         severity: error,
         message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,
