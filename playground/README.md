@@ -34,7 +34,15 @@ The `predev`, `prebuild` and `pretest` scripts run `scripts/prepare.mjs`, which 
 | `npm test` | Vitest (Node): the engine against in-process PGlite, every example, every lesson, the tokenizer, share links |
 | `npm run build` | `tsc -b`, then a production bundle in `dist/` (plus a `404.html` copy for SPA hosting) |
 | `npm run preview` | Serve `dist/` locally |
+| `npm run test:site` | Playwright on `vite preview` (build first): axe on every route in light and dark, and a smoke test. See `tests/README.md` |
+| `npm run lighthouse` | Lighthouse CI on `vite preview` (build first). Budgets are in `lighthouserc.json` |
 | `PLAYGROUND_BASE=/sub/path/ npm run build` | Build for hosting under a path (GitHub Pages, a portfolio sub-path) |
+
+## Deploy
+
+The site is on Cloudflare Pages (project `minab`, domain `minab-lang.org`; decision D41). `.github/workflows/deploy-site.yml` deploys `main` to the live site and every pull request to a preview. `public/_headers` gives the hashed files (JS, CSS and the PGlite `.wasm` and `.data` files in `assets/`) a one-year `immutable` cache and keeps the HTML fresh. `public/_redirects` sends unknown paths to `index.html`, so deep links work. `.github/workflows/site-checks.yml` runs the Playwright and Lighthouse checks.
+
+The repository needs two secrets: `CLOUDFLARE_API_TOKEN` (permission "Cloudflare Pages: Edit") and `CLOUDFLARE_ACCOUNT_ID`. The footer shows the Minab version from the root `package.json` (D42).
 
 ## How it's built
 

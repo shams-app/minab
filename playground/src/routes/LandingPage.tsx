@@ -83,14 +83,20 @@ export function LandingPage() {
     const rule = useSnippet(landing.layers.rule.exampleId);
     const current = landing.demo.find(d => d.exampleId === active)!;
 
-    // Monaco loads only after first paint and a quiet moment, so it never competes with the hero. The hero demo
-    // itself starts the worker and the database; warming the engine here just makes "Open the playground" instant.
+    // The hero demo starts the worker and the database. Warming the engine after a quiet moment makes "Open the
+    // playground" instant. Monaco is large and its start-up blocks the main thread, so it loads only when the
+    // visitor shows intent (pointer, focus or touch on a link to a page that has the editor).
     useEffect(() => {
-        const timer = window.setTimeout(() => {
-            warmUpEngine();
-            preloadEditor();
-        }, 2000);
-        return () => window.clearTimeout(timer);
+        const timer = window.setTimeout(warmUpEngine, 2000);
+        const onIntent = (event: Event) => {
+            if (event.target instanceof Element && event.target.closest('a[href^="/play"], a[href^="/learn"]')) preloadEditor();
+        };
+        const events = ['pointerover', 'focusin', 'touchstart'] as const;
+        for (const name of events) document.addEventListener(name, onIntent, { passive: true });
+        return () => {
+            window.clearTimeout(timer);
+            for (const name of events) document.removeEventListener(name, onIntent);
+        };
     }, []);
 
     const layerQuery = exampleById(landing.layers.query.exampleId)!;
@@ -163,7 +169,13 @@ export function LandingPage() {
             <FeatureGrid features={landing.features} />
             <CtaBand title={landing.cta.title} body={landing.cta.body} primary={landing.cta.primary} secondary={landing.cta.secondary} />
             <NameBand text={NAME_LINE} />
-            <Footer author={landing.footer.author} authorUrl={landing.footer.authorUrl} links={landing.footer.links} note={landing.footer.note} />
+            <Footer
+                author={landing.footer.author}
+                authorUrl={landing.footer.authorUrl}
+                links={landing.footer.links}
+                note={landing.footer.note}
+                version={__MINAB_VERSION__}
+            />
         </div>
     );
 }

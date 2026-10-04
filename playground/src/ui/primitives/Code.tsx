@@ -74,7 +74,7 @@ export function CodeBlock({ code, language = 'minab', copyable, wrap, caption, c
                     </span>
                 </div>
             ) : null}
-            <pre>
+            <pre tabIndex={0}>
                 <code>{renderLines(lines)}</code>
             </pre>
             {!caption && copyButton}
@@ -118,7 +118,7 @@ const markdown = new Marked({
                     line.map(s => (s.type === 'whitespace' ? escapeHtml(s.text) : `<span class="${tokenClass(s.type)}">${escapeHtml(s.text)}</span>`)).join('')
                 )
                 .join('\n');
-            return `<figure class="mb-code" data-language="${lang ?? 'minab'}"><pre><code>${html}</code></pre></figure>`;
+            return `<figure class="mb-code" data-language="${lang ?? 'minab'}"><pre tabindex="0"><code>${html}</code></pre></figure>`;
         },
         codespan({ text }) {
             const raw = unescapeHtml(text);

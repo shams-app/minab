@@ -4,3 +4,6 @@ dist/
 src/language/generated/
 *.tsbuildinfo
 .DS_Store
+playwright-report/
+test-results/
+.lighthouseci/

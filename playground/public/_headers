@@ -1,0 +1,25 @@
+# Cloudflare Pages headers (D41). Vite puts a content hash in every file
+# name under /assets/, so these files can be cached for a year. The big PGlite
+# files (.wasm, .data) are in /assets/ too.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.data
+  Cache-Control: public, max-age=31536000, immutable
+
+# The fonts have no hash in their name, but they change very rarely.
+/fonts/*
+  Cache-Control: public, max-age=2592000
+
+# The pages must be fresh: they name the hashed files.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/404.html
+  Cache-Control: public, max-age=0, must-revalidate

@@ -25,7 +25,14 @@ export function LessonList({ lessons, progress }: { lessons: LessonSummary[]; pr
                     {progress.done}/{progress.total} done
                 </span>
             </p>
-            <div className="mb-progress" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
+            <div
+                className="mb-progress"
+                role="progressbar"
+                aria-label="Tour progress"
+                aria-valuemin={0}
+                aria-valuemax={progress.total}
+                aria-valuenow={progress.done}
+            >
                 <span style={{ width: `${(progress.done / progress.total) * 100}%` }} />
             </div>
             <ol>
