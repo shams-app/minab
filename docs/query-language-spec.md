@@ -1208,7 +1208,7 @@ fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
 }
 ```
 
-Only a call may stand alone. A statement such as `1 + 2;` is the error `call.statementNotACall`. The grammar takes any expression there (`target=Expression ';'`, the same start as an assignment, and the parser tells them apart at the `=` or the `;`), and the checker narrows it to a call. A call without `;` at the end of a block is still the block's tail. A call statement may call a user function or a host function; the value is dropped (a host function's effect is the reason to call it).
+Only a call may stand alone. A statement such as `1 + 2;` is the error `call.statementNotACall`. The grammar rule `AssignmentOrCall` reads the leading expression once. An assignment operator after it makes an `AssignmentStatement`, and `;` makes a `CallStatement`. The grammar takes any expression there, and the checker narrows it to a call. (A separate rule that also began with an expression made parsing about 50% slower.) A call without `;` at the end of a block is still the block's tail. A call statement may call a user function or a host function; the value is dropped (a host function's effect is the reason to call it).
 
 ---
 
@@ -1398,7 +1398,7 @@ Param:
     name=Name ':' type=Type;
 
 BodyStatement:
-    VariableDecl | AssignmentStatement | CallStatement | LoopStatement | BreakStatement | ContinueStatement
+    VariableDecl | AssignmentOrCall | LoopStatement | BreakStatement | ContinueStatement
     | InsertStatement | DeleteStatement | UpdateStatement | IfStatement;
 
 InsertStatement:
@@ -1426,11 +1426,14 @@ SetClause:
 SetAssignment:
     key=(Name | STRING) operator=('+:' | '-:' | '*:' | '/:' | ':|' | ':') value=Expression;
 
-AssignmentStatement:
-    target=Expression operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression ';';
-
-CallStatement:
-    call=Expression ';';
+// One rule for both, so the parser reads the leading expression once: after it, `=`
+// (or another operator) makes an assignment and `;` makes a call statement.
+// The checker requires that a call statement is a call (`call.statementNotACall`).
+AssignmentOrCall infers BodyStatement:
+    Expression (
+        {infer AssignmentStatement.target=current} operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression
+        | {infer CallStatement.call=current}
+    ) ';';
 
 LoopStatement:
     (label=Name ':')?
