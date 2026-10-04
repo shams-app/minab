@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src/nestjs/**/*.ts", "test/nestjs/**/*.ts"],
+  "exclude": ["node_modules", "out"]
+}

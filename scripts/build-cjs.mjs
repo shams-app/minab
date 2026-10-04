@@ -38,6 +38,8 @@ export async function buildCjs(outdir = join(root, 'out/cjs')) {
         target: 'node22',
         external: EXTERNAL,
         sourcemap: false,
+        // The NestJS entry uses parameter decorators. Every injection is explicit (`@Inject`), so esbuild needs no type metadata.
+        tsconfigRaw: { compilerOptions: { experimentalDecorators: true } },
         legalComments: 'none',
         logLevel: 'warning'
     });

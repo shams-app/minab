@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.nestjs.json",
+  "compilerOptions": {
+    "sourceMap": false
+  },
+  "include": ["src/nestjs/**/*.ts"]
+}

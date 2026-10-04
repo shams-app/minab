@@ -10,6 +10,7 @@ installs the tarball there and runs it. Nothing here imports from `src/`.
   `MINAB_TARBALL=<file>` skips the pack and uses that tarball.
 - `esm/`: an ES-module Node project (`import`), the package and `./node`.
 - `cjs/`: a CommonJS Node project (`require`), the same checks.
+- `nest-cjs/`: a CommonJS Node project with NestJS 11. It boots a module with `MinabModule.forRoot` from `@shamsine/minab/nestjs` and runs a stored program (H2).
 - `jest/`: a Jest test in a CommonJS project with the default Jest config.
 - `bun/`: a Bun script that imports the package.
 - `ts-node-resolution/`: (`tsconfig.old.json`, so linters do not read it) a TypeScript project with `moduleResolution: node` (old style).

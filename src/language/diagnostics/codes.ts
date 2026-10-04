@@ -632,6 +632,11 @@ export const DIAGNOSTICS = {
         message: p => `the value at ${p.path} is not a valid ${p.expected}`,
         doc: 'A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error.'
     }),
+    'wire.programNotFound': entry<{ id: string; version: string }>({
+        severity: error,
+        message: p => `no stored program with id "${p.id}" and version "${p.version}"`,
+        doc: 'The run endpoint runs stored programs by id and version, and the host program store has none with this id and version. Check the ref of the run. A server never runs program text sent by a client unless it is in development mode.'
+    }),
     'wire.remoteFailed': entry<{ reason: string }>({
         severity: error,
         message: p => `the remote run failed: ${p.reason}`,
