@@ -214,6 +214,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'wire.invalidRequest': { via: 'runtime' }, // test/wire.test.ts
     'wire.invalidResponse': { via: 'runtime' }, // test/wire.test.ts
     'wire.invalidValue': { via: 'runtime' }, // test/wire.test.ts
+    'wire.programNotFound': { via: 'runtime' }, // test/nestjs/service.test.ts
     'wire.tooManyRuns': { via: 'runtime' }, // test/wire.test.ts
     'wire.unsupportedVersion': { via: 'runtime' }, // test/wire.test.ts
     'wire.workerFailed': { via: 'runtime' } // test/browser/bridge.test.ts

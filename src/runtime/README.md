@@ -157,4 +157,4 @@ to its driver. The timer is cleared when the run ends.
 - A `QueryExecutor` (one argument) still fits the data port. The CLI (R7) and the playground (R8)
   use `DataPort`.
 - The write port is an interface. No statement uses it until X5.
-- The HTTP endpoint (H2) and the browser client (H5) use the wire format. They are not built yet.
+- The HTTP endpoint is built (H2, `src/nestjs/`). The browser client (H5) is not built yet.

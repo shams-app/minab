@@ -19,6 +19,11 @@ const root = resolve(here, '../..');
 const CONSUMERS = {
     esm: { type: 'module', deps: [], command: ['node', 'check.mjs'] },
     cjs: { type: 'commonjs', deps: [], command: ['node', 'check.cjs'] },
+    'nest-cjs': {
+        type: 'commonjs',
+        deps: ['@nestjs/common@^11', '@nestjs/core@^11', 'rxjs@^7', 'reflect-metadata@^0.2'],
+        command: ['node', 'check.cjs']
+    },
     jest: { type: 'commonjs', deps: ['jest@^29'], command: ['npx', 'jest'] },
     bun: { type: 'module', deps: [], command: ['bun', 'run', 'check.mjs'] },
     'ts-node-resolution': { type: 'commonjs', deps: ['typescript@~5.9', '@types/node@^22'], command: ['npx', 'tsc', '-p', 'tsconfig.old.json'] }
