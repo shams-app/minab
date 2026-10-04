@@ -103,7 +103,8 @@
     "docs",
     "!docs/production/**",
     "!docs/release-future/**",
-    "examples"
+    "examples",
+    "!examples/nestjs"
   ],
   "publishConfig": {
     "access": "public"

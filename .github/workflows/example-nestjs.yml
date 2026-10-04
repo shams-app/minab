@@ -1,0 +1,46 @@
+# Builds and packs Minab, installs the tarball into examples/nestjs, migrates a real Postgres
+# and runs the example's end-to-end tests (H3). The example tests what a user gets from npm.
+name: Example NestJS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: minab
+          POSTGRES_PASSWORD: minab
+          POSTGRES_DB: minab_example
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U minab -d minab_example"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://minab:minab@localhost:5432/minab_example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the example (the packed tarball of this repository)
+        working-directory: examples/nestjs
+        run: |
+          npm ci
+          npm run setup
+      - name: Migrate
+        working-directory: examples/nestjs
+        run: npm run migrate
+      - name: End-to-end tests
+        working-directory: examples/nestjs
+        run: npm test

@@ -6,7 +6,7 @@
  * `local` runs with a data port that fails the test when it is called.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
@@ -269,7 +269,7 @@ describe('proof by running: a program called local never calls the data port', (
     test('example programs', async () => {
         const root = here('../examples');
         let local = 0;
-        for (const name of readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory())) {
+        for (const name of readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory() && existsSync(join(root, d.name, `${d.name}.minab`)))) {
             const dir = join(root, name.name);
             const config = loadConfigFile(join(dir, 'minab.config.json'));
             const source = readFileSync(join(dir, `${name.name}.minab`), 'utf8');
