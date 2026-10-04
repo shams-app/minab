@@ -140,6 +140,7 @@ A program fails while it runs.
 | `eval.failed` | error | {reason} | `reason` | The program failed while it ran. params.reason has the English reason. Specific failures have their own code. |
 | `eval.hostFunctionFailed` | error | the host function "{name}" failed | `name` | The host function threw an error. The text of that error is not copied here. The host can log it. |
 | `eval.hostFunctionMissing` | error | the host function "{name}" was called, and the host gave no implementation | `name` | The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run. |
+| `eval.indexNeedsArray` | error | ".$index" needs an array: the rows of a table have no position | none | The program uses ".$index" where "." is a row of a table. A table has no order, so a row has no position. Use an array, or sort with ORDERBY and count in a loop. |
 | `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
 | `eval.missingInput` | error | the host input "{name}" has no value for this run | `name` | The program reads a declared host input, but run got no value for it. Give a value in the hostInputs of run. |
 | `eval.programInvalid` | error | the program has errors, so it cannot run | none | Fix the diagnostics of the program first. A program with errors never runs. |

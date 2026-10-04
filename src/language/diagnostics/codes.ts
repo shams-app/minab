@@ -172,6 +172,11 @@ export const DIAGNOSTICS = {
         message: p => `the host function "${p.name}" was called, and the host gave no implementation`,
         doc: 'The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run.'
     }),
+    'eval.indexNeedsArray': entry({
+        severity: error,
+        message: () => '".$index" needs an array: the rows of a table have no position',
+        doc: 'The program uses ".$index" where "." is a row of a table. A table has no order, so a row has no position. Use an array, or sort with ORDERBY and count in a loop.'
+    }),
     'eval.integerOutOfRange': entry({
         severity: error,
         message: () => 'an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991',

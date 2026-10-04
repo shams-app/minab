@@ -1,4 +1,6 @@
 {
-  "mode": "check-only",
-  "refusal": "\"LoopStatement\" is not executed yet"
+  "mode": "run",
+  "json": true,
+  "statements": 1,
+  "compiles": false
 }

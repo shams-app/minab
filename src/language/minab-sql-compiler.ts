@@ -282,6 +282,32 @@ export class MinabSqlCompiler {
         return this.run(ctx => `SELECT ${this.expression(expr, ctx, [])} AS "value"`, outer, clock);
     }
 
+    /**
+     * Compile a collection (`.orders`, `#Order[...]`) to a `SELECT` of its rows. A loop (X4)
+     * reads its rows with it. `table` is the table of the rows. Answers `ok: false` when the
+     * expression is not a collection.
+     */
+    compileRows(expr: Expression, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult & { table?: string } {
+        let table: string | undefined;
+        const result = this.run(
+            ctx => {
+                const source = this.collectionSource(expr, ctx, []);
+                table = source.table;
+                const scope: SqlScope = {
+                    alias: source.alias,
+                    table: source.table,
+                    named: new Map([[source.alias, { alias: source.alias, table: source.table }]])
+                };
+                const physical = this.sqlTable(source.table);
+                const where = source.predicates.length > 0 ? ` WHERE ${source.predicates.join(' AND ')}` : '';
+                return `SELECT ${this.star(scope)} FROM ${quoteIdent(physical)} AS ${quoteIdent(source.alias)}${where}`;
+            },
+            outer,
+            clock
+        );
+        return result.ok ? { ...result, table } : result;
+    }
+
     private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
         const ctx = new Ctx(outer, clock);
         try {

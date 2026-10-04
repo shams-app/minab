@@ -246,16 +246,16 @@ export const examples: Example[] = [
     {
         id: 'overdue-loop',
         title: 'Loops',
-        summary: 'A `for-in` loop over a customer’s orders, with a guard. Checks today; runs later.',
-        notes: 'Loops parse, resolve and type-check — hover `order` to see its type — but the evaluator doesn’t execute them yet, and says so rather than guessing.',
+        summary: 'A `for-in` loop over a customer’s orders, with a guard.',
+        notes: 'The orders are read once, then the loop runs in memory. Hover `order` to see its type. Each step counts toward the loop limit.',
         source: overdueLoop,
-        tags: ['control-flow', 'check-only'],
+        tags: ['control-flow'],
         level: 'advanced',
         specRef: '§9.4',
         repoPath: repo('overdue-loop'),
         host: { dataset: 'demo', rule: { recordTable: 'Customer' }, record: { id: 'cus-donald', name: 'Donald Knuth', tier: 'bronze' } },
         focus: 'result',
-        expect: { kind: 'check-only', construct: 'LoopStatement' }
+        expect: { kind: 'verdict', value: false, statements: 1 }
     },
     {
         id: 'order-dml',
@@ -275,7 +275,7 @@ export const examples: Example[] = [
         id: 'reconcile-overdue-accounts',
         title: 'Everything together',
         summary: 'Functions, loops, `if`/`else if`, `is`, and writes in one program.',
-        notes: 'The showcase’s finale. Every construct here type-checks against the host schema; loops and writes are the part the evaluator doesn’t run yet.',
+        notes: 'The showcase’s finale. Every construct here type-checks against the host schema; loops run, but the writes inside them do not run yet. This host has no rows, so the loop does not reach a write.',
         source: reconcile,
         tags: ['functions', 'control-flow', 'json', 'check-only'],
         level: 'advanced',
@@ -283,7 +283,7 @@ export const examples: Example[] = [
         repoPath: repo('reconcile-overdue-accounts'),
         host: { dataset: { schema: reconcileConfig.schema } },
         focus: 'result',
-        expect: { kind: 'check-only', construct: 'LoopStatement' }
+        expect: { kind: 'value', value: 0, statements: 1 }
     },
 
     // ---- written for the playground ---------------------------------------
@@ -587,15 +587,15 @@ export const examples: Example[] = [
     {
         id: 'tuples',
         title: 'Tuples',
-        summary: 'Typed tuples and positional access. Checks today; runs later.',
-        notes: 'Hover `point` to see `(INTEGER, INTEGER)`. Tuples type-check fully; the evaluator doesn’t build them yet.',
+        summary: 'Typed tuples and positional access.',
+        notes: 'Hover `point` to see `(INTEGER, INTEGER)`. A tuple holds a fixed number of values, and `point[0]` reads the first one.',
         source: 'let point: (INTEGER, INTEGER) = (3, 4);\n\npoint[0]\n',
-        tags: ['types', 'check-only'],
+        tags: ['types'],
         level: 'intermediate',
         specRef: '§7.6',
         host: { dataset: 'demo' },
         focus: 'result',
-        expect: { kind: 'check-only', construct: 'TupleLiteral' }
+        expect: { kind: 'value', value: 3, statements: 0 }
     }
 ];
 

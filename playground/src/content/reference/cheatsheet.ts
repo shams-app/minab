@@ -95,8 +95,7 @@ export const cheatsheet: CheatSection[] = [
                 syntax: '.$index',
                 description: 'The position of the current element while iterating an array.',
                 specRef: '§3.5',
-                keywords: ['.$index'],
-                status: 'check-only'
+                keywords: ['.$index']
             }
         ]
     },
@@ -465,8 +464,7 @@ export const cheatsheet: CheatSection[] = [
                 description: 'Range, for-in and conditional forms, with `break` and `continue` (optionally labelled).',
                 specRef: '§9.4',
                 keywords: ['loop', 'from', 'to', 'by', 'in', 'where', 'break', 'continue'],
-                exampleId: 'overdue-loop',
-                status: 'check-only'
+                exampleId: 'overdue-loop'
             }
         ]
     },

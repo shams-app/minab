@@ -1,4 +1,4 @@
 {
   "mode": "check-only",
-  "refusal": "\"LoopStatement\" is not executed yet"
+  "refusal": "\"UpdateStatement\" is not executed yet"
 }

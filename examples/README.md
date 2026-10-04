@@ -32,7 +32,7 @@ A run example:
 A check-only example (a construct that `minab run` does not execute yet):
 
 ```json
-{ "mode": "check-only", "refusal": "\"LoopStatement\" is not executed yet" }
+{ "mode": "check-only", "refusal": "\"UpdateStatement\" is not executed yet" }
 ```
 
 - `refusal` is the source of a regular expression that the `minab run` error must match.
