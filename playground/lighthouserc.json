@@ -10,7 +10,7 @@
                 "http://localhost:4173/learn/01-hello",
                 "http://localhost:4173/reference"
             ],
-            "numberOfRuns": 1,
+            "numberOfRuns": 3,
             "settings": {
                 "chromeFlags": "--no-sandbox"
             }
