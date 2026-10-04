@@ -396,10 +396,7 @@ export class Engine implements EngineApi {
 
         const started = now();
         try {
-            const outcome = await program.run(
-                { record: config.record, fieldValue: config.fieldValue },
-                { data: tracer.port, events: tracer.events }
-            );
+            const outcome = await program.run({ record: config.record, fieldValue: config.fieldValue }, { data: tracer.port, events: tracer.events });
             base.runMs = now() - started;
             base.trace = tracer.entries;
             if (!outcome.ok) {

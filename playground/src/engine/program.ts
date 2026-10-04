@@ -66,7 +66,13 @@ export function nodeAt(document: LangiumDocument<Model>, range: Range): AstNode 
     let found: AstNode | undefined;
     for (const node of AstUtils.streamAst(document.parseResult.value)) {
         const r = rangeOf(node);
-        if (r && r.start.line === range.start.line && r.start.character === range.start.character && r.end.line === range.end.line && r.end.character === range.end.character) {
+        if (
+            r &&
+            r.start.line === range.start.line &&
+            r.start.character === range.start.character &&
+            r.end.line === range.end.line &&
+            r.end.character === range.end.character
+        ) {
             found = node;
         }
     }
