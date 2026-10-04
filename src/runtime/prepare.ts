@@ -181,15 +181,25 @@ function utf8Length(text: string): number {
 
 /**
  * How deep `(`, `[` and `{` are nested in the source, found in one pass without a parser. Text in strings,
- * quoted names and comments does not count. The parser takes more than linear time and stack on deep
- * programs (a 64 KB source could use gigabytes), so this check comes first.
+ * quoted names and comments does not count. A run of prefix operators (`-`, `+`, `NOT`) counts too: each
+ * one nests the tree one level, and `-` repeated 5,000 times costs the parser as much as 5,000 brackets.
+ * The parser takes more than linear time and stack on deep programs (a 64 KB source could use gigabytes),
+ * so this check comes first.
  */
 export function bracketDepth(source: string): number {
     let depth = 0;
     let deepest = 0;
+    // Prefix operators in a row, and whether the last token ended an operand (then `-` is a binary minus).
+    let prefixes = 0;
+    let afterOperand = false;
+    const note = () => {
+        if (depth + prefixes > deepest) deepest = depth + prefixes;
+    };
     for (let i = 0; i < source.length; i++) {
         const c = source[i];
         if (c === '"' || c === "'" || c === '`') {
+            prefixes = 0;
+            afterOperand = true;
             for (i++; i < source.length && source[i] !== c; i++) if (source[i] === '\\') i++;
         } else if (c === '/' && source[i + 1] === '/') {
             while (i < source.length && source[i] !== '\n' && source[i] !== '\r') i++;
@@ -197,9 +207,32 @@ export function bracketDepth(source: string): number {
             const end = source.indexOf('*/', i + 2);
             i = end < 0 ? source.length : end + 1;
         } else if (c === '(' || c === '[' || c === '{') {
-            if (++depth > deepest) deepest = depth;
-        } else if ((c === ')' || c === ']' || c === '}') && depth > 0) {
-            depth--;
+            prefixes = 0;
+            afterOperand = false;
+            depth++;
+            note();
+        } else if (c === ')' || c === ']' || c === '}') {
+            prefixes = 0;
+            afterOperand = true;
+            if (depth > 0) depth--;
+        } else if (c === '-' || c === '+') {
+            if (afterOperand) {
+                afterOperand = false;
+                prefixes = 0;
+            } else {
+                prefixes++;
+                note();
+            }
+        } else if (/\s/.test(c)) {
+            continue;
+        } else if (source.startsWith('NOT', i) && !/[\p{L}\p{N}_]/u.test(source[i + 3] ?? '') && !/[\p{L}\p{N}_]/u.test(source[i - 1] ?? '')) {
+            prefixes++;
+            afterOperand = false;
+            note();
+            i += 2;
+        } else {
+            prefixes = 0;
+            afterOperand = !',;:=<>*/%&|!?^\\.'.includes(c);
         }
     }
     return deepest;

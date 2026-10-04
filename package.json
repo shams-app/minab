@@ -183,6 +183,7 @@
     "@types/pg": "^8.23.1",
     "concurrently": "^9.0.0",
     "esbuild": "^0.28.2",
+    "fast-check": "^4.10.2",
     "langium-cli": "~4.4.0",
     "monaco-editor": "^0.56.0",
     "oxfmt": "^0.71.0",

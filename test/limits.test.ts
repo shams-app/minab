@@ -148,6 +148,16 @@ describe('bracketDepth', () => {
         expect(bracketDepth('"never closed ((((')).toBe(0);
     });
 
+    test('a run of prefix operators counts as nesting; a binary minus does not', () => {
+        expect(bracketDepth('- - - 1')).toBe(3);
+        expect(bracketDepth('NOT NOT NOT TRUE')).toBe(3);
+        expect(bracketDepth('f(-(-1))')).toBe(3);
+        expect(bracketDepth('1 - 1 - 1 + 1')).toBe(0);
+        expect(bracketDepth('.a - -.b')).toBe(1);
+        expect(bracketDepth('"-" - 1 // - - -\n - 1')).toBe(0);
+        expect(bracketDepth('xNOT NOTx')).toBe(0);
+    });
+
     test('a closer without an opener does not go below zero', () => {
         expect(bracketDepth(')))((')).toBe(2);
     });
