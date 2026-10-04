@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minab.dev/schemas/wire-v1.response.json",
+  "title": "Minab wire format v1: response",
+  "description": "The answer to a request: one result for each run, or an error for a request that failed as a whole. A client ignores unknown fields.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["v", "results"],
+      "properties": {
+        "v": { "const": 1 },
+        "results": { "type": "array", "items": { "$ref": "#/$defs/result" } }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["v", "error"],
+      "properties": {
+        "v": { "const": 1 },
+        "error": { "$ref": "#/$defs/error" }
+      }
+    }
+  ],
+  "$defs": {
+    "count": { "type": "number", "minimum": 0 },
+    "stats": {
+      "type": "object",
+      "required": ["statements", "rows", "durationMs"],
+      "properties": {
+        "statements": { "$ref": "#/$defs/count" },
+        "rows": { "$ref": "#/$defs/count" },
+        "durationMs": { "$ref": "#/$defs/count" }
+      }
+    },
+    "position": {
+      "type": "object",
+      "required": ["line", "character"],
+      "properties": {
+        "line": { "$ref": "#/$defs/count" },
+        "character": { "$ref": "#/$defs/count" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "params"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "range": {
+          "type": ["object", "null"],
+          "properties": {
+            "start": { "$ref": "#/$defs/position" },
+            "end": { "$ref": "#/$defs/position" }
+          },
+          "required": ["start", "end"]
+        },
+        "params": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
+      }
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "ok", "value", "stats"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "ok": { "const": true },
+            "value": { "type": ["null", "boolean", "number", "string", "array", "object"] },
+            "logs": { "type": "array", "items": { "type": "string" } },
+            "stats": { "$ref": "#/$defs/stats" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["id", "ok", "error"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "ok": { "const": false },
+            "error": { "$ref": "#/$defs/error" },
+            "logs": { "type": "array", "items": { "type": "string" } },
+            "stats": { "$ref": "#/$defs/stats" }
+          }
+        }
+      ]
+    }
+  }
+}

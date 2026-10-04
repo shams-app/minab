@@ -40,3 +40,18 @@ export type {
     WriteTransaction
 } from './ports.js';
 export { HostDeclarationError } from '../language/host-declarations.js';
+export { WIRE_VERSIONS, WireError, decodeValue, encodeValue, parseRequest, parseResponse, wireErrorResponse, wireScalar } from './wire.js';
+export type {
+    Json,
+    ParseRequestOptions,
+    WireErrorResponse,
+    WireParse,
+    WireProgramRef,
+    WireProgramSource,
+    WireRequest,
+    WireResponse,
+    WireResult,
+    WireRun,
+    WireRunOptions,
+    WireType
+} from './wire.js';
