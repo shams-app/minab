@@ -71,6 +71,7 @@ import {
     type WhereClause
 } from './generated/ast.js';
 import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
+import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
@@ -96,7 +97,7 @@ export function registerValidationChecks(services: MinabServices): void {
         MemberAccess: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         TupleAccess: validator.checkExpressionTypeChecks,
         FilterAccess: validator.checkExpressionTypeChecks,
-        CallExpression: validator.checkExpressionTypeChecks,
+        CallExpression: [validator.checkExpressionTypeChecks, validator.checkFunctionInlinable],
         ListLiteral: validator.checkExpressionTypeChecks,
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
@@ -106,7 +107,7 @@ export function registerValidationChecks(services: MinabServices): void {
         Subquery: validator.checkExpressionTypeChecks,
         WhereClause: validator.checkConditionIsBoolean,
         HavingClause: validator.checkConditionIsBoolean,
-        GroupByClause: [validator.checkGroupKeysNotCollection, validator.checkGroupKeyNamesUnique],
+        GroupByClause: [validator.checkGroupKeysNotCollection, validator.checkGroupKeyNamesUnique, validator.checkGroupKeysNamed],
         AssignmentStatement: validator.checkAssignmentTypeCompatible,
         VariableDecl: [validator.checkVariableDeclTypeCompatible, validator.checkVariableNotFunctionName, validator.checkLetNotRepeated],
         Param: validator.checkParamNotFunctionName,
@@ -128,7 +129,12 @@ export class MinabValidator {
         const result = this.services.scopeResolver.resolveGroupKeyRef(node);
         if (!result.found) {
             report(accept, result, { node });
+            return;
         }
+        // With several keys, a bare `KEY` has no value: only `KEY.<name>` does (D22).
+        if (isMemberAccess(node.$container) && node.$container.receiver === node) return;
+        const typed = this.services.typeChecker.inferType(node);
+        if (!typed.ok) report(accept, typed, { node });
     }
 
     checkNamedScopeResolves(node: NamedScope, accept: ValidationAcceptor): void {
@@ -211,14 +217,38 @@ export class MinabValidator {
         });
     }
 
-    /** Two `GROUPBY` keys may not have the same name (`AS name`). */
+    /** Two `GROUPBY` keys may not have the same name (`AS name`, or the last field of a plain path when there are several keys). */
     checkGroupKeyNamesUnique(node: GroupByClause, accept: ValidationAcceptor): void {
         const seen = new Set<string>();
         for (const key of node.keys) {
-            if (key.alias === undefined) continue;
-            if (seen.has(key.alias)) report(accept, coded('query.duplicateGroupKeyName', { name: key.alias }), { node: key, property: 'alias' });
-            seen.add(key.alias);
+            const name = node.keys.length > 1 ? groupKeyName(key) : key.alias;
+            if (name === undefined) continue;
+            if (seen.has(name))
+                report(accept, coded('query.duplicateGroupKeyName', { name }), { node: key, property: key.alias === undefined ? 'expression' : 'alias' });
+            seen.add(name);
         }
+    }
+
+    /** With several keys, `KEY.<name>` reads one, so a computed key needs `AS name` (D22). */
+    checkGroupKeysNamed(node: GroupByClause, accept: ValidationAcceptor): void {
+        if (node.keys.length < 2) return;
+        for (const key of node.keys) {
+            if (groupKeyName(key) === undefined) report(accept, coded('query.unnamedGroupKey'), { node: key, property: 'expression' });
+        }
+    }
+
+    /**
+     * A user function called inside a query is copied into the SQL (D23). That works only for a
+     * simple function, so `check` says so here and does not leave it to `compile`.
+     */
+    checkFunctionInlinable(node: CallExpression, accept: ValidationAcceptor): void {
+        if (!isNameRef(node.callee) || !AstUtils.getContainerOfType(node, isQuery)) return;
+        const name = node.callee.name;
+        if (this.services.schema.getHostFunction(name)) return;
+        const decl = findUserFunction(node, name);
+        if (!decl) return;
+        const reason = inlineBlocker(decl, host => !!this.services.schema.getHostFunction(host));
+        if (reason) report(accept, coded('query.functionNotInlinable', { name, reason }), { node });
     }
 
     /**

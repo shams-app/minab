@@ -215,9 +215,12 @@ describe('compile errors', () => {
         const query = AstUtils.streamAst(document.parseResult.value).find(node => node.$type === 'Query');
         const specific = services.sqlCompiler.compileQuery(query as never);
         expect(specific).toMatchObject({ ok: false, code: 'compile.blockInQuery' });
-        const { document: other } = await validationHelper<Model>(services)('fn f(a: INTEGER): INTEGER { a }\nFROM Order SELECT f(1) AS x');
+        const { document: other } = await validationHelper<Model>(services)('FROM Order SELECT g(1) AS x');
         const plain = services.sqlCompiler.compileQuery(AstUtils.streamAst(other.parseResult.value).find(node => node.$type === 'Query') as never);
         expect(plain).toMatchObject({ ok: false, code: 'compile.notSql', params: { reason: expect.any(String) } });
+        const { document: loop } = await validationHelper<Model>(services)('fn f(a: INTEGER): INTEGER { let b: INTEGER = a; b }\nFROM Order SELECT f(1) AS x');
+        const refused = services.sqlCompiler.compileQuery(AstUtils.streamAst(loop.parseResult.value).find(node => node.$type === 'Query') as never);
+        expect(refused).toMatchObject({ ok: false, code: 'query.functionNotInlinable' });
     });
 });
 

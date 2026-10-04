@@ -60,6 +60,7 @@ import {
     type Expression,
     type FilterAccess,
     type FunctionDecl,
+    type GroupByClause,
     type GroupKeyRef,
     type IfExpr,
     type ListLiteral,
@@ -78,6 +79,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
+import { groupKeyName } from './minab-query-inlining.js';
 import { checkBuiltin, getBuiltin, type BuiltinSignature } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
@@ -262,13 +264,19 @@ export class MinabTypeChecker {
         const groupBy = res.scope.owner;
         if (!isGroupByClause(groupBy)) return err('scope.keyWithoutGroupBy');
         if (groupBy.keys.length === 1) return this.inferType(groupBy.keys[0].expression);
-        const elements: MinabType[] = [];
-        for (const key of groupBy.keys) {
-            const keyType = this.inferType(key.expression);
-            if (!keyType.ok) return keyType;
-            elements.push(keyType.type);
-        }
-        return ok({ kind: 'tuple', elements });
+        // Several keys: KEY is a record of the keys (D22). Only `KEY.<name>` has a type.
+        return err('query.keyNeedsName', { keys: this.groupKeyNames(groupBy) });
+    }
+
+    /** `KEY.<name>` when `GROUPBY` has several keys: the type of the key with that name. */
+    private inferKeyMember(node: MemberAccess, groupBy: GroupByClause): TypeResult {
+        const key = groupBy.keys.find(k => groupKeyName(k) === node.member);
+        if (!key) return err('query.keyNeedsName', { keys: this.groupKeyNames(groupBy) });
+        return this.inferType(key.expression);
+    }
+
+    private groupKeyNames(groupBy: GroupByClause): string {
+        return groupBy.keys.flatMap(k => groupKeyName(k) ?? []).join(', ');
     }
 
     private inferNameRef(node: NameRef): TypeResult {
@@ -330,6 +338,12 @@ export class MinabTypeChecker {
     }
 
     private inferMemberAccess(node: MemberAccess): TypeResult {
+        if (isGroupKeyRef(node.receiver)) {
+            const res = this.scopeResolver.resolveGroupKeyRef(node.receiver);
+            if (res.found && isGroupByClause(res.scope.owner) && res.scope.owner.keys.length > 1) {
+                return this.inferKeyMember(node, res.scope.owner);
+            }
+        }
         const receiver = this.inferType(node.receiver);
         if (!receiver.ok) return receiver;
         const t = receiver.type;

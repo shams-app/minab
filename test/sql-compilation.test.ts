@@ -251,11 +251,17 @@ describe('what the compiler refuses, so the interpreter takes it (ADR 0001)', ()
     });
 
     test('a user function never becomes a database function call', async () => {
-        const reason = await compileError(
+        const { text } = await compile(
             `fn discounted(t: DECIMAL, r: DECIMAL): DECIMAL { t - t * r / 100 }\nFROM Order WHERE discounted(.total, 10) > 5 SELECT .id AS id`
         );
-        expect(reason).toMatch(/user function/);
-        expect(reason).not.toContain('discounted(');
+        expect(text).not.toContain('discounted(');
+    });
+
+    test('a user function with a statement is refused with query.functionNotInlinable', async () => {
+        const result = compiler.compileQuery(
+            await queryOf(`fn f(t: INTEGER): INTEGER { let a: INTEGER = t; a }\nFROM Order WHERE f(.total) > 1 SELECT .id AS id`)
+        );
+        expect(result).toMatchObject({ ok: false, code: 'query.functionNotInlinable', params: { name: 'f' } });
     });
 
     test('a switch arm with a statement is refused with compile.blockInQuery', async () => {

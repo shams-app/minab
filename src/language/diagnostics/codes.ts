@@ -251,6 +251,11 @@ export const DIAGNOSTICS = {
         message: p => `the GROUPBY key name "${p.name}" is used twice`,
         doc: 'Each GROUPBY key that has a name (AS name) needs its own name. Rename one of them.'
     }),
+    'query.functionNotInlinable': entry<{ name: string; reason: string }>({
+        severity: error,
+        message: p => `the function "${p.name}" cannot be used inside a query: ${p.reason}`,
+        doc: 'A query is one SQL statement, so a function used in it is copied into the SQL. Only a function whose body is one expression can be copied: no statements, no recursion, no host functions and no queries. Call it outside the query, or simplify its body.'
+    }),
     'query.functionReturnNotJson': entry({
         severity: error,
         message: () => 'a function whose body ends in a query must declare its return type as JSON (spec §8.6)',
@@ -261,10 +266,20 @@ export const DIAGNOSTICS = {
         message: () => 'a subquery used with IN must SELECT exactly one column',
         doc: 'IN compares one value with a list of values. Select exactly one column in the subquery.'
     }),
+    'query.keyNeedsName': entry<{ keys: string }>({
+        severity: error,
+        message: p => `this GROUPBY has several keys, so KEY needs a name: use KEY.<name> (${p.keys})`,
+        doc: 'With several GROUPBY keys, KEY is a record of the keys. Read one key as KEY.name, using one of the key names.'
+    }),
     'query.singleColumnRequired': entry({
         severity: error,
         message: () => 'a query used as a value must SELECT exactly one column',
         doc: 'A query used as a value gives one column. Select exactly one column, not "*" and not several.'
+    }),
+    'query.unnamedGroupKey': entry({
+        severity: error,
+        message: () => 'give this group key a name with AS',
+        doc: 'When GROUPBY has several keys, each key needs a name so that KEY.name can read it. A plain field path is named by its last field. Any other key needs AS name.'
     }),
 
     'rule.fieldTypeMissing': entry({

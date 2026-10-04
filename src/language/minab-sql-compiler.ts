@@ -60,6 +60,8 @@ import {
     type BinaryExpression,
     type CallExpression,
     type CastExpr,
+    type FunctionDecl,
+    type GroupKey,
     type Expression,
     type IfExpr,
     type JsonObjectLiteral,
@@ -75,6 +77,7 @@ import {
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, type SqlArg, type SqlClock } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
+import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
@@ -159,7 +162,7 @@ interface SqlScope {
     /** `FROM ... AS x` / `JOIN ... AS y` names, reachable as `x.field` or `#x`. */
     named: Map<string, NamedEntry>;
     /** Set once a `GROUPBY` is in effect, so `KEY` has something to resolve to. */
-    groupKeys?: Expression[];
+    groupKeys?: GroupKey[];
     /** For each group key that walks a relation: the SQL of the joined column it groups by. */
     groupKeySql?: Map<Expression, string>;
     /** The `LEFT JOIN` clauses those keys need, in order. */
@@ -334,7 +337,7 @@ export class MinabSqlCompiler {
         }
         const scope: SqlScope = { alias, table, named };
         if (query.groupByClause) {
-            scope.groupKeys = query.groupByClause.keys.map(k => k.expression);
+            scope.groupKeys = query.groupByClause.keys;
         }
         scope.selectAliases = new Set((query.selectClause?.items ?? []).flatMap(i => (i.alias ? [i.alias] : [])));
         return scope;
@@ -411,9 +414,30 @@ export class MinabSqlCompiler {
         }
     }
 
+    /** `KEY.<name>` over several keys: the key with that name (D22). `undefined` for any other expression. */
+    private namedKey(expr: Expression, scopes: SqlScope[]): GroupKey | undefined {
+        if (!isMemberAccess(expr) || !isGroupKeyRef(expr.receiver)) return undefined;
+        const keys = scopes[0]?.groupKeys;
+        if (!keys) fail('KEY is only valid after a GROUPBY clause');
+        if (keys.length === 1) return undefined;
+        const key = keys.find(k => groupKeyName(k) === expr.member);
+        if (!key) failCoded('query.keyNeedsName', { keys: this.keyNames(scopes[0]) });
+        return key;
+    }
+
+    private keyNames(scope: SqlScope): string {
+        return (scope.groupKeys ?? []).flatMap(k => groupKeyName(k) ?? []).join(', ');
+    }
+
     /** A `GROUPBY` key as SQL: the joined column when `joinGroupKeys` made one, else the plain expression. */
     private groupKey(key: Expression, ctx: Ctx, scopes: SqlScope[]): string {
-        return scopes[0]?.groupKeySql?.get(key) ?? this.expression(key, ctx, scopes);
+        const scope = scopes[0];
+        const known = scope?.groupKeySql?.get(key);
+        if (known !== undefined) return known;
+        // Compiled once: `KEY` and `GROUP BY` must carry the same parameters, or Postgres sees two different expressions.
+        const sql = this.expression(key, ctx, scopes);
+        if (scope) (scope.groupKeySql ??= new Map()).set(key, sql);
+        return sql;
     }
 
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
@@ -606,6 +630,8 @@ export class MinabSqlCompiler {
      */
     private fieldOrOuter(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
         if (isNameRef(expr)) {
+            const param = this.inlineParams?.get(expr.name);
+            if (param) return param();
             // An `ORDERBY` item naming a `SELECT ... AS n` column.
             if (scopes[0]?.selectAliases?.has(expr.name)) return quoteIdent(expr.name);
             if (this.lookupNamed(expr.name, scopes)) {
@@ -621,9 +647,11 @@ export class MinabSqlCompiler {
         if (isGroupKeyRef(expr)) {
             const keys = scopes[0]?.groupKeys;
             if (!keys) fail('KEY is only valid after a GROUPBY clause');
-            if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
-            return this.groupKey(keys[0], ctx, scopes);
+            if (keys.length !== 1) failCoded('query.keyNeedsName', { keys: this.keyNames(scopes[0]) });
+            return this.groupKey(keys[0].expression, ctx, scopes);
         }
+        const named = this.namedKey(expr, scopes);
+        if (named) return this.groupKey(named.expression, ctx, scopes);
         if (isMemberAccess(expr)) {
             const mark = ctx.mark();
             const receiver = this.rowRef(expr.receiver, ctx, scopes);
@@ -667,6 +695,9 @@ export class MinabSqlCompiler {
             }
             return undefined;
         }
+        // `KEY.<name>` over several keys, when that key is a row (a relation).
+        const named = this.namedKey(expr, scopes);
+        if (named) return this.rowRef(named.expression, ctx, scopes);
         if (isMemberAccess(expr)) {
             const receiver = this.rowRef(expr.receiver, ctx, scopes);
             if (!receiver) return undefined;
@@ -675,8 +706,8 @@ export class MinabSqlCompiler {
         if (isGroupKeyRef(expr)) {
             const keys = scopes[0]?.groupKeys;
             if (!keys) fail('KEY is only valid after a GROUPBY clause');
-            if (keys.length !== 1) fail('KEY over a multi-key GROUPBY has no single SQL form');
-            return this.rowRef(keys[0], ctx, scopes);
+            if (keys.length !== 1) failCoded('query.keyNeedsName', { keys: this.keyNames(scopes[0]) });
+            return this.rowRef(keys[0].expression, ctx, scopes);
         }
         return undefined;
     }
@@ -866,6 +897,11 @@ export class MinabSqlCompiler {
             // A host function is the host's code. Emitting `name(...)` would call a database function of that name.
             failCoded('compile.hostFunctionInSql', { name: callee.name });
         }
+        if (isNameRef(callee) && !isBuiltinName(callee.name)) {
+            // Only inside a query: a call outside one belongs to the interpreter, which runs the function.
+            const decl = scopes.length > 0 ? findUserFunction(expr, callee.name) : undefined;
+            if (decl) return this.inlineCall(decl, expr, ctx, scopes);
+        }
         if (!isNameRef(callee) || !isBuiltinName(callee.name)) {
             // A user `fn` runs in the interpreter. Emitting `name(...)` would call a database function of that name: a wrong answer.
             fail(
@@ -903,6 +939,38 @@ export class MinabSqlCompiler {
         // An ordinary grouped aggregate over the current query scope.
         const inner = isCurrentRecord(arg) && !arg.field ? '*' : this.expression(arg, ctx, scopes);
         return `${name}(${inner})`;
+    }
+
+    /**
+     * A user function with one tail expression (D23): its body is compiled in place, and each
+     * parameter becomes its argument's SQL. An argument is compiled each time the body uses it.
+     * That is correct, because an expression in SQL has no side effects.
+     */
+    private inlineCall(decl: FunctionDecl, expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const reason = inlineBlocker(decl, name => !!this.schema.getHostFunction(name));
+        if (reason) failCoded('query.functionNotInlinable', { name: decl.name, reason });
+        if (expr.args.length !== decl.params.length) fail(`${decl.name} takes ${decl.params.length} argument(s)`);
+        const outer = this.inlineParams;
+        const params = new Map<string, () => string>();
+        decl.params.forEach((param, i) => {
+            const arg = expr.args[i];
+            // The argument belongs to the caller, so it sees the caller's parameters.
+            params.set(param.name, () => this.withParams(outer, () => `(${this.expression(arg, ctx, scopes)})`));
+        });
+        return this.withParams(params, () => `(${this.expression(decl.tail as Expression, ctx, scopes)})`);
+    }
+
+    /** The parameters of the function being inlined right now, by name. */
+    private inlineParams: Map<string, () => string> | undefined;
+
+    private withParams<T>(params: Map<string, () => string> | undefined, body: () => T): T {
+        const saved = this.inlineParams;
+        this.inlineParams = params;
+        try {
+            return body();
+        } finally {
+            this.inlineParams = saved;
+        }
     }
 
     /** A scalar built-in (D20): its SQL form is in the table. Each argument also says whether it is `CITEXT`. */

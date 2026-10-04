@@ -196,7 +196,7 @@ describe('host functions (D27)', () => {
     });
 
     test('a user function is still compile.notSql', async () => {
-        const program = await host().prepare('fn f(a: INTEGER): INTEGER { a }\nFROM Order WHERE f(1) == 1 SELECT .id');
+        const program = await host().prepare('fn f(a: INTEGER): INTEGER { a }\nf(1) == 1');
         expect(program.compile()).toMatchObject({ ok: false, error: { code: 'compile.notSql' } });
     });
 

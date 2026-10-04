@@ -212,7 +212,6 @@ const CHECK: Record<string, CheckSetup> = {
     'showcase §1 #3': { parseOnly: COLLECTION_FILTER_BUG },
     'showcase §2 #1': { context: 'booking' },
     'showcase §9 #4': { parseOnly: NO_RECORD_TABLE },
-    'showcase §10 #2': { prelude: block => block('showcase §10 #1') },
     'showcase §10 #4': { context: 'customer', prelude: block => block('showcase §10 #1') },
     'showcase §11 #2': { context: 'customer' },
     'showcase §11 #4': { prelude: () => STUBS },
@@ -242,7 +241,9 @@ interface ExpectedError {
 const ERRORS: ExpectedError[] = [
     { file: 'showcase', section: '§7', index: 4, expect: 'type.initializerMismatch' },
     { file: 'showcase', section: '§7', index: 7, expect: 'null.orderingWithNull', context: 'order' },
+    { file: 'showcase', section: '§5', index: 4, expect: 'query.unnamedGroupKey' },
     { file: 'showcase', section: '§10', index: 5, expect: 'call.functionNameCase' },
+    { file: 'showcase', section: '§10', index: 7, expect: 'query.functionNotInlinable' },
     { file: 'showcase', section: '§11', index: 3, expect: 'type.initializerMismatch', context: 'customer' },
     { file: 'showcase', section: '§18', index: 3, expect: 'call.unknownDateUnit', context: 'booking' }
 ];

@@ -109,6 +109,23 @@ GROUPBY .status AS s
 SELECT KEY AS status, COUNT(.) AS order_count
 ```
 
+With several keys, `KEY` is a record of the keys, and `KEY.<name>` reads one. A plain field path is named by its last field (`.status` is `status`). (§4.1)
+
+```
+FROM Order
+GROUPBY .status, .customer.country AS country
+SELECT KEY.status AS status, KEY.country AS country, COUNT(.) AS order_count
+ORDERBY order_count DESC
+```
+
+A computed key needs a name when there are several keys:
+
+```
+FROM Order
+GROUPBY .status, .total * 2      // ✗ semantic error — query.unnamedGroupKey (add AS name)
+SELECT COUNT(.) AS order_count
+```
+
 ---
 
 ## 6. Variables
@@ -303,10 +320,13 @@ fn discountedTotal(orderId: UUID, rate: DECIMAL): DECIMAL {
 }
 ```
 
-**Calling it, by name:**
+**Calling it, by name, inside a query.** A function with one expression as its body is copied into the SQL. (§8.4)
 ```
-FROM Customer
-SELECT .id, discountedTotal(.id, .discount_rate) AS discounted
+fn net(t: DECIMAL): DECIMAL { t * 0.9 }
+
+FROM Order
+WHERE net(.total) > 100
+SELECT .id, net(.total) AS net_total
 ```
 
 **A function whose tail is a `Query` always returns `JSON` — a JSON array of the selected shape (§8.6):**
@@ -340,6 +360,18 @@ fn processOrder(orderId: UUID): BOOLEAN {
     );
     valid
 }
+```
+
+**A function with a `let` (or a query, or recursion) cannot be used inside a query — `check` says so (§8.4):**
+```
+fn withLet(t: DECIMAL): DECIMAL {
+    let half: DECIMAL = t / 2;
+    half
+}
+
+FROM Order
+WHERE withLet(.total) > 100      // ✗ semantic error — query.functionNotInlinable (it has statements)
+SELECT .id
 ```
 
 ---

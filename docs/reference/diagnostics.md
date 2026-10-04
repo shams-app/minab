@@ -183,9 +183,12 @@ A query is used in a way its shape does not allow.
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
 | `query.duplicateGroupKeyName` | error | the GROUPBY key name "{name}" is used twice | `name` | Each GROUPBY key that has a name (AS name) needs its own name. Rename one of them. |
+| `query.functionNotInlinable` | error | the function "{name}" cannot be used inside a query: {reason} | `name`, `reason` | A query is one SQL statement, so a function used in it is copied into the SQL. Only a function whose body is one expression can be copied: no statements, no recursion, no host functions and no queries. Call it outside the query, or simplify its body. |
 | `query.functionReturnNotJson` | error | a function whose body ends in a query must declare its return type as JSON (spec §8.6) | none | A query returns rows, so the function must return JSON. Change the return type to JSON. |
 | `query.inSingleColumnRequired` | error | a subquery used with IN must SELECT exactly one column | none | IN compares one value with a list of values. Select exactly one column in the subquery. |
+| `query.keyNeedsName` | error | this GROUPBY has several keys, so KEY needs a name: use KEY.<name> ({keys}) | `keys` | With several GROUPBY keys, KEY is a record of the keys. Read one key as KEY.name, using one of the key names. |
 | `query.singleColumnRequired` | error | a query used as a value must SELECT exactly one column | none | A query used as a value gives one column. Select exactly one column, not "*" and not several. |
+| `query.unnamedGroupKey` | error | give this group key a name with AS | none | When GROUPBY has several keys, each key needs a name so that KEY.name can read it. A plain field path is named by its last field. Any other key needs AS name. |
 
 ## rule
 

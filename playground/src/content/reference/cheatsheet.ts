@@ -75,7 +75,8 @@ export const cheatsheet: CheatSection[] = [
                 id: 'group-key',
                 title: 'Group key',
                 syntax: 'KEY    KEY.name',
-                description: 'After `GROUPBY`, the group itself. Grouping by a relation makes `KEY` that related row.',
+                description:
+                    'After `GROUPBY`, the group itself. Grouping by a relation makes `KEY` that related row. With several keys, `KEY.name` reads one key (a plain path is named by its last field; any other key needs `AS name`).',
                 specRef: '§2.2',
                 keywords: ['KEY'],
                 exampleId: 'top-customers'
@@ -134,7 +135,7 @@ export const cheatsheet: CheatSection[] = [
             {
                 id: 'groupby',
                 title: 'GROUPBY · HAVING',
-                syntax: 'GROUPBY .customer\nHAVING SUM(.total) > 1000\n\nGROUPBY .status AS s',
+                syntax: 'GROUPBY .customer\nHAVING SUM(.total) > 1000\n\nGROUPBY .status, .total * 2 AS double',
                 description:
                     'Groups rows; aggregates then apply per group. `HAVING` filters groups the way `WHERE` filters rows. A key may take a name with `AS`.',
                 specRef: '§4.3',
