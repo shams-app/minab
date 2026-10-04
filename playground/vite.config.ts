@@ -1,4 +1,4 @@
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
@@ -24,7 +24,13 @@ function spaFallback(): Plugin {
     };
 }
 
+/** The Minab version the site runs (D42): the root package's version, read at build time. */
+const minabVersion = (JSON.parse(readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf8')) as { version: string }).version;
+
 export default defineConfig({
+    define: {
+        __MINAB_VERSION__: JSON.stringify(minabVersion)
+    },
     base: process.env.PLAYGROUND_BASE ?? '/',
     plugins: [react(), spaFallback()],
     resolve: {

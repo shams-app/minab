@@ -321,12 +321,15 @@ export function Footer({
     author,
     authorUrl,
     links,
-    note
+    note,
+    version
 }: {
     author: string;
     authorUrl: string;
     links: ReadonlyArray<{ label: string; href: string }>;
     note: string;
+    /** The Minab version the site runs. */
+    version: string;
 }) {
     return (
         <footer className="mb-footer">
@@ -351,7 +354,9 @@ export function Footer({
                     </a>
                 ))}
             </nav>
-            <p className="mb-muted">{note}</p>
+            <p className="mb-muted">
+                {note} <span data-testid="minab-version">Minab {version}</span>
+            </p>
         </footer>
     );
 }

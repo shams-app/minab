@@ -91,6 +91,8 @@ export function applyEditorTheme(): void {
     set('editor.foreground', '--editor-fg');
     set('editorLineNumber.foreground', '--editor-gutter-fg');
     set('editorLineNumber.activeForeground', '--editor-gutter-fg-active');
+    // Monaco dims the number of the empty last line; keep it as readable as the others.
+    set('editorLineNumber.dimmedForeground', '--editor-gutter-fg');
     set('editor.lineHighlightBackground', '--editor-line-highlight');
     set('editor.lineHighlightBorder', '--editor-line-highlight');
     set('editor.selectionBackground', '--editor-selection');

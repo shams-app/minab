@@ -82,4 +82,9 @@ describe.each([
     test.each(syntax)('%s passes AA against the editor background', name => {
         expect(contrast(tokens[name], tokens['--editor-bg'])).toBeGreaterThanOrEqual(4.5);
     });
+
+    // Inline code (`.mb-inline-code`) sits on the sunken surface, which is darker than the editor in the light theme.
+    test.each(syntax)('%s passes AA against the sunken surface (inline code)', name => {
+        expect(contrast(tokens[name], tokens['--surface-sunken'])).toBeGreaterThanOrEqual(4.5);
+    });
 });
