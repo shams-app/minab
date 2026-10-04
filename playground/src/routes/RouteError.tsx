@@ -8,7 +8,7 @@ export function RouteError() {
     return (
         <div className="mb-page">
             <EmptyState
-                icon="alert"
+                glyph="!"
                 tone="danger"
                 title="Something broke on this page"
                 action={
