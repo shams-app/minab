@@ -85,6 +85,11 @@ export const DIAGNOSTICS = {
         message: p => `"${p.name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins`,
         doc: 'Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it.'
     }),
+    'call.unknownDateUnit': entry<{ name: string; unit: string; allowed: string }>({
+        severity: error,
+        message: p => `${p.name}: the unit ${p.unit} is not allowed here — use a text literal that is one of ${p.allowed}`,
+        doc: 'The unit of a date function must be a text literal such as "day", written in the call. A DATE accepts year, month, week and day; a DATETIME also accepts hour, minute and second.'
+    }),
     'call.unknownFunction': entry<{ name: string }>({
         severity: error,
         message: p => `unknown function "${p.name}"`,

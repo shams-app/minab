@@ -78,7 +78,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
-import { checkBuiltin, getBuiltin } from './minab-builtins.js';
+import { checkBuiltin, getBuiltin, type BuiltinSignature } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
@@ -414,6 +414,16 @@ export class MinabTypeChecker {
         return model?.declarations.find((d): d is FunctionDecl => isFunctionDecl(d) && d.name === name);
     }
 
+    /** The unit of a date function must be a text literal from the list for the argument types (D21). */
+    private checkDateUnit(node: CallExpression, builtin: BuiltinSignature, argTypes: MinabType[]): TypeResult | undefined {
+        if (builtin.unitAt === undefined || !builtin.unitsFor) return undefined;
+        const allowed = builtin.unitsFor(argTypes);
+        const arg = node.args[builtin.unitAt];
+        if (isStringLiteral(arg) && allowed.includes(arg.value)) return undefined;
+        const shown = isStringLiteral(arg) ? JSON.stringify(arg.value) : 'that is not a text literal';
+        return err('call.unknownDateUnit', { name: builtin.name, unit: shown, allowed: allowed.map(u => JSON.stringify(u)).join(', ') });
+    }
+
     private inferCallExpression(node: CallExpression): TypeResult {
         if (!isNameRef(node.callee)) {
             return err('call.calleeNotName');
@@ -431,7 +441,7 @@ export class MinabTypeChecker {
             argTypes.push(argType.type);
         }
         const result = checkBuiltin(builtin, argTypes);
-        if (result.ok) return ok(result.type);
+        if (result.ok) return this.checkDateUnit(node, builtin, argTypes) ?? ok(result.type);
         // In a grouped query an aggregate reads the group: `SUM(.total)` has one value per row.
         const promoted = builtin.kind === 'scalar' || argTypes.length !== 1 ? undefined : this.promoteForGroupedAggregate(node, argTypes[0]);
         if (promoted) {

@@ -10,6 +10,7 @@
  */
 
 import Big from 'big.js';
+import { normalizeDateTime } from './dates.js';
 import { coded } from './diagnostics/codes.js';
 import type { SourceRange } from '../runtime/types.js';
 import type { LogicalTypeBase } from './minab-types.js';
@@ -214,6 +215,8 @@ export function normalizeIn(value: unknown, base: LogicalTypeBase, array = false
         const parsed = typeof value === 'bigint' ? new Big(value.toString()) : toBigStrict(value);
         return parsed ?? value;
     }
+    // A `DATETIME` is an instant. It is held as an ISO 8601 UTC text, which sorts like time (D21).
+    if (base === 'DATETIME') return normalizeDateTime(value);
     if (base === 'INTEGER') {
         if (typeof value === 'bigint') return fromBigint(value);
         if (typeof value === 'string' && /^\s*[+-]?\d+\s*$/.test(value)) return checkInteger(Number(value));

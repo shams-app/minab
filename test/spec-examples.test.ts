@@ -118,7 +118,9 @@ const PIECES: Record<string, 'lines' | 'paragraphs'> = {
     'showcase §10 #4': 'lines',
     'showcase §17 #1': 'lines',
     'showcase §17 #2': 'lines',
-    'showcase §17 #3': 'lines'
+    'showcase §17 #3': 'lines',
+    'showcase §18 #1': 'lines',
+    'showcase §18 #2': 'lines'
 };
 
 // ---- how to check ------------------------------------------------------------
@@ -171,6 +173,8 @@ const CHECK: Record<string, CheckSetup> = {
     'spec §9.1.1 #3': { parseOnly: NO_RECORD_VARIABLE },
     'showcase §7 #1': { prelude: () => RAW_ID },
     'showcase §9 #3': { prelude: () => 'let tags: JSON = ["alpha", "beta", "gamma"];' },
+    'showcase §18 #2': { context: 'booking' },
+    'showcase §18 #3': { context: 'booking' },
     'spec §3.1 #1': { context: 'customer' },
     'spec §3.2 #1': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §3.2 #2': { parseOnly: COLLECTION_FILTER_BUG },
@@ -239,7 +243,8 @@ const ERRORS: ExpectedError[] = [
     { file: 'showcase', section: '§7', index: 4, expect: 'type.initializerMismatch' },
     { file: 'showcase', section: '§7', index: 7, expect: 'null.orderingWithNull', context: 'order' },
     { file: 'showcase', section: '§10', index: 5, expect: 'call.functionNameCase' },
-    { file: 'showcase', section: '§11', index: 3, expect: 'type.initializerMismatch', context: 'customer' }
+    { file: 'showcase', section: '§11', index: 3, expect: 'type.initializerMismatch', context: 'customer' },
+    { file: 'showcase', section: '§18', index: 3, expect: 'call.unknownDateUnit', context: 'booking' }
 ];
 const expectedErrors = new Map(ERRORS.map(e => [key(e), e]));
 

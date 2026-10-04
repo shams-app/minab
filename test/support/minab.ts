@@ -9,6 +9,12 @@ import { createMinabServices } from '../../src/language/minab-module.js';
 import type { MinabSchema } from '../../src/language/schema.js';
 import { Decimal } from './database.js';
 
+/** The clock of one run: the instant (ISO 8601) and the time zone (an IANA name). */
+export interface TestClock {
+    now: string;
+    timeZone: string;
+}
+
 /** A schema as a JSON config writes it (the same shape as `schema` in a host config). */
 export type SchemaSpec = { tables: unknown[] };
 
@@ -19,7 +25,12 @@ export interface Loaded {
     /** Parses and checks a program. `errors` holds the messages of every error. */
     parse(source: string): Promise<{ model: Model; errors: string[] }>;
     /** Runs the program with the real interpreter. */
-    run(model: Model, executor: QueryExecutor, record?: { table: string; row: Row }): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }>;
+    run(
+        model: Model,
+        executor: QueryExecutor,
+        record?: { table: string; row: Row },
+        clock?: TestClock
+    ): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }>;
 }
 
 const cache = new Map<string, Loaded>();
@@ -41,7 +52,14 @@ export function loadSchema(spec: SchemaSpec, recordTable?: string): Loaded {
             const errors = [...document.parseResult.parserErrors.map(e => e.message), ...(document.diagnostics ?? []).filter(d => d.severity === 1).map(text)];
             return { model: document.parseResult.value, errors };
         },
-        run: (model, executor, record) => services.Minab.interpreter.evaluate(model, { executor, record: record?.row, recordTable: record?.table })
+        run: (model, executor, record, clock) =>
+            services.Minab.interpreter.evaluate(model, {
+                executor,
+                record: record?.row,
+                recordTable: record?.table,
+                now: clock ? new Date(clock.now) : undefined,
+                timeZone: clock?.timeZone
+            })
     };
     cache.set(key, loaded);
     return loaded;
@@ -68,6 +86,13 @@ function canonicalDecimal(text: string): string {
     return text.replace(/0+$/, '').replace(/\.$/, '');
 }
 
+const INSTANT_TEXT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}(:?\d{2})?)$/;
+
+/** Postgres prints `2026-03-20 21:00:00+00`; `Date.parse` wants `T` and a full offset. */
+function isoOf(text: string): string {
+    return text.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+}
+
 /**
  * Whether two answers are the same, by type. A `DECIMAL` from the database
  * (a `Decimal`) equals a JS number only when their exact texts match, so
@@ -84,6 +109,8 @@ export function sameValue(a: unknown, b: unknown): boolean {
     if (Array.isArray(a) || Array.isArray(b)) {
         return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
     }
+    // A date time is an instant: `2026-03-20 21:00:00+00` and `2026-03-20T21:00:00.000Z` are the same one.
+    if (typeof a === 'string' && typeof b === 'string' && INSTANT_TEXT.test(a) && INSTANT_TEXT.test(b)) return Date.parse(isoOf(a)) === Date.parse(isoOf(b));
     if (typeof a === 'object' && typeof b === 'object') return JSON.stringify(sortedJson(a)) === JSON.stringify(sortedJson(b));
     return a === b;
 }

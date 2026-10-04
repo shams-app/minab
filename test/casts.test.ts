@@ -34,10 +34,10 @@ describe('CAST in the interpreter', () => {
         ['CAST(2.50 AS TEXT)', '2.5'],
         ['CAST("Yes" AS BOOLEAN)', true],
         ['CAST(null AS DATE)', null],
-        ['CAST("2026-10-02T08:30:00Z" AS DATETIME)', '2026-10-02 08:30:00'],
+        ['CAST("2026-10-02T08:30:00Z" AS DATETIME)', '2026-10-02T08:30:00.000Z'],
         ['CAST(CAST("2026-10-02 08:30:00" AS DATETIME) AS DATE)', '2026-10-02'],
         ['CAST(CAST("2026-10-02 08:30:00" AS DATETIME) AS TIME)', '08:30:00'],
-        ['CAST(CAST("2026-10-02" AS DATE) AS DATETIME)', '2026-10-02 00:00:00'],
+        ['CAST(CAST("2026-10-02" AS DATE) AS DATETIME)', '2026-10-02T00:00:00.000Z'],
         ['CAST("123E4567-E89B-12D3-A456-426614174000" AS UUID)', '123e4567-e89b-12d3-a456-426614174000'],
         ['CAST("[1, 2]" AS JSON)', [1, 2]]
     ])('%s', async (expr, expected) => {

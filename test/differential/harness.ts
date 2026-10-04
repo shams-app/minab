@@ -2,7 +2,7 @@ import { describe, test } from 'vitest';
 import type { Row } from '../../src/language/minab-executor.js';
 import type { MinabTableSchema } from '../../src/language/schema.js';
 import type { TestDatabase } from '../support/database.js';
-import { errorKind, loadSchema, sameOutcome, sameValue, showOutcome, type Outcome, type SchemaSpec } from '../support/minab.js';
+import { errorKind, loadSchema, sameOutcome, sameValue, showOutcome, type Outcome, type SchemaSpec, type TestClock } from '../support/minab.js';
 
 /** One expression, answered by the interpreter and by Postgres. */
 export interface DifferentialCase {
@@ -15,6 +15,8 @@ export interface DifferentialCase {
     record?: Row;
     /** The table of `record`. Defaults to the first table of `schema`. */
     table?: string;
+    /** The clock of the run: the instant and the time zone (default: the system clock, UTC). Both runtimes get the same one. */
+    clock?: TestClock;
     /** The answer both runtimes must give: a value, or `{ error: 'division-by-zero' }`. */
     expect?: unknown;
     /** A known bug: the two answers differ today. The card that fixes it removes this. */
@@ -69,7 +71,16 @@ async function settle(run: () => Promise<{ ok: true; value: unknown } | { ok: fa
     }
 }
 
-const DEFAULTS: Record<string, unknown> = { INTEGER: 0, DECIMAL: 0, TEXT: '', CITEXT: '', BOOLEAN: false };
+const DEFAULTS: Record<string, unknown> = {
+    INTEGER: 0,
+    DECIMAL: 0,
+    TEXT: '',
+    CITEXT: '',
+    BOOLEAN: false,
+    DATE: '2000-01-01',
+    TIME: '00:00:00',
+    DATETIME: '2000-01-01T00:00:00Z'
+};
 
 /** A record may name only the columns it cares about. The other columns get a neutral value (`null` when the column is nullable). */
 function withDefaults(table: MinabTableSchema, record: Row): Row {
@@ -84,8 +95,10 @@ function withDefaults(table: MinabTableSchema, record: Row): Row {
 /** Runs the case on both runtimes. */
 export async function answers(db: TestDatabase, c: DifferentialCase): Promise<{ interpreted: Outcome; sql: Outcome; sqlText?: string }> {
     if (c.record && !c.schema) throw new Error(`case "${c.name}": a record needs a schema`);
-    const loaded = loadSchema(c.schema ?? ONE_SCHEMA);
-    const table = c.record ? (c.table ?? loaded.schema.tables[0]?.name) : 'One';
+    const first = loadSchema(c.schema ?? ONE_SCHEMA);
+    const table = c.record ? (c.table ?? first.schema.tables[0]?.name) : 'One';
+    // With a record, the services know the record's table, as in a real run: `.ts` has a type before the run.
+    const loaded = c.record ? loadSchema(c.schema ?? ONE_SCHEMA, table) : first;
     const key = loaded.schema.tables.find(t => t.name === table)?.primaryKey;
     if (!key) throw new Error(`case "${c.name}": table "${table}" needs a primaryKey`);
     const row = withDefaults(
@@ -95,7 +108,7 @@ export async function answers(db: TestDatabase, c: DifferentialCase): Promise<{ 
 
     return await db.isolated(loaded.script({ [table]: [row] }), async () => {
         const program = await loaded.parse(c.expr);
-        const interpreted = await settle(() => loaded.run(program.model, db.executor, c.record ? { table, row } : undefined));
+        const interpreted = await settle(() => loaded.run(program.model, db.executor, c.record ? { table, row } : undefined, c.clock));
 
         const parsed = await loaded.parse(`FROM ${table} WHERE .${key} == ${literal(row[key])} SELECT ${c.expr} AS v`);
         let sqlText: string | undefined;
@@ -106,7 +119,7 @@ export async function answers(db: TestDatabase, c: DifferentialCase): Promise<{ 
             }
         };
         const sql = await settle(async () => {
-            const result = await loaded.run(parsed.model, spy);
+            const result = await loaded.run(parsed.model, spy, undefined, c.clock);
             if (!result.ok) return result;
             return { ok: true as const, value: (result.value as Row[])[0]?.v ?? null };
         });
