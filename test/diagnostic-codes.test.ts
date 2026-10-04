@@ -57,10 +57,11 @@ const schema: MinabSchema = {
     ]
 };
 
-type Setting = 'record' | 'plain' | 'fieldWithoutType';
+type Setting = 'record' | 'customer' | 'plain' | 'fieldWithoutType';
 
 const SETTINGS: Record<Setting, MinabRuleContext> = {
     record: { isFieldRule: false, recordTable: 'Order' },
+    customer: { isFieldRule: false, recordTable: 'Customer' },
     plain: { isFieldRule: false },
     fieldWithoutType: { isFieldRule: true, recordTable: 'Order' }
 };
@@ -130,6 +131,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'null.optionalAssignNeedsNullable': { via: 'validator', program: 'let n: INTEGER = 1;\nn ?= 2;' },
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
 
+    'query.duplicateGroupKeyName': { via: 'validator', program: 'FROM Order GROUPBY .status AS s, .total AS s SELECT COUNT(.) AS n' },
     'query.functionReturnNotJson': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { FROM Order SELECT .id }' },
     'query.inSingleColumnRequired': { via: 'validator', program: '.id IN (FROM Order SELECT .id, .total)' },
     'query.singleColumnRequired': { via: 'checker', program: '(FROM Order SELECT .id, .total) == 1', target: ofType('Subquery') },
@@ -146,6 +148,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     },
     'scope.computedReceiver': { via: 'resolver', program: 'CAST(1 AS TEXT).size', target: ofType('MemberAccess') },
     'scope.currentRecordNoTable': { via: 'validator', program: 'FROM Nope SELECT .' },
+    'scope.duplicateLet': { via: 'validator', program: 'let x: INTEGER = 1;\nlet x: INTEGER = 2;\nx' },
     'scope.functionNameIsTable': { via: 'validator', program: 'fn Customer(a: INTEGER): INTEGER { a }' },
     'scope.keyInWrongClause': { via: 'validator', program: 'FROM Order WHERE KEY == 1 GROUPBY .id SELECT KEY' },
     'scope.keyOutsideQuery': { via: 'validator', program: 'KEY' },
@@ -195,11 +198,13 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.orderingNeedsOrderable': { via: 'validator', program: '.id > true' },
     'type.plusAssignTarget': { via: 'validator', program: 'let t: BOOLEAN = true;\nt += 1;' },
     'type.positionalIndexOnCollection': { via: 'validator', program: 'FROM Customer WHERE COUNT(.orders[2]) > 0 SELECT .id' },
+    'type.relationComparedToKey': { via: 'validator', program: 'FROM Order WHERE .customer == "cus-ada" SELECT .id' },
     'type.switchArmsDiffer': { via: 'validator', program: 'switch .status { "a" => 1, _ => "x" }' },
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
     'type.unexpectedResultType': { via: 'runtime' },
     'type.unsupportedOperator': { via: 'guard' },
+    'type.vivifyOnCollection': { via: 'validator', program: '.orders!.total = 1;', setting: 'customer' },
     'wire.invalidRequest': { via: 'runtime' }, // test/wire.test.ts
     'wire.invalidResponse': { via: 'runtime' }, // test/wire.test.ts
     'wire.invalidValue': { via: 'runtime' }, // test/wire.test.ts

@@ -222,6 +222,15 @@ const ARITHMETIC: Record<string, string> = {
 };
 
 /**
+ * `\` is integer division, cut toward zero (D14). Postgres `div` on `numeric` does exactly that,
+ * and a zero divisor raises `22012`. The operands are cast to `numeric` first, so two `INTEGER`
+ * columns do not take the `integer` path with its own overflow rules.
+ */
+function wholeDivisionSql(a: string, b: string): string {
+    return `div((${a})::numeric, (${b})::numeric)`;
+}
+
+/**
  * `/` gives a `DECIMAL` with 16 digits after the point, rounded half away from zero (D14).
  * Postgres's own `numeric` division keeps only about 16 significant digits, so a large
  * quotient would lose decimals, and `round` after it could round twice. This form is exact:
@@ -300,7 +309,7 @@ export class MinabSqlCompiler {
         // A related collection brings its own predicates (`<fk> = <outer key>`, `[filter]`). The user's WHERE follows them.
         const predicates = [...source.predicates, ...(query.whereClause ? [this.expression(query.whereClause.condition, ctx, scopes)] : [])];
         const where = predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '';
-        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k, ctx, scopes)).join(', ')}` : '';
+        const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k.expression, ctx, scopes)).join(', ')}` : '';
         const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
             ? ` ORDER BY ${query.orderByClause.items
@@ -325,7 +334,7 @@ export class MinabSqlCompiler {
         }
         const scope: SqlScope = { alias, table, named };
         if (query.groupByClause) {
-            scope.groupKeys = query.groupByClause.keys;
+            scope.groupKeys = query.groupByClause.keys.map(k => k.expression);
         }
         scope.selectAliases = new Set((query.selectClause?.items ?? []).flatMap(i => (i.alias ? [i.alias] : [])));
         return scope;
@@ -367,7 +376,7 @@ export class MinabSqlCompiler {
      * null: they form one `null` group (spec §7.7 rule 1).
      */
     private joinGroupKeys(query: Query, scope: SqlScope, ctx: Ctx, scopes: SqlScope[]): void {
-        for (const key of query.groupByClause?.keys ?? []) {
+        for (const { expression: key } of query.groupByClause?.keys ?? []) {
             const path: string[] = [];
             let base: Expression = key;
             while (isMemberAccess(base)) {
@@ -755,6 +764,7 @@ export class MinabSqlCompiler {
             const [a, b] = [left(), right()];
             return divisionSql(a, b);
         }
+        if (op === '\\') return wholeDivisionSql(left(), right());
         if (op === '+' && this.isTextSum(expr)) return `(${left()} || ${right()})`;
         const arithmetic = ARITHMETIC[op];
         if (arithmetic) {

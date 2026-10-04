@@ -31,8 +31,10 @@
 
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
+    isBlock,
     isFilterAccess,
     isFunctionDecl,
+    isLoopStatement,
     isCallExpression,
     isMemberAccess,
     isModel,
@@ -41,6 +43,7 @@ import {
     isQuery,
     isTupleAccess,
     isTypeRef,
+    isVariableDecl,
     type AssignmentStatement,
     type BinaryExpression,
     type CallExpression,
@@ -90,22 +93,22 @@ export function registerValidationChecks(services: MinabServices): void {
         NamedScope: validator.checkNamedScopeResolves,
         BinaryExpression: validator.checkExpressionTypeChecks,
         UnaryExpression: validator.checkExpressionTypeChecks,
-        MemberAccess: validator.checkExpressionTypeChecks,
+        MemberAccess: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         TupleAccess: validator.checkExpressionTypeChecks,
         FilterAccess: validator.checkExpressionTypeChecks,
         CallExpression: validator.checkExpressionTypeChecks,
         ListLiteral: validator.checkExpressionTypeChecks,
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
-        CurrentRecord: validator.checkExpressionTypeChecks,
+        CurrentRecord: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         ParentRecord: validator.checkExpressionTypeChecks,
         NameRef: validator.checkNameRefTypeChecks,
         Subquery: validator.checkExpressionTypeChecks,
         WhereClause: validator.checkConditionIsBoolean,
         HavingClause: validator.checkConditionIsBoolean,
-        GroupByClause: validator.checkGroupKeysNotCollection,
+        GroupByClause: [validator.checkGroupKeysNotCollection, validator.checkGroupKeyNamesUnique],
         AssignmentStatement: validator.checkAssignmentTypeCompatible,
-        VariableDecl: [validator.checkVariableDeclTypeCompatible, validator.checkVariableNotFunctionName],
+        VariableDecl: [validator.checkVariableDeclTypeCompatible, validator.checkVariableNotFunctionName, validator.checkLetNotRepeated],
         Param: validator.checkParamNotFunctionName,
         FunctionDecl: [validator.checkFunctionDeclName, validator.checkFunctionDeclReturnType]
     };
@@ -200,12 +203,53 @@ export class MinabValidator {
     }
 
     checkGroupKeysNotCollection(node: GroupByClause, accept: ValidationAcceptor): void {
-        node.keys.forEach((key, index) => {
-            const result = this.services.typeChecker.inferType(key);
+        node.keys.forEach(key => {
+            const result = this.services.typeChecker.inferType(key.expression);
             if (result.ok && result.type.kind === 'collection') {
-                report(accept, coded('type.collectionAsGroupKey'), { node, property: 'keys', index });
+                report(accept, coded('type.collectionAsGroupKey'), { node: key, property: 'expression' });
             }
         });
+    }
+
+    /** Two `GROUPBY` keys may not have the same name (`AS name`). */
+    checkGroupKeyNamesUnique(node: GroupByClause, accept: ValidationAcceptor): void {
+        const seen = new Set<string>();
+        for (const key of node.keys) {
+            if (key.alias === undefined) continue;
+            if (seen.has(key.alias)) report(accept, coded('query.duplicateGroupKeyName', { name: key.alias }), { node: key, property: 'alias' });
+            seen.add(key.alias);
+        }
+    }
+
+    /**
+     * Spec §12 item 17. `!` creates a missing `ref` in an assignment path. A `collection` is never
+     * null (§7.7), so `!` on a collection step has nothing to do: it is an error.
+     */
+    checkVivifyNotOnCollection(node: MemberAccess | CurrentRecord, accept: ValidationAcceptor): void {
+        if (!node.vivify) return;
+        const result = this.services.typeChecker.inferType(node);
+        if (!result.ok || result.type.kind !== 'collection') return;
+        const member = isMemberAccess(node) ? node.member : (node.field ?? '');
+        report(accept, coded('type.vivifyOnCollection', { member }), { node, property: 'vivify' });
+    }
+
+    /**
+     * Spec §12 item 8. A second `let` with the same name in the same block (or function body, loop
+     * body, or top level) is an error. An inner block may declare the name again: it shadows.
+     */
+    checkLetNotRepeated(node: VariableDecl, accept: ValidationAcceptor): void {
+        const container = node.$container;
+        const siblings: AstNode[] | undefined =
+            isBlock(container) || isLoopStatement(container)
+                ? container.statements
+                : isFunctionDecl(container)
+                  ? container.body
+                  : isModel(container)
+                    ? container.declarations
+                    : undefined;
+        if (!siblings) return;
+        const earlier = siblings.slice(0, siblings.indexOf(node)).some(s => isVariableDecl(s) && s.name === node.name);
+        if (earlier) report(accept, coded('scope.duplicateLet', { name: node.name }), { node, property: 'name' });
     }
 
     checkAssignmentTypeCompatible(node: AssignmentStatement, accept: ValidationAcceptor): void {

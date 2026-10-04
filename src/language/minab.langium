@@ -34,7 +34,10 @@ WhereClause:
     'WHERE' condition=Expression;
 
 GroupByClause:
-    'GROUPBY' keys+=Expression (',' keys+=Expression)*;
+    'GROUPBY' keys+=GroupKey (',' keys+=GroupKey)*;
+
+GroupKey:
+    expression=Expression ('AS' alias=Name)?;
 
 HavingClause:
     'HAVING' condition=Expression;
@@ -168,7 +171,7 @@ Additive infers Expression:
     Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-') right=Multiplicative)*;
 
 Multiplicative infers Expression:
-    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%') right=Unary)*;
+    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION) right=Unary)*;
 
 Unary infers Expression:
     {infer UnaryExpression} operator=('-' | '+') operand=Unary
@@ -311,6 +314,10 @@ terminal ID: /[\p{L}_][\p{L}\p{N}_\u200C\u200D]*/u;
 // Backtick names: any text between backticks. "\`" is a backtick, "\\" a backslash.
 terminal QUOTED_NAME: /`([^`\\]|\\[\s\S])*`/;
 terminal NUMBER returns number: /[0-9]+(\.[0-9]+)?/;
+// `\` outside a string or a backtick name is integer division. It is a terminal, not a keyword,
+// because Langium writes a keyword that is a lone backslash into `ast.ts` without escaping it.
+terminal INTEGER_DIVISION: /\\/;
+
 terminal STRING: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/;
 
 hidden terminal WS: /\s+/;

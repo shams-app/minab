@@ -134,8 +134,9 @@ export const cheatsheet: CheatSection[] = [
             {
                 id: 'groupby',
                 title: 'GROUPBY · HAVING',
-                syntax: 'GROUPBY .customer\nHAVING SUM(.total) > 1000',
-                description: 'Groups rows; aggregates then apply per group. `HAVING` filters groups the way `WHERE` filters rows.',
+                syntax: 'GROUPBY .customer\nHAVING SUM(.total) > 1000\n\nGROUPBY .status AS s',
+                description:
+                    'Groups rows; aggregates then apply per group. `HAVING` filters groups the way `WHERE` filters rows. A key may take a name with `AS`.',
                 specRef: '§4.3',
                 keywords: ['GROUPBY', 'HAVING'],
                 exampleId: 'top-customers'
@@ -218,8 +219,9 @@ export const cheatsheet: CheatSection[] = [
             {
                 id: 'arithmetic',
                 title: 'Arithmetic',
-                syntax: '+  -  *  /  %',
-                description: 'On numbers. `null` propagates through arithmetic (§7.7).',
+                syntax: '+  -  *  /  %  \\\n7 / 2 → 3.5    7 \\ 2 → 3',
+                description:
+                    'On numbers. `/` always gives a `DECIMAL`; `\\` is integer division, cut toward zero, and always gives an `INTEGER`. `null` propagates through arithmetic (§7.7).',
                 specRef: '§5.1'
             },
             {

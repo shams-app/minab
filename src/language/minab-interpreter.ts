@@ -748,7 +748,7 @@ export class MinabInterpreter {
                     return a >= b;
             }
         }
-        if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%') {
+        if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%' && operator !== '\\') {
             fail(`operator "${operator}" is not evaluated yet`);
         }
         if (operator === '+' && this.isTextSum(expr, left, right)) {

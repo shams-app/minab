@@ -28,6 +28,7 @@ A name, table, column or sigil cannot be found.
 | `scope.columnNeedsTable` | error | column "{column}" needs a statically known table (requires the Phase 4 type system) | `column` | The scope has no known table, so the column cannot be looked up. Open a table first, for example with FROM. |
 | `scope.computedReceiver` | error | member access on a computed receiver requires the Phase 4 type system | none | The scope resolver cannot follow a member access on a computed value. Use the type checker for this case. |
 | `scope.currentRecordNoTable` | error | "." has no statically known table here | none | The current record has no known table. Use "." inside a query, or give the host a record table. |
+| `scope.duplicateLet` | error | "{name}" is already declared in this scope | `name` | A second let with the same name in the same block is an error. An inner block may declare the name again (it shadows the outer one). Rename it, or assign with "=" instead. |
 | `scope.functionNameIsTable` | error | "{name}" is a table name — a function may not use it | `name` | A function may not have the name of a table in the schema. Rename the function. |
 | `scope.keyInWrongClause` | error | KEY is only valid in HAVING, SELECT, ORDERBY, or LIMIT, after GROUPBY | none | KEY is the group key. Use it only in the clauses that come after GROUPBY. |
 | `scope.keyOutsideQuery` | error | KEY used outside any query | none | KEY is the group key of a query. Use it inside a query with GROUPBY. |
@@ -79,11 +80,13 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.orderingNeedsOrderable` | error | "{operator}" requires orderable operands, got {left} and {right} | `operator`, `left`, `right` | Only numbers, text, dates and times have an order. Compare values of one of those types. |
 | `type.plusAssignTarget` | error | "+=" requires a numeric or text target, got {actual} | `actual` | The "+=" operator adds numbers or joins text. Use another operator, or change the target type. |
 | `type.positionalIndexOnCollection` | error | a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5) | none | A relation has no fixed row order. Use a query with ORDERBY, or filter with a condition. |
+| `type.relationComparedToKey` | error | "{operator}" can't compare a relation with a key — compare {key}, not {operand} | `operator`, `key`, `operand` | A relation (ref) is not compared with a key value. Compare through the key field of the related table, for example .customer.id == x. |
 | `type.switchArmsDiffer` | error | switch arms must agree on type (no implicit coercion) — got {first} and {second} | `first`, `second` | All arms of a switch must give the same type. Change an arm, or use CAST. |
 | `type.tupleIndexOutOfBounds` | error | tuple index {index} out of bounds (tuple has {count} element(s)) | `index`, `count` | The position is larger than the tuple. Use a position from 0 to the last element. |
 | `type.unaryNeedsNumeric` | error | unary "{operator}" requires a numeric operand, got {actual} | `operator`, `actual` | A sign works on INTEGER and DECIMAL. Use a number, or CAST. |
 | `type.unexpectedResultType` | error | the program gives {actual}, but the host expects {expected} | `actual`, `expected` | The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST. |
 | `type.unsupportedOperator` | error | unsupported operator "{operator}" | `operator` | The checker does not know this operator. Report it as a Minab bug. |
+| `type.vivifyOnCollection` | error | "!" has no use on "{member}": a collection is never null, so there is nothing to create | `member` | The "!" in an assignment path creates a missing ref. A collection is never null (spec §7.7), so "!" on a collection step is an error. Remove the "!". |
 
 ## null
 
@@ -179,6 +182,7 @@ A query is used in a way its shape does not allow.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `query.duplicateGroupKeyName` | error | the GROUPBY key name "{name}" is used twice | `name` | Each GROUPBY key that has a name (AS name) needs its own name. Rename one of them. |
 | `query.functionReturnNotJson` | error | a function whose body ends in a query must declare its return type as JSON (spec §8.6) | none | A query returns rows, so the function must return JSON. Change the return type to JSON. |
 | `query.inSingleColumnRequired` | error | a subquery used with IN must SELECT exactly one column | none | IN compares one value with a list of values. Select exactly one column in the subquery. |
 | `query.singleColumnRequired` | error | a query used as a value must SELECT exactly one column | none | A query used as a value gives one column. Select exactly one column, not "*" and not several. |

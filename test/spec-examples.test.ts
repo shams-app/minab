@@ -333,7 +333,8 @@ describe('spec and showcase examples', () => {
         test(`${name}: checks without errors`, async () => {
             const context = setup.context ?? DEFAULT_CONTEXT;
             for (const part of pieces(block)) {
-                const errors = await checkDiagnostics(prelude(block) + part, context);
+                // A piece that declares its own `let` does not get the prelude: a second `let` with the same name is an error (spec §7.1).
+                const errors = await checkDiagnostics((part.startsWith('let ') ? '' : prelude(block)) + part, context);
                 expect(errors.map(messageOf), `${part}\n(context: ${context})`).toEqual([]);
             }
         });

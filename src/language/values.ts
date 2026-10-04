@@ -121,15 +121,26 @@ const Quotient = Big();
 Quotient.DP = 16;
 Quotient.RM = 1;
 
-export type Arithmetic = '+' | '-' | '*' | '/' | '%';
+/** Whole-number quotient: no digits after the point, cut toward zero (D14, the `\` operator). */
+const Whole = Big();
+Whole.DP = 0;
+Whole.RM = 0;
+
+export type Arithmetic = '+' | '-' | '*' | '/' | '%' | '\\';
 
 /**
  * One arithmetic step. `INTEGER` with `INTEGER` stays an `INTEGER` (range checked for
  * `+`, `-`, `*`). Any `DECIMAL` makes the result a `DECIMAL`.
  * `/` is always a `DECIMAL` (16 digits after the point, half away from zero). `%` has the
- * sign of its left side. Both throw `eval.divisionByZero` when the right side is zero.
+ * sign of its left side. `\` is an `INTEGER`: the quotient cut toward zero (outside the safe range it
+ * throws `eval.integerOutOfRange`). All three throw `eval.divisionByZero` when the right side is zero.
  */
 export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeric {
+    if (operator === '\\') {
+        const y = new Big(b);
+        if (y.eq(0)) throw divisionByZero();
+        return checkInteger(Number(new Whole(a).div(y)));
+    }
     if (typeof a === 'number' && typeof b === 'number') {
         switch (operator) {
             case '+':
@@ -144,6 +155,8 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
             case '%':
                 if (b === 0) throw divisionByZero();
                 return a % b;
+            default:
+                throw new Error('unreachable');
         }
     }
     const x = new Big(a);
@@ -161,6 +174,8 @@ export function arithmetic(operator: Arithmetic, a: Numeric, b: Numeric): Numeri
         case '%':
             if (y.eq(0)) throw divisionByZero();
             return x.mod(y);
+        default:
+            throw new Error('unreachable');
     }
 }
 

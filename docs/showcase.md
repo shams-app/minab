@@ -101,6 +101,14 @@ SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_
 ORDERBY total_spent DESC
 ```
 
+A group key may have a name with `AS`. With one key, the name changes nothing: `KEY` is still the key. (§4.1)
+
+```
+FROM Order
+GROUPBY .status AS s
+SELECT KEY AS status, COUNT(.) AS order_count
+```
+
 ---
 
 ## 6. Variables
@@ -202,6 +210,18 @@ discount
 
 ```
 7 / 2    // 3.5
+```
+
+```
+7 \ 2     // 3 — integer division, cut toward zero
+```
+
+```
+-7 \ 2    // -3
+```
+
+```
+7.9 \ 2   // 3 — an INTEGER, even for a DECIMAL
 ```
 
 ```
