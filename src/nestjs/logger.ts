@@ -42,11 +42,13 @@ export function logsEnabled(options: boolean | MinabLogOptions | undefined): boo
     return options?.enabled ?? process.env.NODE_ENV !== 'production';
 }
 
+/** Tags added to every line of a run: the program and the request. */
 export interface MinabLoggerTags {
     programId?: string;
     requestId?: string;
 }
 
+/** An `EventSink` that writes the events of a run to the Nest `Logger`. One line for each entry, newlines escaped, capped, and off in production by default. */
 export class MinabLogger implements EventSink {
     private written = 0;
     private dropped = 0;
@@ -67,6 +69,7 @@ export class MinabLogger implements EventSink {
         this.prefix = `[program=${oneLine(tags.programId ?? '-')} request=${oneLine(tags.requestId ?? '-')}]`;
     }
 
+    /** `false` when logging is off for this logger. */
     get isEnabled(): boolean {
         return this.enabled;
     }
