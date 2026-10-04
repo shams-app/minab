@@ -1,0 +1,22 @@
+{
+  "unit": "bytes",
+  "minified": true,
+  "entries": {
+    "app": {
+      "bytes": 795572,
+      "gzip": 189215
+    },
+    "browser": {
+      "bytes": 82079,
+      "gzip": 24918
+    },
+    "pglite": {
+      "bytes": 4260,
+      "gzip": 1879
+    },
+    "worker": {
+      "bytes": 780139,
+      "gzip": 184160
+    }
+  }
+}

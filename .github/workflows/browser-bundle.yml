@@ -1,0 +1,26 @@
+# Browser bundle guard (H5). One job per file: see docs/production/README.md.
+# It builds the browser entries for the browser platform, fails if a Node-only module is in them,
+# and prints the sizes. `bench/bundle.json` is the recorded copy; Q4 sets the size budget from it.
+name: Browser bundle
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run langium:generate
+      - run: node scripts/browser-bundle.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-sizes
+          path: bench/bundle.json

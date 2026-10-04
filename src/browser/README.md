@@ -1,7 +1,7 @@
 # src/browser
 
-Entry points of the package for web apps: `@shamsine/minab/browser` and
-`@shamsine/minab/browser/worker`. `pglite.ts` is still a stub (phase H5).
+Entry points of the package for web apps: `@shamsine/minab/browser`,
+`@shamsine/minab/browser/worker` and `@shamsine/minab/browser/pglite`.
 
 A web app runs Minab in a Web Worker. The parser stays off the main thread. The ports (data,
 host functions, clock, events) stay where the app is, on the main thread, and the worker calls
@@ -15,7 +15,18 @@ them over a message bridge and waits for the answer (decision D30).
   In a Web Worker this file starts itself. Write your own worker file when a port must live inside the
   worker (the playground keeps PGlite there): `serveMinab(self, { ports: { data } })`.
 - `protocol.ts`: the message types (version 1), the value encoding and the error helpers. Both sides use it.
-- `pglite.ts`: stub that exports `notReady` (phase H5).
+- `remote.ts`: `createRemoteMinab({ endpoint, fetch?, headers?, maxBatch?, types?, events? })`. `run(ref, inputs, options)`
+  runs a stored program `{ id, version }` on the server with wire format v1. Runs made in the same tick go out in one
+  request (split at `maxBatch`, default 100). An `AbortSignal` ends the run with `cancelled` at once; the `fetch` is
+  aborted when every run of its request is aborted. Failures of the network or of the answer are `wire.remoteFailed`.
+- `route.ts`: `routeByTier({ local, remote, events? })`. `prepare({ id, version, source })` prepares the source locally.
+  If the analysis tier is `local`, `run` runs in the worker with no network call. If it is `data`, `run` sends the id and
+  version to the server. A program that fails its check stays local and gives its error. SQL and the schema are never sent (D28).
+- `console.ts`: `consoleEventSink()` writes `LOG` output to the browser console (SQL too with `statements: true`).
+  `emitLogs(sink, logs)` gives the `logs` of a remote result to the same sink.
+- `pglite.ts`: `createPgliteDataPort({ schema, seed?, script? })`, a `DataPort` over PGlite (an optional peer) with
+  `citext`. It makes the tables with `src/host/ddl.ts`. For demos and offline playgrounds only: production data
+  programs go to the server (D30).
 
 ## The bridge
 
@@ -37,5 +48,7 @@ them over a message bridge and waits for the answer (decision D30).
 ## Rules
 
 - Nothing here imports Node or uses `window` or `document`. `test/browser/imports.test.ts` checks both entries.
-- The playground does not use this yet (H7). Remote runs and routing are H5.
+- The playground does not use this yet (H7).
+- `scripts/browser-bundle.mjs` builds these entries for the browser and fails if a Node-only module gets in
+  (`pg`, `node:*`, `langium/node`, `vscode-languageserver/node`). Sizes are in `bench/bundle.json`.
 - The tests run the worker code in Node with a `MessageChannel` pair. The bridge does not care what is at the other end.
