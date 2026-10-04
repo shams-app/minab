@@ -19,7 +19,9 @@ export type {
     RunPorts,
     RunResult,
     RunStats,
-    SourceRange
+    SourceRange,
+    WriteMode,
+    WriteStatement
 } from './types.js';
 export type { ColumnType, MinabColumnSchema, MinabRuleContext, MinabSchema, MinabTableSchema } from '../language/schema.js';
 export type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';

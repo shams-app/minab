@@ -1,4 +1,21 @@
 {
-  "mode": "check-only",
-  "refusal": "\"UpdateStatement\" is not executed yet"
+  "mode": "run",
+  "json": {
+    "value": 1,
+    "writes": {
+      "mode": "dry-run",
+      "statements": [
+        {
+          "sql": "UPDATE \"Customers\" AS \"_r0\" SET \"status\" = $2, \"flaggedAt\" = \"_r0\".\"flaggedAt\" + $3 WHERE \"_r0\".\"id\" IS NOT DISTINCT FROM $1",
+          "params": [
+            "c-1",
+            "disputed",
+            1
+          ]
+        }
+      ]
+    }
+  },
+  "statements": 2,
+  "compiles": false
 }

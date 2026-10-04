@@ -8,7 +8,18 @@
 
 import type { Row } from '../engine/protocol.js';
 
-export type ExampleTag = 'query' | 'record-rule' | 'field-rule' | 'aggregates' | 'joins' | 'functions' | 'control-flow' | 'types' | 'json' | 'check-only';
+export type ExampleTag =
+    | 'query'
+    | 'record-rule'
+    | 'field-rule'
+    | 'aggregates'
+    | 'joins'
+    | 'functions'
+    | 'control-flow'
+    | 'types'
+    | 'json'
+    | 'writes'
+    | 'check-only';
 
 export type Level = 'beginner' | 'intermediate' | 'advanced';
 

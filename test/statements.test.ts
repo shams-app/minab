@@ -67,11 +67,11 @@ describe('assignment', () => {
         expect(result).toMatchObject({ ok: true, value: '0.3' });
     });
 
-    test('a record path is a write: eval.writesNotSupported', async () => {
+    test('a record path is a write, and a rule cannot write (X5, D26)', async () => {
         const program = await minab.prepare('if true { .total = 21; 1 } else { 0 }', { ruleContext: { recordTable: 'Order', isFieldRule: false } });
-        expect(program.diagnostics).toEqual([]);
+        expect(program.diagnostics).toMatchObject([{ code: 'rule.writeInRule', severity: 'error' }]);
         const result = await program.run({ record: { id: 'o-1', total: 1 } });
-        expect(result).toMatchObject({ ok: false, error: { code: 'eval.writesNotSupported' } });
+        expect(result).toMatchObject({ ok: false, error: { code: 'eval.programInvalid' } });
     });
 });
 
@@ -127,9 +127,9 @@ describe('limits', () => {
     });
 });
 
-describe('what does not run yet', () => {
-    test('a write in a function body is still refused, by name', async () => {
+describe('writes in a function body (X5)', () => {
+    test('a run that writes must choose a write mode', async () => {
         const result = await run('fn f(): INTEGER { DELETE #Order[.total > 1]; 1 }\nf()');
-        expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('"DeleteStatement" is not executed yet') } });
+        expect(result).toMatchObject({ ok: false, error: { code: 'eval.writeModeMissing' } });
     });
 });

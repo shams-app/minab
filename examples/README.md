@@ -29,6 +29,9 @@ A run example:
 - `compiles` is `true` when `minab compile` prints SQL, and `false` when the
   program is run by the interpreter.
 
+An example that writes is a `run` example too. `minab run` is a dry run, so its `json` is `{ "value": …, "writes": { "mode": "dry-run", "statements": […] } }`
+(see `order-dml`). `statements` counts only the reads that reach the data source.
+
 A check-only example (a construct that `minab run` does not execute yet):
 
 ```json

@@ -343,7 +343,7 @@ describe('the interpreted layer proper', () => {
         expect(result).toBe(true);
     });
 
-    test('a construct that does not execute yet says so rather than answering wrongly', async () => {
+    test('a program that writes needs a write mode, and says so rather than writing by accident (X5)', async () => {
         const executor = new RecordingExecutor();
         const result = await run(
             `
@@ -353,6 +353,8 @@ describe('the interpreted layer proper', () => {
             `,
             { executor, record: { id: 'o-1', total: 1 }, recordTable: 'Order' }
         );
-        expect(result).toEqual({ ok: false, reason: expect.stringContaining('not executed yet') });
+        expect(result).toMatchObject({ ok: false, code: 'eval.writeModeMissing' });
+        // Nothing was sent: the choice is checked before any port is called.
+        expect(executor.queries).toHaveLength(0);
     });
 });

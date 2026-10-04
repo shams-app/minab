@@ -1,10 +1,10 @@
 // Declarative writes (spec §10, showcase §13): UPDATE with an inline filter
 // and a compound `+:` operator, then an INSERT from a filtered table.
 //
-// CHECK-ONLY: `INSERT`/`UPDATE`/`DELETE` parse, resolve, and type-check, but
-// execution is not built yet (ADR 0001 settles how it will work).
+// `minab run` is a dry run: it prints the two statements and changes nothing.
+// `minab run --apply --database <url>` writes them, in one transaction.
 //
-//   minab check order-dml.minab
+//   minab run order-dml.minab
 
 UPDATE #Customer[.country == "TR"]
 SET { checked: true, points +: 10 };

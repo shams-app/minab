@@ -175,6 +175,26 @@ class Tracer {
     readonly events: EventSink = {
         emit: event => {
             if (event.kind === 'statement') this.pending.push(event.range);
+            if (event.kind === 'dryRun') {
+                // The playground always runs writes as a dry run (X5, D26): the statement is listed, not sent.
+                const query = { text: event.sql, params: event.params };
+                const node = event.range && nodeAt(this.document, event.range);
+                this.entries.push({
+                    index: this.entries.length + 1,
+                    text: query.text,
+                    params: query.params,
+                    formatted: formatSql(query),
+                    rowCount: 0,
+                    preview: [],
+                    columns: [],
+                    durationMs: 0,
+                    dryRun: true,
+                    origin:
+                        event.range && node && sameRange(event.range, node.$cstNode!.range)
+                            ? { range: event.range, type: node.$type, text: node.$cstNode!.text }
+                            : undefined
+                });
+            }
             if (event.kind === 'log') {
                 this.logs.push({
                     index: this.logs.length + 1,
@@ -415,7 +435,8 @@ export class Engine implements EngineApi {
             const outcome = await program.run(
                 { record: config.record, fieldValue: config.fieldValue },
                 { data: tracer.port, events: tracer.events },
-                signal ? { signal } : {}
+                // A program that writes runs as a dry run here: the statements show in the Execution tab and the database stays as it is.
+                { writes: 'dry-run', ...(signal ? { signal } : {}) }
             );
             base.runMs = now() - started;
             base.trace = tracer.entries;

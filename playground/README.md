@@ -43,7 +43,7 @@ src/
   engine/     the Minab engine — runs in ONE Web Worker, no DOM
     engine.ts       check / compile / run through the runtime API (`src/runtime/`) → RunReport; two queues (language, database)
     language.ts     one `Minab` runtime per host (schema + rule context), and the syntax tree for editor intelligence
-    program.ts      program info for the UI: kind and type from the runtime, check-only constructs and symbols from the syntax tree
+    program.ts      program info for the UI: kind and type from the runtime, check-only constructs (none now) and symbols from the syntax tree
     intel.ts        calls src/editor/ for hover, completion and go-to-definition; builds the AST view
     database.ts     PGlite: lazy boot, citext, JSON-shaped results, preview, SQL console
     ddl.ts          host schema + seed rows → CREATE TABLE / INSERT (also the exported seed.sql)
@@ -89,7 +89,7 @@ public/       favicon, apple-touch icon, OG image, and the self-hosted fonts in 
 ## Known limits
 
 These come from the language implementation, not the playground, and the site labels them as they occur:
-- `INSERT`/`UPDATE`/`DELETE` are **check-only**. They parse and type-check, and the evaluator explains that it doesn't run them yet. Blocks, function-body statements, assignment to local names and `if!` run since X3. Loops, `.$index` and tuples run since X4.
+- `INSERT`/`UPDATE`/`DELETE` on tables run as a **dry run** since X5: the Execution tab lists the statements and the tables stay as they are. Writes to `JSON` arrays and record paths come with X6. Blocks, function-body statements, assignment to local names and `if!` run since X3. Loops, `.$index` and tuples run since X4.
 - A top-level query that calls a user `fn` doesn't compile to SQL.
 - Two compiler gaps found while building the gallery:
   - `GROUPBY .customer.country` (grouping by a traversed column) produces SQL Postgres rejects.

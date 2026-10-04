@@ -41,6 +41,7 @@ import {
     isFilterAccess,
     isGroupKeyRef,
     isIfExpr,
+    isInsertStatement,
     isJsonObjectLiteral,
     isListLiteral,
     isMemberAccess,
@@ -62,17 +63,21 @@ import {
     type CastExpr,
     type FunctionDecl,
     type GroupKey,
+    type DeleteStatement,
     type Expression,
     type IfExpr,
+    type InsertStatement,
     type JsonObjectLiteral,
     type ListLiteral,
     type NameRef,
     type NumberLiteral,
     type Query,
+    type SetAssignment,
     type SwitchExpr,
     type TypeRef,
     type TypeTestExpression,
-    type UnaryExpression
+    type UnaryExpression,
+    type UpdateStatement
 } from './generated/ast.js';
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
 import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, type SqlArg, type SqlClock } from './minab-builtins.js';
@@ -82,6 +87,8 @@ import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
+
+export type WriteStatementNode = InsertStatement | UpdateStatement | DeleteStatement;
 
 /**
  * A refusal has an English `reason` and a stable code from the registry. A refusal with no
@@ -182,6 +189,8 @@ interface CollectionSource {
     table: string;
     alias: string;
     predicates: string[];
+    /** A to-many relation (`.orders`) also says which column links a row back to its owner, and the owner's key. An `INSERT` sets it. */
+    link?: { column: string; value: string };
 }
 
 const SQL_TYPES: Record<LogicalTypeBase, string> = {
@@ -246,6 +255,12 @@ function divisionSql(a: string, b: string): string {
     return `(sign(${x}) * sign(${y}) * div(div(abs(${x}) * 20000000000000000, abs(${y})) + 1, 2) * 0.0000000000000001)`;
 }
 
+/** `SELECT .`: the whole row, the same as `SELECT *` (spec §10.1 uses it in `INSERT ... VALUES FROM ... SELECT .`). */
+function isWholeRow(clause: { items: { expression: Expression; alias?: string }[] }): boolean {
+    const [only] = clause.items;
+    return clause.items.length === 1 && !only.alias && isCurrentRecord(only.expression) && !only.expression.field;
+}
+
 function quoteIdent(name: string): string {
     return `"${name.replace(/"/g, '""')}"`;
 }
@@ -308,6 +323,14 @@ export class MinabSqlCompiler {
         return result.ok ? { ...result, table } : result;
     }
 
+    /**
+     * Compile an `INSERT`, `UPDATE` or `DELETE` (X5) to one parameterized statement. Every value is a
+     * bound parameter. `outer` supplies what the statement reads from outside (the record, variables).
+     */
+    compileWrite(statement: WriteStatementNode, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        return this.run(ctx => this.write(statement, ctx), outer, clock);
+    }
+
     private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
         const ctx = new Ctx(outer, clock);
         try {
@@ -323,10 +346,204 @@ export class MinabSqlCompiler {
         }
     }
 
+    // ---- writes (X5) -----------------------------------------------------
+
+    private write(statement: WriteStatementNode, ctx: Ctx): string {
+        if (isInsertStatement(statement)) return this.insert(statement, ctx);
+        return 'setClause' in statement ? this.update(statement, ctx) : this.delete(statement, ctx);
+    }
+
+    /** The rows an `UPDATE` or `DELETE` ranges over: a table, a relation of the record, either of them filtered. */
+    private writeSource(target: Expression, ctx: Ctx): CollectionSource {
+        if (isTupleAccess(target) || !this.looksLikeCollection(target, ctx, [])) failCoded('compile.writeTarget');
+        return this.collectionSource(target, ctx, []);
+    }
+
+    private writableColumn(table: string, name: string): MinabColumnSchema {
+        const column = this.schema.getColumn(table, name);
+        if (!column || column.type.kind !== 'scalar') failCoded('compile.writeColumn', { table, column: name });
+        return column;
+    }
+
+    private scopeFor(alias: string, table: string): SqlScope {
+        return { alias, table, named: new Map([[alias, { alias, table }]]) };
+    }
+
+    private insert(statement: InsertStatement, ctx: Ctx): string {
+        const target = statement.target;
+        // An INSERT adds rows to a table. A filter on the target would say nothing.
+        if (isFilterAccess(target) || isTupleAccess(target) || !this.looksLikeCollection(target, ctx, [])) failCoded('compile.writeTarget');
+        const source = this.collectionSource(target, ctx, []);
+        const { table, link } = source;
+        const into = quoteIdent(this.sqlTable(table));
+        const payload = statement.payload;
+
+        const objects = isJsonObjectLiteral(payload)
+            ? [payload]
+            : isListLiteral(payload) && payload.items.length > 0 && payload.items.every(isJsonObjectLiteral)
+              ? (payload.items as JsonObjectLiteral[])
+              : undefined;
+        if (objects) {
+            const keys = [...new Set(objects.flatMap(o => o.properties.map(p => p.key)))];
+            const columns = keys.map(key => this.writableColumn(table, key));
+            const names = columns.map(c => quoteIdent(c.sqlName ?? c.name));
+            // A relation target sets its link column itself, unless the row names it.
+            const extra = link && !names.includes(quoteIdent(link.column)) ? link : undefined;
+            if (names.length === 0 && !extra) {
+                if (objects.length > 1) fail('INSERT of several empty objects has no SQL form');
+                return `INSERT INTO ${into} DEFAULT VALUES`;
+            }
+            const rows = objects.map(object => {
+                const cells = keys.map(key => {
+                    const property = object.properties.find(p => p.key === key);
+                    if (!property) return 'DEFAULT';
+                    // `{ id }` is `{ id: id }`.
+                    return this.expression(property.value ?? ({ $type: 'NameRef', name: key } as NameRef), ctx, []);
+                });
+                return `(${(extra ? [...cells, extra.value] : cells).join(', ')})`;
+            });
+            return `INSERT INTO ${into} (${(extra ? [...names, quoteIdent(extra.column)] : names).join(', ')}) VALUES ${rows.join(', ')}`;
+        }
+
+        // Rows from a query or from a table: the columns are matched by name.
+        let inner: string;
+        let names: string[];
+        if (isQuery(payload)) {
+            const from: { table?: string } = {};
+            inner = this.query(payload, ctx, [], from);
+            const clause = payload.selectClause;
+            if (!clause || clause.all || clause.items.length === 0 || isWholeRow(clause)) {
+                names = this.commonColumns(from.table!, table);
+            } else {
+                names = clause.items.map(item => {
+                    const name = item.alias ?? this.fieldName(item.expression);
+                    if (!name) failCoded('compile.writeNeedsName');
+                    return name;
+                });
+            }
+        } else {
+            const rows = this.collectionSource(payload, ctx, []);
+            const where = rows.predicates.length > 0 ? ` WHERE ${rows.predicates.join(' AND ')}` : '';
+            const scope = this.scopeFor(rows.alias, rows.table);
+            inner = `SELECT ${this.star(scope)} FROM ${quoteIdent(this.sqlTable(rows.table))} AS ${quoteIdent(rows.alias)}${where}`;
+            names = this.commonColumns(rows.table, table);
+        }
+        const columns = names.map(name => this.writableColumn(table, name));
+        const physical = columns.map(c => quoteIdent(c.sqlName ?? c.name));
+        const extra = link && !physical.includes(quoteIdent(link.column)) ? link : undefined;
+        const selected = names.map(quoteIdent);
+        return (
+            `INSERT INTO ${into} (${(extra ? [...physical, quoteIdent(extra.column)] : physical).join(', ')}) ` +
+            `SELECT ${(extra ? [...selected, extra.value] : selected).join(', ')} FROM (${inner}) AS ${quoteIdent(ctx.freshAlias())}`
+        );
+    }
+
+    /** The scalar columns that a source table and a target table both have, by Minab name. */
+    private commonColumns(source: string, target: string): string[] {
+        const wanted = new Set(
+            this.table(target)
+                .columns.filter(c => c.type.kind === 'scalar')
+                .map(c => c.name)
+        );
+        return this.table(source)
+            .columns.filter(c => c.type.kind === 'scalar' && wanted.has(c.name))
+            .map(c => c.name);
+    }
+
+    /** The name a bare field gives to its `SELECT` column: `.total` is `total`. */
+    private fieldName(expr: Expression): string | undefined {
+        return isCurrentRecord(expr) ? expr.field : isMemberAccess(expr) ? expr.member : undefined;
+    }
+
+    /**
+     * `WHERE`, `ORDERBY` and `LIMIT` of an `UPDATE` or `DELETE`. Without `ORDERBY` and `LIMIT` the
+     * statement filters the rows itself. With them, SQL has no `UPDATE ... LIMIT`, so the rows come from a key
+     * subquery: `WHERE pk IN (SELECT pk ... ORDER BY ... LIMIT n)`.
+     */
+    private writeRows(
+        statement: UpdateStatement | DeleteStatement,
+        source: CollectionSource,
+        ctx: Ctx,
+        build: (alias: string, scope: SqlScope) => string
+    ): { alias: string; set: string; where: string } {
+        const scope = this.scopeFor(source.alias, source.table);
+        const physical = quoteIdent(this.sqlTable(source.table));
+        const predicates = [...source.predicates, ...(statement.whereClause ? [this.expression(statement.whereClause.condition, ctx, [scope])] : [])];
+        const ordered = statement.orderByClause !== undefined || statement.limitClause !== undefined;
+        if (!ordered) {
+            return { alias: source.alias, set: build(source.alias, scope), where: predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '' };
+        }
+        const key = quoteIdent(this.primaryKey(source.table));
+        const outerAlias = ctx.freshAlias();
+        const set = build(outerAlias, this.scopeFor(outerAlias, source.table));
+        const where = predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '';
+        const orderBy = statement.orderByClause
+            ? ` ORDER BY ${statement.orderByClause.items
+                  .map(i => `${this.expression(i.expression, ctx, [scope])}${i.direction === 'DESC' ? ' DESC' : ''}`)
+                  .join(', ')}`
+            : '';
+        const limit = statement.limitClause
+            ? ` LIMIT ${statement.limitClause.limit}${statement.limitClause.offset !== undefined ? ` OFFSET ${statement.limitClause.offset}` : ''}`
+            : '';
+        const inner = `SELECT ${quoteIdent(source.alias)}.${key} FROM ${physical} AS ${quoteIdent(source.alias)}${where}${orderBy}${limit}`;
+        return { alias: outerAlias, set, where: ` WHERE ${quoteIdent(outerAlias)}.${key} IN (${inner})` };
+    }
+
+    private update(statement: UpdateStatement, ctx: Ctx): string {
+        const source = this.writeSource(statement.target, ctx);
+        const assignments = statement.setClause.assignments;
+        if (assignments.length === 0) failCoded('compile.writeEmptySet');
+        const rows = this.writeRows(statement, source, ctx, (alias, scope) =>
+            assignments.map(assignment => this.assignment(assignment, source.table, alias, scope, ctx)).join(', ')
+        );
+        return `UPDATE ${quoteIdent(this.sqlTable(source.table))} AS ${quoteIdent(rows.alias)} SET ${rows.set}${rows.where}`;
+    }
+
+    private delete(statement: DeleteStatement, ctx: Ctx): string {
+        const source = this.writeSource(statement.target, ctx);
+        const rows = this.writeRows(statement, source, ctx, () => '');
+        return `DELETE FROM ${quoteIdent(this.sqlTable(source.table))} AS ${quoteIdent(rows.alias)}${rows.where}`;
+    }
+
+    /** One `SET` item. `+:` joins text or adds numbers by the type of the column (spec §10.3). */
+    private assignment(assignment: SetAssignment, table: string, alias: string, scope: SqlScope, ctx: Ctx): string {
+        const column = this.writableColumn(table, assignment.key);
+        if (column.type.kind !== 'scalar') failCoded('compile.writeColumn', { table, column: assignment.key });
+        const name = quoteIdent(column.sqlName ?? column.name);
+        const current = `${quoteIdent(alias)}.${name}`;
+        const base = column.type.type.base;
+        const array = column.type.type.array;
+        const value = this.expression(assignment.value, ctx, [scope]);
+        const numeric = !array && (base === 'INTEGER' || base === 'DECIMAL');
+        const text = !array && (base === 'TEXT' || base === 'CITEXT');
+        switch (assignment.operator) {
+            case ':':
+                return `${name} = ${value}`;
+            case '+:':
+                if (text) return `${name} = ${current} || ${value}`;
+                if (numeric) return `${name} = ${current} + ${value}`;
+                break;
+            case '-:':
+                if (numeric) return `${name} = ${current} - ${value}`;
+                break;
+            case '*:':
+                if (numeric) return `${name} = ${current} * ${value}`;
+                break;
+            case '/:':
+                if (numeric) return `${name} = ${divisionSql(current, value)}`;
+                break;
+            case ':|':
+                if (!array && base === 'JSON') return `${name} = COALESCE(${current}, '{}'::jsonb) || ${value}`;
+                break;
+        }
+        fail(`"${assignment.operator}" cannot be used on the ${array ? `${base}[]` : base} column "${assignment.key}"`);
+    }
+
     // ---- query ---------------------------------------------------------
 
-    private query(query: Query, ctx: Ctx, outerScopes: SqlScope[]): string {
+    private query(query: Query, ctx: Ctx, outerScopes: SqlScope[], sourceOut?: { table?: string }): string {
         const source = this.querySource(query, ctx, outerScopes);
+        if (sourceOut) sourceOut.table = source.table;
         const scope = this.scopeOf(query, source);
         const scopes = [scope, ...outerScopes];
         this.joinGroupKeys(query, scope, ctx, scopes);
@@ -468,7 +685,7 @@ export class MinabSqlCompiler {
 
     private selectClause(query: Query, ctx: Ctx, scopes: SqlScope[]): string {
         const clause = query.selectClause;
-        if (!clause || clause.all || clause.items.length === 0) {
+        if (!clause || clause.all || clause.items.length === 0 || isWholeRow(clause)) {
             return `SELECT ${clause?.distinct ? 'DISTINCT ' : ''}${this.star(scopes[0])}`;
         }
         const items = clause.items.map(item => {
@@ -1167,7 +1384,8 @@ export class MinabSqlCompiler {
         return {
             table: column.type.table,
             alias,
-            predicates: [`${quoteIdent(alias)}.${quoteIdent(foreignKey)} = ${ownerKey}`]
+            predicates: [`${quoteIdent(alias)}.${quoteIdent(foreignKey)} = ${ownerKey}`],
+            link: { column: foreignKey, value: ownerKey }
         };
     }
 

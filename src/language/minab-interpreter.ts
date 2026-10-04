@@ -30,9 +30,14 @@
  * local name, `if!` and the three loops with `break` and `continue`. A block gets its own scope. A write (a record path
  * as an assignment target) fails with `eval.writesNotSupported`.
  *
+ * Table writes (X5): `INSERT`, `UPDATE` and `DELETE` compile to one parameterized statement
+ * each (`MinabSqlCompiler.compileWrite`). A run that has any of them needs a write mode
+ * (D26). `dry-run` collects the statements in `RunBudget.writes`. `apply` runs the whole
+ * run inside one transaction of the write port: reads and writes share it, and any failure
+ * rolls everything back.
+ *
  * Not implemented yet (each fails with an explicit reason rather than a
- * wrong answer): `INSERT`/`UPDATE`/`DELETE` execution (§10, X5, X6). ADR 0001
- * covers how writes execute.
+ * wrong answer): writes to `JSON` arrays and record path assignment (§10, X6).
  */
 
 import {
@@ -53,7 +58,10 @@ import {
     isFunctionDecl,
     isGroupKeyRef,
     isIfExpr,
+    isDeleteStatement,
     isIfStatement,
+    isInsertStatement,
+    isUpdateStatement,
     isIndexRef,
     isJsonObjectLiteral,
     isListLiteral,
@@ -79,17 +87,20 @@ import {
     type Block,
     type BodyStatement,
     type Expression,
+    type DeleteStatement,
     type FunctionDecl,
     type IfStatement,
     type IfStatementElse,
+    type InsertStatement,
     type LoopStatement,
     type MainStatement,
     type Model,
     type SwitchExpr,
-    type Type
+    type Type,
+    type UpdateStatement
 } from './generated/ast.js';
 import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinClock, type BuiltinSignature } from './minab-builtins.js';
-import type { AstNode } from 'langium';
+import { AstUtils, type AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
@@ -113,8 +124,8 @@ import { castValue } from './casts.js';
 import { dataFailure } from '../runtime/errors.js';
 import { formatLogMessage } from '../runtime/log-format.js';
 import { NO_LIMITS, RunBudget, RunStopped } from '../runtime/limits.js';
-import { PortError } from '../runtime/ports.js';
-import type { MinabError, SourceRange } from '../runtime/types.js';
+import { PortError, type WriteTransaction } from '../runtime/ports.js';
+import type { MinabError, SourceRange, WriteMode } from '../runtime/types.js';
 import { coded } from './diagnostics/codes.js';
 import type { LogicalTypeBase } from './minab-types.js';
 
@@ -137,8 +148,12 @@ export type InterpretResult = { ok: true; value: MinabValue } | { ok: false; err
 export interface EvalContext {
     /** The data port (ADR 0002, 4.1). A plain `QueryExecutor` fits: it ignores the second argument. */
     executor: DataPort;
-    /** The write port (X5 builds it). Not used yet. */
+    /** The write port. Needed when `writeMode` is `apply`. */
     write?: WritePort;
+    /** What a program that writes does (D26). Missing: a program that writes fails with `eval.writeModeMissing`. */
+    writeMode?: WriteMode;
+    /** The open transaction of an applied run. Set by the interpreter, not by the host. Reads use it too. */
+    writeTransaction?: WriteTransaction;
     /** Values of the declared host inputs (D27). A declared input with no value is the run error `eval.missingInput`. */
     hostInputs?: Record<string, MinabValue>;
     hostFunctions?: HostFunctions;
@@ -262,6 +277,18 @@ function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | '
     return pi >= p.length ? 'true' : 'abort';
 }
 
+const writeCache = new WeakMap<Model, boolean>();
+
+/** Does the program have an `INSERT`, `UPDATE` or `DELETE` anywhere (also in a function it may never call)? */
+function hasWrites(model: Model): boolean {
+    let found = writeCache.get(model);
+    if (found === undefined) {
+        found = AstUtils.streamAst(model).some(node => isInsertStatement(node) || isUpdateStatement(node) || isDeleteStatement(node));
+        writeCache.set(model, found);
+    }
+    return found;
+}
+
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
@@ -278,28 +305,54 @@ export class MinabInterpreter {
         const context: EvalContext = { ...given, now: given.now ?? new Date(), timeZone: given.timeZone ?? 'UTC' };
         const ownBudget = context.budget === undefined;
         const budget = context.budget ?? new RunBudget(NO_LIMITS, context.signal);
-        const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
-            state.frames.push({
-                record: this.normalizeRecord(context.record, context.recordTable),
-                table: context.recordTable,
-                variables: new Map(),
-                types: new Map()
-            });
             budget.check();
-            // Top-level statements run in order. A function is known from the start (`collectFunctions`).
-            for (const declaration of model.declarations) {
-                if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
-            }
-            if (!model.tail) return { ok: true, value: null };
-            return {
-                ok: true,
-                value: externalize(await this.mainStatement(model.tail, state))
-            };
+            const writes = hasWrites(model);
+            // A host must choose (D26). The choice is checked before any port is called.
+            if (writes && !context.writeMode) fail(coded('eval.writeModeMissing').reason, 'eval.writeModeMissing');
+            const value =
+                writes && context.writeMode === 'apply'
+                    ? await this.inTransaction(context, budget, inner => this.runModel(model, inner, budget))
+                    : await this.runModel(model, context, budget);
+            return { ok: true, value };
         } catch (e) {
             return this.failure(e);
         } finally {
             if (ownBudget) budget.dispose();
+        }
+    }
+
+    private async runModel(model: Model, context: EvalContext, budget: RunBudget): Promise<MinabValue> {
+        const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
+        state.frames.push({
+            record: this.normalizeRecord(context.record, context.recordTable),
+            table: context.recordTable,
+            variables: new Map(),
+            types: new Map()
+        });
+        // Top-level statements run in order. A function is known from the start (`collectFunctions`).
+        for (const declaration of model.declarations) {
+            if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
+        }
+        if (!model.tail) return null;
+        return externalize(await this.mainStatement(model.tail, state));
+    }
+
+    /**
+     * One run is one transaction (D26). The work gets a context whose data port is the transaction,
+     * so a read sees the rows the run wrote. An error rolls everything back: the port rolls back
+     * when `work` throws, and the error comes out of here.
+     */
+    private async inTransaction(context: EvalContext, budget: RunBudget, work: (inner: EvalContext) => Promise<MinabValue>): Promise<MinabValue> {
+        const port = context.write;
+        if (!port) fail(coded('eval.writesNotSupported').reason, 'eval.writesNotSupported');
+        try {
+            return await port.transaction(tx => work({ ...context, executor: tx, writeTransaction: tx }), { signal: budget.signal });
+        } catch (e) {
+            if (e instanceof EvalError || e instanceof NumberError || e instanceof RunStopped || e instanceof PortError || e instanceof LoopSignal) throw e;
+            // The database failed to commit or to roll back. As for any other port failure, only a code leaves.
+            const failure = dataFailure(e);
+            throw new EvalError(failure.message, failure.code, failure.params, e);
         }
     }
 
@@ -684,7 +737,7 @@ export class MinabInterpreter {
         return block.tail ? await this.mainStatement(block.tail, inner) : null;
     }
 
-    /** Runs statements in order in the innermost scope of `state`. X5 and X6 add writes. */
+    /** Runs statements in order in the innermost scope of `state`. */
     private async runStatements(statements: BodyStatement[], state: State): Promise<void> {
         for (const statement of statements) {
             state.budget.check();
@@ -702,6 +755,8 @@ export class MinabInterpreter {
                     await this.ifStatement(statement, state);
                 } else if (isLoopStatement(statement)) {
                     await this.loop(statement, state);
+                } else if (isInsertStatement(statement) || isUpdateStatement(statement) || isDeleteStatement(statement)) {
+                    await this.writeStatement(statement, state);
                 } else if (isBreakStatement(statement)) {
                     throw new LoopSignal('break', statement.label);
                 } else if (isContinueStatement(statement)) {
@@ -713,6 +768,42 @@ export class MinabInterpreter {
                 placeError(e, statement);
                 throw e;
             }
+        }
+    }
+
+    // ---- table writes (X5) -----------------------------------------------
+
+    /**
+     * `INSERT`, `UPDATE` or `DELETE` on a table. It becomes one parameterized statement. In a dry run it
+     * is only recorded. When applied, it goes to the run's transaction and the row count is recorded.
+     * Both count toward `limits.statements`, so a loop cannot make an endless list.
+     */
+    private async writeStatement(statement: InsertStatement | UpdateStatement | DeleteStatement, state: State): Promise<void> {
+        const { context, budget } = state;
+        const compiled = this.compiler.compileWrite(statement, this.outerResolver(state), this.clockOf(state));
+        if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
+        const query = compiled.query;
+        const range = statement.$cstNode?.range;
+        const record = { sql: query.text, params: query.params, ...(range ? { range } : {}) };
+        budget.beforeStatement();
+        const transaction = context.writeTransaction;
+        if (context.writeMode !== 'apply' || !transaction) {
+            budget.writes.push(record);
+            context.events?.emit({ kind: 'dryRun', ...record });
+            return;
+        }
+        context.events?.emit({ kind: 'statement', ...record });
+        const started = performance.now();
+        try {
+            const result = await budget.race(Promise.resolve().then(() => transaction.executeWrite(query, { signal: budget.signal })));
+            budget.writes.push({ ...record, rowCount: result.affected });
+            budget.writeRows += result.affected;
+        } catch (e) {
+            if (e instanceof RunStopped || e instanceof PortError) throw e;
+            const failure = dataFailure(e);
+            throw new EvalError(failure.message, failure.code, failure.params, e);
+        } finally {
+            context.events?.emit({ kind: 'timing', phase: 'data', durationMs: performance.now() - started });
         }
     }
 

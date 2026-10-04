@@ -490,8 +490,7 @@ export const cheatsheet: CheatSection[] = [
                 description: 'Set operators: `:` assign, `+:` `-:` `*:` `/:` compound, `:|` default.',
                 specRef: '§10.3',
                 keywords: ['UPDATE', 'SET'],
-                exampleId: 'order-dml',
-                status: 'check-only'
+                exampleId: 'order-dml'
             },
             {
                 id: 'insert',
@@ -500,8 +499,7 @@ export const cheatsheet: CheatSection[] = [
                 description: 'From a JSON object, a filtered table, or a query.',
                 specRef: '§10.1',
                 keywords: ['INSERT', 'VALUES'],
-                exampleId: 'order-dml',
-                status: 'check-only'
+                exampleId: 'order-dml'
             },
             {
                 id: 'delete',
@@ -510,7 +508,7 @@ export const cheatsheet: CheatSection[] = [
                 description: 'Filtered, optionally ordered and limited.',
                 specRef: '§10.2',
                 keywords: ['DELETE'],
-                status: 'check-only'
+                exampleId: 'order-dml'
             }
         ]
     }

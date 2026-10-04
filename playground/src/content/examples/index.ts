@@ -261,23 +261,23 @@ export const examples: Example[] = [
         id: 'order-dml',
         title: 'Declarative writes',
         summary: '`UPDATE` with an inline filter and a compound `+:`, then `INSERT … VALUES`.',
-        notes: 'Writes are specified and fully type-checked — change `+: 10` to `+: "ten"` and watch the checker object — but not executed yet.',
+        notes: 'Writes run as a dry run here: the Execution tab lists both statements and the tables stay as they are. Change `+: 10` to `+: "ten"` and watch the checker object. `minab run --apply` writes them in one transaction.',
         source: orderDml,
-        tags: ['check-only'],
+        tags: ['writes'],
         level: 'advanced',
         specRef: '§10',
         repoPath: repo('order-dml'),
         host: { dataset: { schema: orderDmlConfig.schema } },
         focus: 'result',
-        expect: { kind: 'check-only', construct: 'UpdateStatement' }
+        expect: { kind: 'value', value: true, statements: 2 }
     },
     {
         id: 'reconcile-overdue-accounts',
         title: 'Everything together',
         summary: 'Functions, loops, `if`/`else if`, `is`, and writes in one program.',
-        notes: 'The showcase’s finale. Every construct here type-checks against the host schema; loops run, but the writes inside them do not run yet. This host has no rows, so the loop does not reach a write.',
+        notes: 'The showcase’s finale. Every construct here type-checks against the host schema and runs. Writes are a dry run in the playground. This host has no rows, so the loop does not reach a write.',
         source: reconcile,
-        tags: ['functions', 'control-flow', 'json', 'check-only'],
+        tags: ['functions', 'control-flow', 'json', 'writes'],
         level: 'advanced',
         specRef: 'showcase §14',
         repoPath: repo('reconcile-overdue-accounts'),
@@ -628,5 +628,6 @@ export const TAG_LABELS: Record<ExampleTag, string> = {
     'control-flow': 'Control flow',
     types: 'Types',
     json: 'JSON',
+    writes: 'Writes',
     'check-only': 'Check-only'
 };

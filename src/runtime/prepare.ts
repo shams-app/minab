@@ -127,6 +127,7 @@ class Prepared implements PreparedProgram {
             const result = await this.interpreter.run(this.model, {
                 executor: ports.data ?? NO_DATA_PORT,
                 write: ports.write ?? REFUSING_WRITE_PORT,
+                writeMode: options.writes,
                 hostInputs: inputs.hostInputs as Record<string, unknown> | undefined,
                 hostFunctions: ports.hostFunctions,
                 now: clock.now(),
@@ -140,7 +141,8 @@ class Prepared implements PreparedProgram {
             const durationMs = performance.now() - started;
             if (result.ok) {
                 const logs = { logs: budget.logs, ...(budget.logsTruncated ? { logsTruncated: true } : {}) };
-                return { ok: true, value: result.value, ...logs, stats: { ...budgetStats(budget), durationMs } };
+                const writes = { mode: budget.writes.length > 0 ? (options.writes ?? null) : null, statements: budget.writes };
+                return { ok: true, value: result.value, ...logs, writes, stats: { ...budgetStats(budget), durationMs } };
             }
             return { ok: false, error: result.error };
         } finally {
@@ -150,8 +152,12 @@ class Prepared implements PreparedProgram {
     }
 }
 
-function budgetStats(budget: RunBudget): { statements: number; rows: number } {
-    return { statements: budget.counts.statements, rows: budget.counts.rows };
+function budgetStats(budget: RunBudget): { statements: number; rows: number; writes: { statements: number; rows: number } } {
+    return {
+        statements: budget.counts.statements,
+        rows: budget.counts.rows,
+        writes: { statements: budget.writes.length, rows: budget.writeRows }
+    };
 }
 
 /** A sink that must not throw: if the host's sink throws, the runtime drops the error (ADR 0002, 4.5). */

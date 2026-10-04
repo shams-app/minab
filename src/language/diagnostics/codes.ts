@@ -148,6 +148,26 @@ export const DIAGNOSTICS = {
         message: () => 'the program has errors, so it cannot be compiled',
         doc: 'Fix the diagnostics of the program first. A program with errors is never compiled.'
     }),
+    'compile.writeColumn': entry<{ table: string; column: string }>({
+        severity: error,
+        message: p => `"${p.column}" is not a column of "${p.table}" that a write can set`,
+        doc: 'INSERT and UPDATE set plain columns of the target table. Use a column name from the schema. A relation is set through its foreign key column.'
+    }),
+    'compile.writeEmptySet': entry({
+        severity: error,
+        message: () => 'SET needs at least one assignment',
+        doc: 'An UPDATE with an empty SET changes nothing. Add an assignment, or remove the statement.'
+    }),
+    'compile.writeNeedsName': entry({
+        severity: error,
+        message: () => 'give this column a name with AS, so INSERT can match it to a column of the target',
+        doc: 'INSERT ... VALUES query matches the columns of the query to the columns of the target by name. Name each computed column with AS.'
+    }),
+    'compile.writeTarget': entry({
+        severity: error,
+        message: () => 'the target of a write must be a table (#Table) or a to-many relation of a record (.orders)',
+        doc: 'INSERT, UPDATE and DELETE write to a table. An INSERT target cannot have a filter. Writing into a JSON array comes in a later release.'
+    }),
     'data.error': entry({
         severity: error,
         message: () => 'the data source failed',
@@ -203,6 +223,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => 'the program has errors, so it cannot run',
         doc: 'Fix the diagnostics of the program first. A program with errors never runs.'
+    }),
+    'eval.writeModeMissing': entry({
+        severity: error,
+        message: () => 'the program writes data, so the run must say how: writes "dry-run" or "apply"',
+        doc: 'A host must choose. Give writes: "dry-run" to collect the statements without running them, or writes: "apply" to run them in one transaction.'
     }),
     'eval.writesNotSupported': entry({
         severity: error,
@@ -307,6 +332,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => "'$' is only valid in a field-level rule; this program isn't being validated as one",
         doc: 'The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule.'
+    }),
+    'rule.writeInRule': entry({
+        severity: error,
+        message: () => 'a validation rule cannot write: INSERT, UPDATE, DELETE and record assignment are not allowed here',
+        doc: 'A record rule or field rule only reads. Move the write into a program that a host runs on purpose, for example a command.'
     }),
 
     'scope.assignToInput': entry<{ name: string }>({

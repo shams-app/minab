@@ -23,8 +23,13 @@ export interface ExecutionViewProps {
 }
 
 function summary(report: RunReport): string {
-    const n = report.trace.length;
+    const writes = report.trace.filter(entry => entry.dryRun).length;
+    const n = report.trace.length - writes;
     const kind = report.program.kind;
+    if (writes > 0) {
+        const read = n === 0 ? 'No statement reached Postgres' : `${n} statement${n === 1 ? '' : 's'} reached Postgres`;
+        return `${read}. ${writes} write${writes === 1 ? '' : 's'} listed, not run: the playground runs writes as a dry run, so the tables stay as they are.`;
+    }
     if (kind === 'query') return n === 1 ? 'The whole query ran as one statement in Postgres.' : `${n} statements reached Postgres.`;
     if (n === 0) return 'Nothing reached the database: every part of this program was answered in memory.';
     const rest =
@@ -45,9 +50,9 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
             tabIndex={0}
         >
             <div className="mb-trace-head">
-                <Badge tone="pushdown">Statement {entry.index}</Badge>
+                {entry.dryRun ? <Badge tone="check-only">Write {entry.index} · dry run</Badge> : <Badge tone="pushdown">Statement {entry.index}</Badge>}
                 <span className="mb-muted">
-                    {entry.rowCount} row{entry.rowCount === 1 ? '' : 's'} · {entry.durationMs.toFixed(1)} ms
+                    {entry.dryRun ? 'not run' : `${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} · ${entry.durationMs.toFixed(1)} ms`}
                 </span>
             </div>
             {origin && (

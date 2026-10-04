@@ -6,11 +6,10 @@
 // each candidate row, so the loop's own customer is reached by its alias
 // (`customer.id`), not by a bare `.id`.
 //
-// CHECK-ONLY: it parses, resolves, and type-checks, and the loop runs, but the
-// writes are not executed yet — `minab run` stops at the first `UPDATE` and
-// says so.
+// `minab run` is a dry run: the loop runs and reads, and the writes are printed
+// and not executed. Add `--apply --database <url>` to write them in one transaction.
 //
-//   minab check reconcile-overdue-accounts.minab
+//   minab run reconcile-overdue-accounts.minab
 
 fn daysSincePayment(customerId: UUID): INTEGER {
     let days: INTEGER = (

@@ -92,7 +92,7 @@ export interface RunInputs {
 export interface RunPorts {
     /** Without it, a statement fails with `data.noPort`. */
     data?: DataPort;
-    /** Without it, a write fails with `eval.writesNotSupported` (X5 builds writes). */
+    /** Needed to apply writes (`writes: 'apply'`). Without it, applying fails with `eval.writesNotSupported`. A dry run needs no port. */
     write?: WritePort;
     hostFunctions?: HostFunctions;
     /** Default: the system clock, in UTC. Read once for each run. */
@@ -110,6 +110,26 @@ export interface RunOptions {
     signal?: AbortSignal;
     /** Limits for this run. Each one is the smaller of this value and the host's: a run never raises a limit. */
     limits?: Partial<Limits>;
+    /**
+     * What a program that writes does (D26). There is no default: a host must choose, and a program
+     * that writes with no choice fails with `eval.writeModeMissing` before any port is called.
+     * `dry-run`: reads run, writes are collected in `RunResult.writes` and not run.
+     * `apply`: all writes of the run run in one transaction of `RunPorts.write`.
+     * A program that does not write ignores it.
+     */
+    writes?: WriteMode;
+}
+
+/** How a run treats `INSERT`, `UPDATE` and `DELETE`: collect them (`dry-run`) or run them in one transaction (`apply`). */
+export type WriteMode = 'dry-run' | 'apply';
+
+/** One `INSERT`, `UPDATE` or `DELETE` of a run. */
+export interface WriteStatement {
+    sql: string;
+    params: unknown[];
+    range?: SourceRange;
+    /** Rows the database changed. Only when the run applied the write. */
+    rowCount?: number;
 }
 
 /** A run error or a compile error. A host maps it by `code`, never by `message`. */
@@ -126,10 +146,12 @@ export interface MinabError {
 
 /** What a run used. */
 export interface RunStats {
-    /** Statements sent to the data port. */
+    /** Statements sent to the data port, writes included. */
     statements: number;
     /** Rows read, over all statements. */
     rows: number;
+    /** Writes of the run (a run on this side of the wire always sets it). In a dry run `rows` is 0, because nothing ran. */
+    writes?: { statements: number; rows: number };
     durationMs: number;
 }
 
@@ -142,6 +164,8 @@ export type RunResult =
           logs: string[];
           /** `true` when more entries were logged than the limit allows. The extra ones were dropped. It is not an error. */
           logsTruncated?: boolean;
+          /** The mode of the run, and its write statements in order. Empty when the program did not write. */
+          writes?: { mode: WriteMode | null; statements: WriteStatement[] };
           stats: RunStats;
       }
     | { ok: false; error: MinabError };

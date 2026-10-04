@@ -23,6 +23,8 @@ export interface TestDatabase {
     readonly kind: 'pglite' | 'postgres';
     exec(sql: string): Promise<void>;
     query(text: string, params?: unknown[]): Promise<Row[]>;
+    /** Like `query`, with the row count the database reports for `INSERT`, `UPDATE` and `DELETE`. It fits `pgWritePort`. */
+    queryResult(text: string, params?: unknown[]): Promise<{ rows: Row[]; rowCount: number }>;
     /** A Minab executor over this database. */
     readonly executor: QueryExecutor;
     /**
@@ -78,6 +80,10 @@ async function openPglite(): Promise<TestDatabase> {
         kind: 'pglite',
         exec: async sql => void (await db.exec(sql)),
         query: async (text, params = []) => (await db.query<Row>(text, params, { rowMode: 'object' })).rows,
+        queryResult: async (text, params = []) => {
+            const result = await db.query<Row>(text, params, { rowMode: 'object' });
+            return { rows: result.rows, rowCount: result.affectedRows ?? result.rows.length };
+        },
         get executor() {
             return executorOf(self);
         },
@@ -110,6 +116,10 @@ async function openPostgres(url: string): Promise<TestDatabase> {
         kind: 'postgres',
         exec: async sql => void (await client.query(sql)),
         query: async (text, params = []) => (await client.query(text, params)).rows as Row[],
+        queryResult: async (text, params = []) => {
+            const result = await client.query(text, params);
+            return { rows: result.rows as Row[], rowCount: result.rowCount ?? result.rows.length };
+        },
         get executor() {
             return executorOf(self);
         },

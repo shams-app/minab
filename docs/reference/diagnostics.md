@@ -130,6 +130,10 @@ A program cannot become SQL.
 | `compile.notSql` | error | this program does not compile to SQL on its own: {reason} | `reason` | Part of the program has no SQL form (for example a user function or a statement). The interpreter runs it; use run instead of compile. |
 | `compile.nothingToCompile` | error | nothing to compile: the program has no query or expression | none | A program with only declarations has no value to turn into SQL. Add a query or an expression at the end. |
 | `compile.programHasErrors` | error | the program has errors, so it cannot be compiled | none | Fix the diagnostics of the program first. A program with errors is never compiled. |
+| `compile.writeColumn` | error | "{column}" is not a column of "{table}" that a write can set | `column`, `table` | INSERT and UPDATE set plain columns of the target table. Use a column name from the schema. A relation is set through its foreign key column. |
+| `compile.writeEmptySet` | error | SET needs at least one assignment | none | An UPDATE with an empty SET changes nothing. Add an assignment, or remove the statement. |
+| `compile.writeNeedsName` | error | give this column a name with AS, so INSERT can match it to a column of the target | none | INSERT ... VALUES query matches the columns of the query to the columns of the target by name. Name each computed column with AS. |
+| `compile.writeTarget` | error | the target of a write must be a table (#Table) or a to-many relation of a record (.orders) | none | INSERT, UPDATE and DELETE write to a table. An INSERT target cannot have a filter. Writing into a JSON array comes in a later release. |
 
 ## eval
 
@@ -146,6 +150,7 @@ A program fails while it runs.
 | `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
 | `eval.missingInput` | error | the host input "{name}" has no value for this run | `name` | The program reads a declared host input, but run got no value for it. Give a value in the hostInputs of run. |
 | `eval.programInvalid` | error | the program has errors, so it cannot run | none | Fix the diagnostics of the program first. A program with errors never runs. |
+| `eval.writeModeMissing` | error | the program writes data, so the run must say how: writes "dry-run" or "apply" | none | A host must choose. Give writes: "dry-run" to collect the statements without running them, or writes: "apply" to run them in one transaction. |
 | `eval.writesNotSupported` | error | this run has no write port, so the program cannot write | none | The program writes data, and the host gave run no write port. Give a write port, or remove the write. |
 
 ## limit
@@ -201,6 +206,7 @@ A rule cannot be checked in this setting.
 | --- | --- | --- | --- | --- |
 | `rule.fieldTypeMissing` | error | the host did not supply a type for "$" (MinabRuleContext.fieldType) | none | This is a host setup problem. The host must give the type of the field when it checks a field-level rule. |
 | `rule.fieldValueOutsideFieldRule` | error | '$' is only valid in a field-level rule; this program isn't being validated as one | none | The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule. |
+| `rule.writeInRule` | error | a validation rule cannot write: INSERT, UPDATE, DELETE and record assignment are not allowed here | none | A record rule or field rule only reads. Move the write into a program that a host runs on purpose, for example a command. |
 
 ## wire
 

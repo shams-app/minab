@@ -225,6 +225,8 @@ const CHECK: Record<string, CheckSetup> = {
     'showcase §13 #3': { parseOnly: NO_RECORD_TABLE },
     'showcase §13 #4': { parseOnly: NO_RECORD_TABLE },
     'showcase §13 #5': { parseOnly: NO_RECORD_TABLE },
+    // It writes, so it is a program a host runs on purpose, not a rule (X5, D26).
+    'showcase §14 #1': { context: 'none' },
     'showcase §15 #1': { parseOnly: HOST_NAMES },
     'showcase §15 #2': { parseOnly: HOST_NAMES }
 };

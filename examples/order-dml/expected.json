@@ -1,4 +1,26 @@
 {
-  "mode": "check-only",
-  "refusal": "\"UpdateStatement\" is not executed yet"
+  "mode": "run",
+  "json": {
+    "value": true,
+    "writes": {
+      "mode": "dry-run",
+      "statements": [
+        {
+          "sql": "UPDATE \"Customer\" AS \"_r0\" SET \"checked\" = TRUE, \"points\" = \"_r0\".\"points\" + $2 WHERE \"_r0\".\"country\" IS NOT DISTINCT FROM $1",
+          "params": [
+            "TR",
+            10
+          ]
+        },
+        {
+          "sql": "INSERT INTO \"Archive\" (\"id\", \"country\", \"checked\", \"points\") SELECT \"id\", \"country\", \"checked\", \"points\" FROM (SELECT * FROM \"Customer\" AS \"_r1\" WHERE \"_r1\".\"country\" IS NOT DISTINCT FROM $1) AS \"_r2\"",
+          "params": [
+            "TR"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": 0,
+  "compiles": true
 }
