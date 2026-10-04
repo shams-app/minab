@@ -127,7 +127,17 @@ export interface RunStats {
     durationMs: number;
 }
 
-export type RunResult = { ok: true; value: unknown; /** Log entries. Empty until L7. */ logs: string[]; stats: RunStats } | { ok: false; error: MinabError };
+export type RunResult =
+    | {
+          ok: true;
+          value: unknown;
+          /** The lines of `LOG` (L7), in order: `label: value`, one line each. At most the `logEntries` limit. */
+          logs: string[];
+          /** `true` when more entries were logged than the limit allows. The extra ones were dropped. It is not an error. */
+          logsTruncated?: boolean;
+          stats: RunStats;
+      }
+    | { ok: false; error: MinabError };
 
 export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 

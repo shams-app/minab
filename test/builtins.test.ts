@@ -45,7 +45,7 @@ async function typeOf(expr: string): Promise<string> {
 }
 
 describe('the built-in table', () => {
-    test('has the eight old built-ins, the 16 functions of D20 and the nine of D21', () => {
+    test('has the eight old built-ins, the 16 functions of D20, the nine of D21 and LOG (D19)', () => {
         const old = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'EXISTS', 'ALL', 'ANY'];
         const d20 = [
             'LOWER',
@@ -66,7 +66,7 @@ describe('the built-in table', () => {
             'LEAST'
         ];
         const d21 = ['NOW', 'TODAY', 'YEAR', 'MONTH', 'DAY', 'HOUR', 'MINUTE', 'DATE_ADD', 'DATE_DIFF'];
-        expect(builtinNames()).toEqual([...old, ...d20, ...d21]);
+        expect(builtinNames()).toEqual([...old, ...d20, ...d21, 'LOG']);
     });
 
     test('every scalar has a SQL form and every aggregate a shape', () => {

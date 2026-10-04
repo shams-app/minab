@@ -138,7 +138,10 @@ class Prepared implements PreparedProgram {
                 fieldValue: inputs.fieldValue
             });
             const durationMs = performance.now() - started;
-            if (result.ok) return { ok: true, value: result.value, logs: [], stats: { ...budgetStats(budget), durationMs } };
+            if (result.ok) {
+                const logs = { logs: budget.logs, ...(budget.logsTruncated ? { logsTruncated: true } : {}) };
+                return { ok: true, value: result.value, ...logs, stats: { ...budgetStats(budget), durationMs } };
+            }
             return { ok: false, error: result.error };
         } finally {
             budget.dispose();

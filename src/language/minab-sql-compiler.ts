@@ -1003,8 +1003,9 @@ export class MinabSqlCompiler {
     private scalarCall(builtin: BuiltinSignature, expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         if (!builtin.sql) fail(`${builtin.name} has no SQL form`);
         // The unit of a date function is read from the text literal; it is not a parameter of the statement.
+        // The label of a `LOG` is not used in SQL either (`LOG(x)` is `x`), and an unused parameter would fail in Postgres.
         const args: SqlArg[] = expr.args.map((arg, i) => ({
-            sql: i === builtin.unitAt && isStringLiteral(arg) ? '' : this.expression(arg, ctx, scopes),
+            sql: (i === builtin.unitAt && isStringLiteral(arg)) || (builtin.logs && i > 0) ? '' : this.expression(arg, ctx, scopes),
             citext: this.isCitextArg(arg),
             base: this.baseOf(arg),
             literal: isStringLiteral(arg) ? arg.value : undefined

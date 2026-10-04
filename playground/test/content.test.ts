@@ -70,6 +70,11 @@ function assertExpectation(example: Example, report: RunReport): void {
             expect(report.stage, context).toBe('done');
             expect(report.result, context).toMatchObject({ kind: 'value', value: expectation.value });
             if (expectation.statements !== undefined) expect(report.trace, context).toHaveLength(expectation.statements);
+            if (expectation.logs !== undefined)
+                expect(
+                    report.logs.map(l => l.message),
+                    context
+                ).toEqual(expectation.logs);
             return;
         case 'check-only':
             expect(report.diagnostics, context).toEqual([]);

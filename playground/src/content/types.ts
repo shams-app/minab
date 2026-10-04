@@ -36,7 +36,7 @@ export interface RecordPreset {
 export type Expectation =
     | { kind: 'rows'; count: number; first?: Row }
     | { kind: 'verdict'; value: boolean; statements?: number }
-    | { kind: 'value'; value: unknown; statements?: number }
+    | { kind: 'value'; value: unknown; statements?: number; /** The log lines (`LOG`) the run must make, in order. */ logs?: string[] }
     | { kind: 'check-only'; construct: string }
     | { kind: 'diagnostics'; message: RegExp };
 
@@ -56,7 +56,7 @@ export interface Example {
     host: ExampleHost;
     presets?: RecordPreset[];
     /** The output tab worth opening first. */
-    focus: 'result' | 'sql' | 'execution' | 'problems';
+    focus: 'result' | 'sql' | 'execution' | 'console' | 'problems';
     expect: Expectation;
 }
 

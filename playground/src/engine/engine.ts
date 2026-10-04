@@ -47,6 +47,7 @@ import type {
     Severity,
     SqlConsoleResult,
     TablePreview,
+    LogEntry,
     TraceEntry
 } from './protocol.js';
 
@@ -162,6 +163,7 @@ function sameRange(a: SourceRange, b: SourceRange): boolean {
  */
 class Tracer {
     readonly entries: TraceEntry[] = [];
+    readonly logs: LogEntry[] = [];
     lastColumns: string[] = [];
     private readonly pending: (SourceRange | undefined)[] = [];
 
@@ -173,6 +175,15 @@ class Tracer {
     readonly events: EventSink = {
         emit: event => {
             if (event.kind === 'statement') this.pending.push(event.range);
+            if (event.kind === 'log') {
+                this.logs.push({
+                    index: this.logs.length + 1,
+                    message: event.message,
+                    ...(event.label === undefined ? {} : { label: event.label }),
+                    ...(event.range ? { range: event.range } : {}),
+                    ...(event.time === undefined ? {} : { timeMs: event.time })
+                });
+            }
         }
     };
 
@@ -350,6 +361,7 @@ export class Engine implements EngineApi {
             runId,
             stage: 'done',
             trace: [],
+            logs: [],
             dataSource: host.settings.dataSource,
             runMs: 0,
             totalMs: 0
@@ -399,6 +411,8 @@ export class Engine implements EngineApi {
             const outcome = await program.run({ record: config.record, fieldValue: config.fieldValue }, { data: tracer.port, events: tracer.events });
             base.runMs = now() - started;
             base.trace = tracer.entries;
+            base.logs = tracer.logs;
+            if (outcome.ok && outcome.logsTruncated) base.logsTruncated = true;
             if (!outcome.ok) {
                 const { error } = outcome;
                 const failed = tracer.entries.find(entry => entry.error);
@@ -413,6 +427,7 @@ export class Engine implements EngineApi {
         } catch (e) {
             base.runMs = now() - started;
             base.trace = tracer.entries;
+            base.logs = tracer.logs;
             return { ...base, stage: 'run', error: { kind: 'internal', message: (e as Error).message ?? String(e) } };
         }
     }

@@ -768,6 +768,37 @@ DATE_ADD(.start_date, 1, "fortnight")
 
 ---
 
+## 19. Debugging with `LOG`
+
+*Spec §5.3.2 and §9.5.* `LOG(value, label?)` records a value and gives it back unchanged, so it can wrap any part of a rule. A call followed by `;` is a statement. The command line prints the logs on stderr as `file:line:col label: value`; the playground shows them in the Console tab.
+
+```
+// Wrap any part of a rule: the answer does not change
+LOG(2) + 1                                         // logs 2, answers 3
+LOG(1 + 1, "sum") == 2                             // logs "sum: 2", answers true
+```
+
+```
+// As a statement, in a function body or at the top level
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    let cut: DECIMAL = LOG(total * rate / 100, "cut");
+    LOG(cut);
+    total - cut
+}
+```
+
+```
+// These do not print: the right side of AND is skipped when the left side is false
+false AND LOG(true)
+```
+
+```
+// This LOG runs in the database, so it prints nothing (the checker warns: call.logInSql)
+FROM Order WHERE LOG(.total) > 100 SELECT .id
+```
+
+---
+
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.

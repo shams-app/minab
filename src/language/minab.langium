@@ -82,7 +82,7 @@ Param:
     name=Name ':' type=Type;
 
 BodyStatement:
-    VariableDecl | AssignmentStatement | LoopStatement | BreakStatement | ContinueStatement
+    VariableDecl | AssignmentOrCall | LoopStatement | BreakStatement | ContinueStatement
     | InsertStatement | DeleteStatement | UpdateStatement | IfStatement;
 
 InsertStatement:
@@ -110,8 +110,14 @@ SetClause:
 SetAssignment:
     key=(Name | STRING) operator=('+:' | '-:' | '*:' | '/:' | ':|' | ':') value=Expression;
 
-AssignmentStatement:
-    target=Expression operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression ';';
+// One rule for both, so the parser reads the leading expression once: after it, `=`
+// (or another operator) makes an assignment and `;` makes a call statement.
+// The checker requires that a call statement is a call (`call.statementNotACall`).
+AssignmentOrCall infers BodyStatement:
+    Expression (
+        {infer AssignmentStatement.target=current} operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression
+        | {infer CallStatement.call=current}
+    ) ';';
 
 LoopStatement:
     (label=Name ':')?

@@ -12,7 +12,7 @@ import type { AnalyzeReport, EngineStatus, Range, RunReport } from '../engine/pr
 import { EMPTY_HOST, type Workspace } from './workspace.js';
 import { load } from './persistence.js';
 
-export type OutputTab = 'result' | 'sql' | 'execution' | 'ast' | 'problems';
+export type OutputTab = 'result' | 'sql' | 'execution' | 'console' | 'ast' | 'problems';
 export type HostTab = 'schema' | 'data' | 'record' | 'field';
 export type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -28,7 +28,7 @@ export interface Toast {
 /** A source span the editor should emphasize — a pushed-down subexpression, an AST node, a problem. */
 export interface Highlight {
     range: Range;
-    kind: 'pushdown' | 'ast' | 'problem';
+    kind: 'pushdown' | 'ast' | 'problem' | 'log';
 }
 
 export interface PlaygroundState {

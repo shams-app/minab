@@ -116,6 +116,11 @@ export interface RunCounts {
  */
 export class RunBudget {
     readonly counts: RunCounts = { statements: 0, rows: 0, loopIterations: 0 };
+    /** The log lines of this run (`LOG`), at most `limits.logEntries`. */
+    readonly logs: string[] = [];
+    /** `true` when a log entry was dropped because of `limits.logEntries`. */
+    logsTruncated = false;
+    private readonly startedAt = performance.now();
     private readonly controller = new AbortController();
     private readonly deadline: number;
     private readonly timer: ReturnType<typeof setTimeout> | undefined;
@@ -209,6 +214,19 @@ export class RunBudget {
             throw stop('limit.tooManyRows', { limit: this.limits.rowsPerStatement });
         }
         this.counts.rows += rows;
+    }
+
+    /**
+     * Keeps a log line, or drops it when the run has `logEntries` already (D36). A dropped entry is not an
+     * error. Returns the time since the run started in milliseconds when the entry was kept, else `undefined`.
+     */
+    addLog(message: string): number | undefined {
+        if (this.logs.length >= this.limits.logEntries) {
+            this.logsTruncated = true;
+            return undefined;
+        }
+        this.logs.push(message);
+        return performance.now() - this.startedAt;
     }
 
     /** At each loop step. Statements that loop (X4) call it. */

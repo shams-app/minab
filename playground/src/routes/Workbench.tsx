@@ -22,6 +22,7 @@ import { HostPanel } from '../ui/host/HostPanel.js';
 import { FieldView, RecordView } from '../ui/host/RecordView.js';
 import { SchemaView } from '../ui/host/SchemaView.js';
 import { AstView } from '../ui/output/AstView.js';
+import { ConsoleView } from '../ui/output/ConsoleView.js';
 import { ExecutionView } from '../ui/output/ExecutionView.js';
 import { OutputPanel } from '../ui/output/OutputPanel.js';
 import { ProblemsList } from '../ui/output/ProblemsList.js';
@@ -153,6 +154,8 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
                 return <SqlView analysis={wb.analysis} trace={report?.trace ?? []} onShowExecution={() => wb.setOutputTab('execution')} />;
             case 'execution':
                 return <ExecutionView report={report} onHighlight={r => wb.setHighlight(r, 'pushdown')} onReveal={wb.revealInEditor} />;
+            case 'console':
+                return <ConsoleView report={report} onHighlight={r => wb.setHighlight(r, 'log')} onReveal={wb.revealInEditor} />;
             case 'problems':
                 return <ProblemsList diagnostics={wb.diagnostics} configError={wb.analysis?.configError} onSelect={wb.revealInEditor} />;
             case 'ast':
@@ -164,7 +167,12 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
         <OutputPanel
             tab={wb.outputTab}
             onTabChange={wb.setOutputTab}
-            counts={{ problems: wb.problems.errors + wb.problems.warnings, statements: report && !wb.stale ? report.trace.length : undefined, rows }}
+            counts={{
+                problems: wb.problems.errors + wb.problems.warnings,
+                statements: report && !wb.stale ? report.trace.length : undefined,
+                logs: report && !wb.stale ? report.logs.length : undefined,
+                rows
+            }}
         >
             {outputBody}
         </OutputPanel>

@@ -85,8 +85,12 @@ export const SYSTEM_CLOCK: ClockPort = { now: () => new Date(), timeZone: 'UTC' 
 export type MinabEvent =
     /** Sent just before the statement goes to the data port. The duration comes later, in a `timing` event. */
     | { kind: 'statement'; sql: string; params: unknown[]; range?: SourceRange }
-    /** `LOG(...)` output. L7 builds it. */
-    | { kind: 'log'; message: string; range?: SourceRange }
+    /**
+     * `LOG(value, label?)` output (L7). `message` is the one-line text (`label: value`, newlines escaped, D37).
+     * `value` is the value as a host sees it. `time` is the milliseconds since the run started.
+     * After `logEntries` entries (D36) the run drops the rest and sends no more.
+     */
+    | { kind: 'log'; message: string; value?: unknown; label?: string; range?: SourceRange; time?: number }
     /** `data`: one call of the data port. `run`: the whole run. */
     | { kind: 'timing'; phase: 'prepare' | 'compile' | 'run' | 'data'; durationMs: number };
 

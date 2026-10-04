@@ -57,7 +57,7 @@ export type BuiltinKind = 'aggregate' | 'predicate' | 'scalar';
  * What a parameter accepts. A `null` argument fits every kind of a scalar function.
  * - `collection`, `numericCollection`, `orderableCollection`, `booleanCollection`: a collection or an array (of those items);
  * - `text`: `TEXT` or `CITEXT`; `integer`: `INTEGER`; `number`: `INTEGER` or `DECIMAL`;
- * - `orderable`: a type with an order (not an array); `scalar`: any single value;
+ * - `orderable`: a type with an order (not an array); `scalar`: any single value; `any`: any value, also a collection or a record;
  * - `datish`: `DATE` or `DATETIME`; `timeish`: `TIME` or `DATETIME`;
  * - `unit`: a text, which the checker also requires to be a literal from the function's list (`unitsFor`).
  */
@@ -71,6 +71,7 @@ export type ParamKind =
     | 'number'
     | 'orderable'
     | 'scalar'
+    | 'any'
     | 'datish'
     | 'timeish'
     | 'unit';
@@ -134,6 +135,11 @@ export interface BuiltinSignature {
     nullPropagates?: boolean;
     /** Aggregates and predicates get `[items]`; a scalar gets its argument values (an omitted optional one is `undefined`). */
     evaluate(args: unknown[], info: BuiltinArgInfo[], clock: BuiltinClock): unknown;
+    /**
+     * The call records its first argument as a log entry (L7: `LOG`). The interpreter emits the entry;
+     * `evaluate` only gives the value back. In SQL the call is the plain value.
+     */
+    logs?: boolean;
     /** A scalar's SQL form. */
     sql?(args: SqlArg[], clock: SqlClock): string;
     /**
@@ -180,6 +186,7 @@ const EXPECTED: Record<ParamKind, string> = {
     number: 'INTEGER or DECIMAL',
     orderable: 'an orderable type',
     scalar: 'a single value',
+    any: 'a value',
     datish: 'DATE or DATETIME',
     timeish: 'TIME or DATETIME',
     unit: 'TEXT'
@@ -187,6 +194,7 @@ const EXPECTED: Record<ParamKind, string> = {
 
 /** Whether `type` fits a parameter kind. */
 function fits(kind: ParamKind, type: MinabType): boolean {
+    if (kind === 'any') return true;
     if (kind === 'collection') return isCollectionLike(type);
     if (kind === 'numericCollection' || kind === 'orderableCollection' || kind === 'booleanCollection') {
         const el = elementType(type);
@@ -860,7 +868,23 @@ const DATE_FUNCTIONS: BuiltinSignature[] = [
     }
 ];
 
-const BUILTINS: BuiltinSignature[] = [...AGGREGATES, ...SCALARS, ...DATE_FUNCTIONS];
+// ---- the table: debugging (D19) --------------------------------------
+
+const DEBUG_FUNCTIONS: BuiltinSignature[] = [
+    {
+        name: 'LOG',
+        kind: 'scalar',
+        params: [{ kind: 'any' }, { kind: 'text', optional: true }],
+        // The value goes through unchanged, `null` too: the interpreter does not skip the call.
+        nullPropagates: false,
+        returns: args => args[0],
+        logs: true,
+        evaluate: args => args[0],
+        sql: args => args[0].sql
+    }
+];
+
+const BUILTINS: BuiltinSignature[] = [...AGGREGATES, ...SCALARS, ...DATE_FUNCTIONS, ...DEBUG_FUNCTIONS];
 
 const BUILTINS_BY_NAME = new Map(BUILTINS.map(b => [b.name, b]));
 

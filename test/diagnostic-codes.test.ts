@@ -92,6 +92,8 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.builtinNeedsOrderableCollection': { via: 'validator', program: 'MIN(1)' },
     'call.calleeNotName': { via: 'validator', program: '.id(1)' },
     'call.functionNameCase': { via: 'validator', program: 'fn TAX(a: INTEGER): INTEGER { a }' },
+    'call.logInSql': { via: 'validator', program: 'FROM Order WHERE LOG(.total) > 1 SELECT .id' },
+    'call.statementNotACall': { via: 'validator', program: '1 + 2;\n3' },
     'call.unknownDateUnit': { via: 'validator', program: 'DATE_ADD(CAST("2026-01-31" AS DATE), 1, "fortnight")' },
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },

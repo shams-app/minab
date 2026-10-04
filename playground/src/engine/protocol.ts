@@ -133,6 +133,18 @@ export interface TraceEntry {
     error?: string;
 }
 
+/** One line of `LOG` output (L7), in the order the program logged it. */
+export interface LogEntry {
+    index: number;
+    /** The one-line text: `label: value`, newlines escaped. */
+    message: string;
+    label?: string;
+    /** The `LOG(...)` call in the source. */
+    range?: Range;
+    /** Milliseconds since the run started. */
+    timeMs?: number;
+}
+
 export type RunStage = 'config' | 'parse' | 'check' | 'run' | 'done';
 
 export interface RunReport extends AnalyzeReport {
@@ -144,6 +156,10 @@ export interface RunReport extends AnalyzeReport {
     refusal?: { construct: string; label: string; specRef: string; reason: string };
     error?: { kind: 'config' | 'evaluation' | 'datasource' | 'internal'; message: string; sql?: string };
     trace: TraceEntry[];
+    /** The `LOG` lines of the run. */
+    logs: LogEntry[];
+    /** More logs were made than the limit allows. The rest were dropped. */
+    logsTruncated?: boolean;
     dataSource: DataSourceMode;
     runMs: number;
     totalMs: number;

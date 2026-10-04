@@ -298,6 +298,11 @@ code, kbd, pre { font-family: var(--font-mono); }
 .mb-trace-item[data-state='error'] { border-left-color: var(--danger); }
 .mb-trace-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .mb-trace-origin { display: grid; gap: 4px; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: inherit; }
+.mb-console-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mb-console-line { display: flex; gap: var(--space-3); align-items: baseline; width: 100%; border: 0; background: none; padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); text-align: left; font: inherit; cursor: pointer; }
+.mb-console-line:hover, .mb-console-line:focus-visible { background: var(--surface-sunken); }
+.mb-console-line:disabled { cursor: default; }
+.mb-console-text { font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
 .mb-trace-error { color: var(--danger); font-size: var(--text-sm); }
 .mb-legend-swatch { display: inline-block; width: 18px; height: 3px; vertical-align: middle; background: var(--pushdown); margin-right: 4px; }
 
