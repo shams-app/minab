@@ -64,7 +64,6 @@ jobs:
             pages deploy playground/dist
             --project-name=${{ env.PAGES_PROJECT }}
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
-            --commit-hash=${{ github.event.pull_request.head.sha || github.sha }}
             --commit-dirty=true
       - name: Summary
         env:
