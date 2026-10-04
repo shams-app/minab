@@ -16,12 +16,10 @@ import type { CheckOnlyConstruct, ProgramInfo, Range } from './protocol.js';
 /**
  * Constructs that parse, resolve and type-check but aren't executed yet
  * (README "Status"; `minab-interpreter.ts`). Keyed by AST `$type`.
+ * Table writes left this list in X5: the playground runs them as a dry run. Writes to `JSON` arrays
+ * and record path assignment (X6) will come back here if they are still not run when the list is next read.
  */
-export const CHECK_ONLY: Record<string, { label: string; specRef: string }> = {
-    InsertStatement: { label: 'INSERT', specRef: '§10.1' },
-    DeleteStatement: { label: 'DELETE', specRef: '§10.2' },
-    UpdateStatement: { label: 'UPDATE', specRef: '§10.3' }
-};
+export const CHECK_ONLY: Record<string, { label: string; specRef: string }> = {};
 
 export function rangeOf(node: AstNode | undefined): Range | undefined {
     return node?.$cstNode?.range;

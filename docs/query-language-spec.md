@@ -1307,6 +1307,16 @@ One judgment call here worth flagging: the colon-style compound operators are wh
 
 `+:`/`-:`/`*:`/`/:`/`:|` are new two-character tokens, distinct from the existing single-character `+`/`-`/`*`/`/`/`:` — same precedented pattern as `==` vs `=` or `isnot` vs `is`, where a longer literal token takes priority over its shorter prefix.
 
+### 10.4 How writes run
+
+This note says how a host runs the statements above (decision D26). It adds no syntax.
+
+- **Targets.** `INSERT`, `UPDATE` and `DELETE` write to a table (`#Customer`) or to a to-many relation of a record (`.orders`), with an optional filter. A relation target adds the link to its owner: `UPDATE .orders …` only touches the orders of that record, and `INSERT .orders …` sets the foreign key. Writing into a `JSON` array, and assigning to a record path, are not part of this note yet.
+- **One statement each.** Each write becomes one parameterized SQL statement. Every value is a bound parameter. `ORDERBY` and `LIMIT` on `UPDATE` and `DELETE` choose the rows through a key subquery.
+- **One run is one transaction.** All writes of a run, and the reads after them, share one transaction. If any step fails, all writes of the run are rolled back. A host may give a transaction it already started. Then the host commits or rolls back.
+- **Dry run.** A host chooses how a run writes: `dry-run` collects the statements and runs none of them (reads still run), or `apply` runs them. There is no default for a host. The `minab` command is a dry run unless you give `--apply`.
+- **Rules cannot write.** A record rule or a field rule (§6) may not contain `INSERT`, `UPDATE`, `DELETE` or an assignment to a record path. The checker reports `rule.writeInRule`. Writing is for a program that a host runs on purpose, for example a command.
+
 ---
 
 ## 11. Grammar Reference (Langium)

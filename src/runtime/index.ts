@@ -19,7 +19,9 @@ export type {
     RunPorts,
     RunResult,
     RunStats,
-    SourceRange
+    SourceRange,
+    WriteMode,
+    WriteStatement
 } from './types.js';
 export type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 export type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';

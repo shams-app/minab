@@ -240,10 +240,18 @@ describe('examples/ give their expected answer through the runtime API', () => {
         expect(program.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
 
         const data = new FixtureExecutor(config.responses);
-        const result = await program.run({ record: config.record, fieldValue: config.fieldValue }, { data });
+        // A host must choose a write mode (D26); the examples that write run as a dry run.
+        const result = await program.run({ record: config.record, fieldValue: config.fieldValue }, { data }, { writes: 'dry-run' });
         if (expected.mode === 'run') {
             expect(result.ok).toBe(true);
-            expect(JSON.parse(JSON.stringify(result.ok ? (result.value ?? null) : null))).toEqual(expected.json);
+            // Like `minab run --json`: a program that writes also shows its statements.
+            const written = result.ok ? (result.writes?.statements ?? []) : [];
+            const shown = result.ok
+                ? written.length > 0
+                    ? { value: result.value ?? null, writes: { mode: result.writes?.mode, statements: written.map(({ sql, params }) => ({ sql, params })) } }
+                    : (result.value ?? null)
+                : null;
+            expect(JSON.parse(JSON.stringify(shown))).toEqual(expected.json);
             expect(data.statements).toHaveLength(expected.statements);
             expect(program.compile().ok).toBe(expected.compiles);
         } else {

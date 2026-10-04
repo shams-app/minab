@@ -9,7 +9,7 @@
  */
 
 import { coded, type DiagnosticCode, type ParamsArgs } from '../language/diagnostics/codes.js';
-import type { SourceRange } from './types.js';
+import type { SourceRange, WriteStatement } from './types.js';
 
 export interface Limits {
     /** UTF-8 bytes of the source. Checked at `prepare`. */
@@ -120,6 +120,10 @@ export class RunBudget {
     readonly logs: string[] = [];
     /** `true` when a log entry was dropped because of `limits.logEntries`. */
     logsTruncated = false;
+    /** The `INSERT`, `UPDATE` and `DELETE` statements of this run, in order (X5). A dry run collects them without running them. */
+    readonly writes: WriteStatement[] = [];
+    /** Rows the database changed, over all applied writes. */
+    writeRows = 0;
     private readonly startedAt = performance.now();
     private readonly controller = new AbortController();
     private readonly deadline: number;

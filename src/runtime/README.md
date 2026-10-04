@@ -12,7 +12,7 @@ database driver. A test checks the imports.
   declared functions and inputs (D27). They are checked here: a bad name or type word
   throws a `HostDeclarationError`.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
-  (interface only), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
+  (one transaction for the writes of a run, X5), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
   which counts what one run uses and stops it at a limit or an abort.
 - `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
@@ -153,9 +153,18 @@ to its driver. The timer is cleared when the run ends.
 - `expect` is optional. Without it nothing is checked and the program may return any type;
   `resultType` still reports the type.
 
+## Writes (X5, D26)
+
+- A program with `INSERT`, `UPDATE` or `DELETE` needs `run(inputs, ports, { writes })`. `'dry-run'` collects the statements
+  and runs none. `'apply'` runs them in one transaction of `ports.write`. There is no default: a missing choice is
+  `eval.writeModeMissing`, before any port is called. A program that does not write ignores the option.
+- In an applied run the reads share the transaction, so they see what the run wrote. Any failure rolls everything back.
+- The result has `writes: { mode, statements: [{ sql, params, range, rowCount? }] }` and `stats.writes: { statements, rows }`.
+  Writes count toward `limits.statements`. The event `dryRun` comes when a dry run collects a write; an applied write sends `statement`.
+- A record rule or field rule cannot write: the checker reports `rule.writeInRule`.
+
 ## Not done yet
 
 - A `QueryExecutor` (one argument) still fits the data port. The CLI (R7) and the playground (R8)
   use `DataPort`.
-- The write port is an interface. No statement uses it until X5.
 - The HTTP endpoint is built (H2, `src/nestjs/`). The browser client (H5) is not built yet.

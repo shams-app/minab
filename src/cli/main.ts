@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Diagnostic } from 'vscode-languageserver-types';
-import { createMinab, type DataPort, type MinabError, type PreparedProgram, type SourceRange } from '../runtime/index.js';
+import { createMinab, type DataPort, type MinabError, type PreparedProgram, type SourceRange, type WritePort, type WriteStatement } from '../runtime/index.js';
 import { DEFAULT_CONFIG_NAME, ConfigError, discoverConfig, emptyConfig, loadConfigFile, loadRecordFile, type LoadedConfig } from './config.js';
 import { formatDiagnostic, isError, summarize, toCliDiagnostic } from './diagnostics.js';
 import { DataSourceError, FixtureExecutor, connectPostgres } from './executors.js';
@@ -55,6 +55,7 @@ interface Options {
     record?: string;
     field?: string;
     json: boolean;
+    apply: boolean;
     trace: boolean;
     logs: boolean;
 }
@@ -76,6 +77,8 @@ Options:
   -d, --database <url>   Run against a PostgreSQL database (needs the "pg" package)
   -r, --record <file>    JSON record under validation, overriding the config
       --field <json>     Value of \`$\` for a field rule, overriding the config
+      --apply            Write to the database. Without it, \`run\` is a dry run: it prints the
+                         INSERT, UPDATE and DELETE statements and changes nothing. Needs --database
       --json             Print the result as JSON instead of for a human
       --trace            Print every SQL statement sent to the data source
       --no-logs          Do not print the output of LOG (it goes to stderr by default)
@@ -130,6 +133,7 @@ function parseArgs(argv: string[]): Options | { help: true } | { version: true }
         record: flags.get('record') as string | undefined,
         field: flags.get('field') as string | undefined,
         json: flags.get('json') === true,
+        apply: flags.get('apply') === true,
         trace: flags.get('trace') === true,
         logs: flags.get('no-logs') !== true
     };
@@ -144,6 +148,7 @@ const ALIASES: Record<string, string | undefined> = {
     '--record': 'record',
     '--field': 'field',
     '--json': 'json',
+    '--apply': 'apply',
     '--trace': 'trace',
     '--no-logs': 'no-logs',
     '-h': 'help',
@@ -283,21 +288,33 @@ function errorReason(error: MinabError): string {
 
 async function run(program: PreparedProgram, config: LoadedConfig, options: Options, io: CliIo, fileLabel: string): Promise<number> {
     const databaseUrl = options.database ?? process.env.MINAB_DATABASE_URL ?? config.database;
+    // Writes need a real database. A fixture cannot hold them, so asking for it is a mistake in the command.
+    if (options.apply && !databaseUrl) throw new ConfigError('--apply needs a database: give --database <url> or set MINAB_DATABASE_URL');
     const postgres = databaseUrl ? await connectPostgres(databaseUrl) : undefined;
     const base: DataPort = postgres ?? new FixtureExecutor(config.responses);
 
     // The runtime hides the driver's text, because a host must not leak SQL. A person at a
     // terminal needs it, so the CLI keeps the first data source failure and prints it itself.
     let sourceFailure: DataSourceError | undefined;
-    const data: DataPort = {
-        async execute(query, context) {
-            try {
-                return await base.execute(query, context);
-            } catch (e) {
-                if (e instanceof DataSourceError) sourceFailure ??= e;
-                throw e;
-            }
+    const keep = async <T>(call: () => Promise<T>): Promise<T> => {
+        try {
+            return await call();
+        } catch (e) {
+            if (e instanceof DataSourceError) sourceFailure ??= e;
+            throw e;
         }
+    };
+    const data: DataPort = { execute: (query, context) => keep(() => base.execute(query, context)) };
+    const write: WritePort | undefined = postgres && {
+        transaction: (work, context) =>
+            postgres.write.transaction(
+                tx =>
+                    work({
+                        execute: (query, inner) => keep(() => tx.execute(query, inner)),
+                        executeWrite: (query, inner) => keep(() => tx.executeWrite(query, inner))
+                    }),
+                context
+            )
     };
 
     try {
@@ -305,6 +322,7 @@ async function run(program: PreparedProgram, config: LoadedConfig, options: Opti
             { record: config.record, fieldValue: config.fieldValue },
             {
                 data,
+                write,
                 events:
                     options.trace || options.logs
                         ? {
@@ -315,7 +333,9 @@ async function run(program: PreparedProgram, config: LoadedConfig, options: Opti
                               }
                           }
                         : undefined
-            }
+            },
+            // The CLI is a host that chooses: a dry run unless `--apply` (D26).
+            { writes: options.apply ? 'apply' : 'dry-run' }
         );
         if (sourceFailure) {
             io.err(`minab: ${(sourceFailure as DataSourceError).message}`);
@@ -327,11 +347,35 @@ async function run(program: PreparedProgram, config: LoadedConfig, options: Opti
             if (options.json) io.out(JSON.stringify({ ok: false, error: result.error }, null, 2));
             return EXIT_PROGRAM_ERROR;
         }
-        io.out(options.json ? JSON.stringify(result.value ?? null, null, 2) : formatValue(result.value));
+        const statements = result.writes?.statements ?? [];
+        if (options.json) {
+            // A program that writes prints its value and its statements. One that does not prints the value, as before.
+            const writes = {
+                mode: result.writes?.mode,
+                statements: statements.map(({ sql, params, rowCount }) => ({ sql, params, ...(rowCount === undefined ? {} : { rowCount }) }))
+            };
+            io.out(JSON.stringify(statements.length > 0 ? { value: result.value ?? null, writes } : (result.value ?? null), null, 2));
+        } else {
+            if (statements.length > 0) io.out(formatWrites(statements, options.apply));
+            if (statements.length === 0 || (result.value ?? null) !== null) io.out(formatValue(result.value));
+        }
         return EXIT_OK;
     } finally {
         await postgres?.close();
     }
+}
+
+/** The statements of a run that writes, as D26 shows them: the SQL, then its parameters after `--`. */
+export function formatWrites(statements: WriteStatement[], applied: boolean): string {
+    const count = `${statements.length} statement${statements.length === 1 ? '' : 's'}`;
+    const rows = statements.reduce((sum, s) => sum + (s.rowCount ?? 0), 0);
+    const header = applied ? `applied: ${count}, ${rows} row${rows === 1 ? '' : 's'} changed` : `dry run: ${count}, nothing written (use --apply to write)`;
+    const lines = statements.map(s => {
+        const params = `[${s.params.map(value => JSON.stringify(value) ?? 'null').join(', ')}]`;
+        const changed = s.rowCount === undefined ? '' : `   -> ${s.rowCount} row${s.rowCount === 1 ? '' : 's'}`;
+        return `  ${s.sql}   -- ${params}${changed}`;
+    });
+    return [header, ...lines].join('\n');
 }
 
 function loadConfig(options: Options, programPath: string, io: CliIo): LoadedConfig {

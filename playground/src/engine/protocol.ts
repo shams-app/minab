@@ -131,6 +131,8 @@ export interface TraceEntry {
     /** The Minab node this statement was compiled from — the whole query, or the pushed-down subexpression. */
     origin?: { range: Range; type: string; text: string };
     error?: string;
+    /** A write that the dry run collected and did not run (X5). It has no rows and no time. */
+    dryRun?: boolean;
 }
 
 /** One line of `LOG` output (L7), in the order the program logged it. */

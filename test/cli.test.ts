@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -186,13 +186,26 @@ describe('minab run', () => {
         expect((await cli('run', 'badcast.minab')).output).toBe('');
     });
 
-    test('a construct the evaluator does not implement yet reports its reason, not a stack trace', async () => {
-        // Writes come with X5 and X6 (spec §10).
-        write('delete.minab', 'DELETE #Order[.total > 100]; true');
-        const result = await cli('run', 'delete.minab');
-        expect(result.code).toBe(EXIT_PROGRAM_ERROR);
-        expect(result.errors).toContain('minab: cannot evaluate this program:');
-        expect(result.errors).not.toContain('at ');
+    // A program that writes is not a rule, so it has its own folder with a config that has no rule context.
+    function writeProgram(): string {
+        mkdirSync(join(dir, 'writes'), { recursive: true });
+        writeFileSync(join(dir, 'writes', 'minab.config.json'), JSON.stringify({ schema: CONFIG.schema }));
+        writeFileSync(join(dir, 'writes', 'delete.minab'), 'DELETE #Order[.total > 100]; true');
+        return join('writes', 'delete.minab');
+    }
+
+    test('a program that writes is a dry run: it prints the statement and changes nothing (X5, D26)', async () => {
+        const result = await cli('run', writeProgram());
+        expect(result.code).toBe(EXIT_OK);
+        expect(result.output).toContain('dry run: 1 statement, nothing written (use --apply to write)');
+        expect(result.output).toContain('DELETE FROM "Order" AS "_r0" WHERE "_r0"."total" > $1   -- [100]');
+        expect(result.errors).toBe('');
+    });
+
+    test('--apply needs a database', async () => {
+        const result = await cli('run', '--apply', writeProgram());
+        expect(result.code).toBe(EXIT_USAGE_ERROR);
+        expect(result.errors).toContain('--apply needs a database');
     });
 });
 
