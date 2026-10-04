@@ -109,6 +109,7 @@ A function call is wrong.
 | `call.builtinNeedsOrderableCollection` | error | {name} expects a collection of an orderable type, got {actual} | `name`, `actual` | MIN and MAX compare values. Pass a collection of numbers, text, dates or times. |
 | `call.calleeNotName` | error | a function call must be a plain name — e.g. COUNT(...) or myFunction(...) | none | Only a plain name can be called. Write the function name before the parentheses. |
 | `call.functionNameCase` | error | "{name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins | `name` | Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it. |
+| `call.unknownDateUnit` | error | {name}: the unit {unit} is not allowed here — use a text literal that is one of {allowed} | `name`, `unit`, `allowed` | The unit of a date function must be a text literal such as "day", written in the call. A DATE accepts year, month, week and day; a DATETIME also accepts hour, minute and second. |
 | `call.unknownFunction` | error | unknown function "{name}" | `name` | The name is not a built-in function and no function with this name is declared. Declare it with "fn", or fix the name. |
 | `call.userArity` | error | "{name}" expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A user function needs one argument for each declared parameter. Add or remove arguments. |
 | `call.wrongArgumentCount` | error | {name} expects {expected} argument(s), got {actual} | `name`, `expected`, `actual` | A built-in function needs the number of arguments its signature says. Some arguments are optional, and some functions take any number from a minimum on. Add or remove arguments. |
@@ -190,3 +191,15 @@ A rule cannot be checked in this setting.
 | --- | --- | --- | --- | --- |
 | `rule.fieldTypeMissing` | error | the host did not supply a type for "$" (MinabRuleContext.fieldType) | none | This is a host setup problem. The host must give the type of the field when it checks a field-level rule. |
 | `rule.fieldValueOutsideFieldRule` | error | '$' is only valid in a field-level rule; this program isn't being validated as one | none | The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule. |
+
+## wire
+
+A wire request, response or value does not follow wire format v1 (R6).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `wire.invalidRequest` | error | the request is not valid at {path}: {reason} | `path`, `reason` | The wire request does not have the shape of wire format v1. params.path says where. Fix the request; the value itself is never copied into the error. |
+| `wire.invalidResponse` | error | the response is not valid at {path}: {reason} | `path`, `reason` | The wire response does not have the shape of wire format v1. params.path says where. A client should treat the server as broken. |
+| `wire.invalidValue` | error | the value at {path} is not a valid {expected} | `path`, `expected` | A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error. |
+| `wire.tooManyRuns` | error | the request has {used} runs, and the limit is {limit} | `used`, `limit` | One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests. |
+| `wire.unsupportedVersion` | error | wire format version {version} is not supported (supported: {supported}) | `version`, `supported` | The "v" field of the request names a wire format this server does not know. Use one of the supported versions. |

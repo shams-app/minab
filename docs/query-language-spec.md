@@ -369,6 +369,20 @@ Built-ins are table-driven (`src/language/minab-builtins.ts`): each has a name, 
 | `FLOOR(n)`, `CEIL(n)` | `(N) -> INTEGER` | Round down, round up. |
 | `GREATEST(a, b, …)`, `LEAST(a, b, …)` | `(T, T, …) -> T` | `T` is orderable. At least two arguments. Ignore `null` arguments, like Postgres; the result is `null` only when all are. |
 
+**Date and time functions (decision D21).** They read the clock and the time zone of the run (§7.2). Both runtimes give the same answer (a differential test proves it, in `UTC`, `Asia/Tehran`, `Europe/Berlin` and `America/New_York`). The null rule above applies.
+
+| Function | Signature | Notes |
+|---|---|---|
+| `NOW()` | `() -> DATETIME` | The instant the run started. Every `NOW()` in one run is the same instant. In SQL it is a bound parameter, never the database's `now()`. |
+| `TODAY()` | `() -> DATE` | The date of `NOW()` in the run's time zone. |
+| `YEAR(d)`, `MONTH(d)`, `DAY(d)` | `(DATE or DATETIME) -> INTEGER` | A `DATETIME` is read in the run's time zone. |
+| `HOUR(t)`, `MINUTE(t)` | `(TIME or DATETIME) -> INTEGER` | A `DATETIME` is read in the run's time zone. |
+| `DATE_ADD(d, n, unit)` | `(DATE or DATETIME, INTEGER, TEXT) -> same type as d` | Units `"year"`, `"month"`, `"week"`, `"day"`; and `"hour"`, `"minute"`, `"second"` for a `DATETIME`. Month ends clamp, like Postgres: `DATE_ADD("2026-01-31", 1, "month")` is `2026-02-28` (and `2028-02-29` in 2028). On a `DATETIME`, years, months, weeks and days move the date in the run's time zone and keep the wall-clock time, so one day across a daylight-saving change is still the same time of day. Hours, minutes and seconds move the instant. `n` may be negative. |
+| `DATE_DIFF(a, b, unit)` | `(DATE or DATETIME, same type, TEXT) -> INTEGER` | Whole units from `b` to `a`, truncated toward zero: `DATE_DIFF(a, b, "month")` is `1` for `2026-10-02` and `2026-09-01`, and `-1` the other way. A month is whole when the day (and for a `DATETIME`, the time) of `a` has reached that of `b`; so Jan 31 to Feb 28 is `0` months. Days, weeks, months and years on a `DATETIME` count wall-clock time in the run's zone; hours, minutes and seconds count real time. |
+| `CAST(dt AS DATE)`, `CAST(dt AS TIME)` | `DATETIME -> DATE`, `DATETIME -> TIME` | In the run's time zone (§5.5). |
+
+The unit must be a text literal from the list for the type of the first argument. Anything else is `call.unknownDateUnit`. A `DATE` and a `DATETIME` do not mix in `DATE_DIFF`: cast one of them first (no implicit coercion).
+
 Known difference: `UPPER`, `LOWER` and the case-insensitive checks use full Unicode case mapping in the interpreter and the database's simple mapping in SQL. They may differ for a few non-ASCII letters (for example `UPPER("straße")` is `STRASSE` in the interpreter and `STRAẞE` in Postgres, and `LOWER("İ")` has two code points in the interpreter and one in Postgres). Ordinary accented letters (`é`, `É`) agree. Text ordering in `GREATEST`/`LEAST` follows the same rule as `<` on text.
 
 ### 5.4 Subqueries as expressions
@@ -382,7 +396,7 @@ WHERE .id IN (FROM Order WHERE .status == "flagged" SELECT .customer_id)
 
 ### 5.5 Casting
 
-Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`, or a `DECIMAL` against an `INTEGER` in an aggregate result) requires an explicit `CAST`:
+Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`) requires an explicit `CAST`. Two families are not "different types" for this rule: `INTEGER` and `DECIMAL` are one numeric family, and `TEXT` and `CITEXT` are one text family (§7.2). They compare with no `CAST`:
 
 ```
 CAST(<expr> AS <Type>)
@@ -411,9 +425,9 @@ The interpreter and the compiled SQL give the same answer for every cast below (
 | `TEXT`/`CITEXT` | `UUID` | Must be the form 8-4-4-4-12 of hex digits, in any case. The result is in lower case. Any other text fails. |
 | `TEXT`/`CITEXT` | `DATE` | ISO 8601 date only: `"2026-10-02"`. A date that does not exist (`"2026-02-30"`) fails. |
 | `TEXT`/`CITEXT` | `TIME` | ISO 8601 time, with up to six fraction digits: `"08:30"`, `"08:30:00"`, `"08:30:00.5"`. |
-| `TEXT`/`CITEXT` | `DATETIME` | ISO 8601: `"2026-10-02T08:30:00"` or `"2026-10-02 08:30:00"`. A date alone means midnight. A zone (`Z`, `+02:00`) is read and ignored, as `DATETIME` has no time zone. |
-| `DATETIME` | `DATE` or `TIME` | The date part or the time part. |
-| `DATE` | `DATETIME` | The date at `00:00:00`. |
+| `TEXT`/`CITEXT` | `DATETIME` | ISO 8601: `"2026-10-02T08:30:00"` or `"2026-10-02 08:30:00"`. A date alone means midnight. The result is an instant (§7.2). A zone in the text (`Z`, `+02:00`) is used. Without one, the text is a wall-clock time **in the run's time zone**: in `Asia/Tehran`, `"2026-10-02 08:30:00"` is `2026-10-02T05:00:00.000Z`. A time that does not exist (clocks go forward) is read as standard time, like Postgres. |
+| `DATETIME` | `DATE` or `TIME` | The date part or the time part, **in the run's time zone** (§7.2). |
+| `DATE` | `DATETIME` | Midnight of that date in the run's time zone. |
 | `DATE`, `TIME`, `DATETIME`, `UUID` | `TEXT`/`CITEXT` | The value as text (a `DATETIME` is `2026-10-02 08:30:00`). |
 | `TEXT`/`CITEXT` | `JSON` | The text is parsed as JSON: `"{\"a\": 1}"` → an object. Text that is not JSON fails. |
 | `JSON` | `JSON` | Unchanged. |
@@ -565,13 +579,19 @@ Minab's scalar types are a small, storage-agnostic vocabulary — behavioral cat
 | `INTEGER` | Whole numbers. |
 | `DECIMAL` | Numbers with a fractional part. |
 | `BOOLEAN` | `true`/`false` only. |
-| `DATE` | A calendar date, no time component. |
-| `TIME` | A time of day, no date component. |
-| `DATETIME` | Both a date and a time. |
+| `DATE` | A calendar date, no time component and no time zone. |
+| `TIME` | A time of day, no date component and no time zone. |
+| `DATETIME` | An instant, like Postgres `timestamptz`. It is the same moment everywhere; it shows as a date and a time only when it is read in a time zone. |
 | `UUID` | An opaque identifier — equality only, no ordering. |
 | `JSON` | Structured data of unknown shape — test it with `is`/`isnot` (§5.6) before treating it as one kind or another. |
 
+**Text family.** `TEXT` and `CITEXT` are one family: they compare with each other, and with text literals and parameters, with no `CAST`, for `==`, `!=`, `<`, `<=`, `>`, `>=`, `IN` and `LIKE`. When either side is `CITEXT`, the comparison ignores case: `.email == "Ada@Example.COM"` is `true` for `ada@example.com`, and so is `.name == .email` when the texts differ only in case. When both sides are `TEXT`, the comparison is case-sensitive. Case is folded with Unicode lower-casing; for a few non-ASCII letters this can differ from the database (see the note under §5.3.1). The SQL compiler casts the `TEXT` side to `citext` (`$1::citext`), because Postgres would compare `citext = text` as plain text.
+
+**`LIKE`.** The pattern uses Postgres's default rules, in both runtimes: `%` matches any run of characters (also none), `_` matches exactly one character (one Persian letter is one character), and `\` makes the next character plain, so `\%` matches a percent sign. Inside a Minab string, write a backslash as `\\`: `.code LIKE "50\\%"` matches `"50%"` and not `"500"`. `LIKE` is case-sensitive for `TEXT` and ignores case when either side is `CITEXT`. A pattern that ends with an unescaped `\` is an error, as in Postgres: the error comes only when the matcher reaches that `\` (so `"Hello" LIKE "Hello\\"` is `false`, and `"Hello!" LIKE "Hello\\"` fails).
+
 Any type may be suffixed with `[]` to form an array — `INTEGER[]`, `UUID[]` — since function parameters (§8) need arrays of arbitrary element types.
+
+**Dates, times and the time zone of a run (decision D21).** Every run has a time zone from the host's clock port: an IANA name such as `Asia/Tehran`, `UTC` by default. A host such as Shamsine passes the user's zone. A `DATETIME` is read in this zone when a program asks for its parts (`YEAR`, `HOUR`, `CAST(... AS DATE)`, §5.3.1), and never otherwise. Values cross JSON as ISO 8601 text: a `DATE` as `"2026-10-02"`, a `TIME` as `"08:30:00"` (with an optional fraction), a `DATETIME` as UTC with milliseconds, `"2026-10-02T08:30:00.000Z"`. A value from the data port is read by its column type: a `DATETIME` may arrive as a `Date` or as the text Postgres prints (`2026-10-02 08:30:00+00`) and becomes the ISO text above, which sorts like time, so `.paid_at < NOW()` compares instants. A `DATE` that arrives as a `Date` is read as its UTC date. Jalali (Persian) calendar display is the host's job, not Minab's.
 
 **Exact numbers.** A `DECIMAL` is exact, as Postgres `numeric` is: `0.1 + 0.2 == 0.3` is `true`, in the interpreter and in the compiled SQL. A number literal with a fractional part (`0.30`) is a `DECIMAL`; one without (`30`) is an `INTEGER`. `INTEGER` with `INTEGER` stays `INTEGER`; a mix is `DECIMAL`. An `INTEGER` is a whole number from -9,007,199,254,740,991 to 9,007,199,254,740,991. A result outside that range is an evaluation error, `eval.integerOutOfRange`, never a silently wrong value. Use `DECIMAL` for larger numbers.
 

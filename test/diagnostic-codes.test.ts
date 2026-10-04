@@ -32,6 +32,7 @@ import { EXIT_PROGRAM_ERROR, runCli, type CliIo } from '../src/cli/main.js';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { evaluate } from './support/evaluate.js';
 
 const schema: MinabSchema = {
     tables: [
@@ -90,6 +91,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'call.builtinNeedsOrderableCollection': { via: 'validator', program: 'MIN(1)' },
     'call.calleeNotName': { via: 'validator', program: '.id(1)' },
     'call.functionNameCase': { via: 'validator', program: 'fn TAX(a: INTEGER): INTEGER { a }' },
+    'call.unknownDateUnit': { via: 'validator', program: 'DATE_ADD(CAST("2026-01-31" AS DATE), 1, "fortnight")' },
     'call.unknownFunction': { via: 'validator', program: 'nope(1)' },
     'call.userArity': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf(1, 2)' },
     'call.wrongArgumentCount': { via: 'validator', program: 'ROUND()' },
@@ -197,7 +199,12 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
     'type.unexpectedResultType': { via: 'runtime' },
-    'type.unsupportedOperator': { via: 'guard' }
+    'type.unsupportedOperator': { via: 'guard' },
+    'wire.invalidRequest': { via: 'runtime' }, // test/wire.test.ts
+    'wire.invalidResponse': { via: 'runtime' }, // test/wire.test.ts
+    'wire.invalidValue': { via: 'runtime' }, // test/wire.test.ts
+    'wire.tooManyRuns': { via: 'runtime' }, // test/wire.test.ts
+    'wire.unsupportedVersion': { via: 'runtime' } // test/wire.test.ts
 };
 
 let services: Record<Setting, MinabServices>;
@@ -220,7 +227,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule)\.[a-z][A-Za-z0-9]*|cancelled)$/);
+        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);
@@ -290,7 +297,7 @@ describe('every code is reported by a program', () => {
             case 'evaluation': {
                 // The error carries its code and the English message.
                 const { document } = await validate.record(testCase.program);
-                const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
+                const result = await evaluate(services.record.interpreter, document.parseResult.value, { executor: { execute: async () => [] } });
                 const params = (!result.ok && result.params) || {};
                 expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message(params as never) });
                 break;

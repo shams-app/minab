@@ -73,7 +73,7 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } from './diagnostics/codes.js';
-import { getBuiltin, isBuiltinName, type BuiltinSignature, type SqlArg } from './minab-builtins.js';
+import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, type SqlArg, type SqlClock } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
 import { sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
@@ -256,8 +256,8 @@ export class MinabSqlCompiler {
     }
 
     /** Compile a pipeline `Query` (spec §4) to a full `SELECT`. */
-    compileQuery(query: Query, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
-        return this.run(ctx => this.query(query, ctx, []), outer);
+    compileQuery(query: Query, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        return this.run(ctx => this.query(query, ctx, []), outer, clock);
     }
 
     /**
@@ -266,12 +266,12 @@ export class MinabSqlCompiler {
      * (`EXISTS(#Booking[...])`, `COUNT(.orders[...])`, a scalar subquery)
      * and reads one value back.
      */
-    compileValue(expr: Expression, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
-        return this.run(ctx => `SELECT ${this.expression(expr, ctx, [])} AS "value"`, outer);
+    compileValue(expr: Expression, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        return this.run(ctx => `SELECT ${this.expression(expr, ctx, [])} AS "value"`, outer, clock);
     }
 
-    private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE): SqlResult {
-        const ctx = new Ctx(outer);
+    private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        const ctx = new Ctx(outer, clock);
         try {
             const text = build(ctx);
             return { ok: true, query: { text, params: ctx.params } };
@@ -473,7 +473,22 @@ export class MinabSqlCompiler {
             const operand = this.expression(expr.value, ctx, scopes);
             // A decimal as text has no trailing zeros (D16): `2.50` is "2.5", like the interpreter.
             const trimmed = this.isDecimalToText(expr) ? `trim_scale(${operand})` : operand;
-            return `CAST(${trimmed} AS ${this.sqlType(expr.targetType)})`;
+            // A `DATETIME` becomes a `DATE` or a `TIME` in the run's time zone, not the session's (D21).
+            const target = expr.targetType;
+            if (!target.array && (target.base === 'DATE' || target.base === 'TIME') && this.baseOf(expr.value) === 'DATETIME') {
+                return `CAST((CAST(${operand} AS timestamptz) AT TIME ZONE ${ctx.sqlClock.zone()}) AS ${this.sqlType(target)})`;
+            }
+            if (!target.array && target.base === 'DATETIME') {
+                const from = this.baseOf(expr.value);
+                // A `DATETIME` is an instant. Text without a zone, and a `DATE`, are read in the run's time zone (D21).
+                if (from === 'DATETIME') return operand;
+                if (from === 'DATE') return `(CAST(${operand} AS timestamp) AT TIME ZONE ${ctx.sqlClock.zone()})`;
+                if (from === 'TEXT' || from === 'CITEXT') {
+                    const zoned = `CAST(${operand} AS text) ~* '\\d:\\d{2}(:\\d{2}(\\.\\d+)?)?\\s*(Z|[+-]\\d{2}(:?\\d{2})?)$'`;
+                    return `(CASE WHEN ${zoned} THEN CAST(${operand} AS timestamptz) ELSE CAST(${operand} AS timestamp) AT TIME ZONE ${ctx.sqlClock.zone()} END)`;
+                }
+            }
+            return `CAST(${trimmed} AS ${this.sqlType(target)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
         if (isIfExpr(expr)) return this.ifExpr(expr, ctx, scopes);
@@ -723,7 +738,7 @@ export class MinabSqlCompiler {
             return `(${this.expression(expr.left, ctx, scopes)} ${op} ${this.expression(expr.right, ctx, scopes)})`;
         }
         if (op === 'IN') {
-            return `${this.expression(expr.left, ctx, scopes)} IN ${this.inList(expr.right, ctx, scopes)}`;
+            return this.inComparison(expr, ctx, scopes);
         }
         if (op === '==' || op === '!=') {
             const identity = this.identityComparison(expr, ctx, scopes);
@@ -731,7 +746,8 @@ export class MinabSqlCompiler {
         }
         const comparison = COMPARISONS[op];
         if (comparison) {
-            return `${this.expression(expr.left, ctx, scopes)} ${comparison} ${this.expression(expr.right, ctx, scopes)}`;
+            const [l, r] = this.textFamilySides(expr.left, expr.right, ctx, scopes);
+            return `${l} ${comparison} ${r}`;
         }
         const left = () => this.expression(expr.left, ctx, scopes);
         const right = () => this.expression(expr.right, ctx, scopes);
@@ -745,6 +761,44 @@ export class MinabSqlCompiler {
             return `(${left()} ${arithmetic} ${right()})`;
         }
         fail(`operator "${op}" has no SQL form`);
+    }
+
+    /**
+     * The two sides of a comparison. When one side is `CITEXT` and the other is
+     * `TEXT`, the text side is cast to `citext`: Postgres would compare
+     * `citext = text` as plain text otherwise (D15).
+     */
+    private textFamilySides(left: Expression, right: Expression, ctx: Ctx, scopes: SqlScope[]): [string, string] {
+        const l = this.expression(left, ctx, scopes);
+        const r = this.expression(right, ctx, scopes);
+        const [lc, rc] = [this.isCitextArg(left), this.isCitextArg(right)];
+        if (lc === rc) return [l, r];
+        const cast = (sql: string, isText: boolean) => (isText ? `CAST(${sql} AS citext)` : sql);
+        return [cast(l, this.isTextArg(left) && !lc), cast(r, this.isTextArg(right) && !rc)];
+    }
+
+    /** `IN`: with a `CITEXT` side, the `TEXT` side (value or list items) is cast to `citext`. */
+    private inComparison(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+        const value = this.expression(expr.left, ctx, scopes);
+        const valueCitext = this.isCitextArg(expr.left);
+        if (!isListLiteral(expr.right)) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
+        const items = expr.right.items;
+        const anyCitext = valueCitext || items.some(i => this.isCitextArg(i));
+        if (!anyCitext) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
+        const cast = (sql: string, arg: Expression) => (this.isTextArg(arg) && !this.isCitextArg(arg) ? `CAST(${sql} AS citext)` : sql);
+        const list = items.map(i => cast(this.expression(i, ctx, scopes), i)).join(', ');
+        return `${cast(value, expr.left)} IN (${list})`;
+    }
+
+    /** True when the argument has type `TEXT` or `CITEXT`. */
+    private isTextArg(expr: Expression): boolean {
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && !inferred.type.array && (inferred.type.base === 'TEXT' || inferred.type.base === 'CITEXT');
+        } catch {
+            return false;
+        }
     }
 
     /**
@@ -844,8 +898,25 @@ export class MinabSqlCompiler {
     /** A scalar built-in (D20): its SQL form is in the table. Each argument also says whether it is `CITEXT`. */
     private scalarCall(builtin: BuiltinSignature, expr: CallExpression, ctx: Ctx, scopes: SqlScope[]): string {
         if (!builtin.sql) fail(`${builtin.name} has no SQL form`);
-        const args: SqlArg[] = expr.args.map(arg => ({ sql: this.expression(arg, ctx, scopes), citext: this.isCitextArg(arg) }));
-        return builtin.sql(args);
+        // The unit of a date function is read from the text literal; it is not a parameter of the statement.
+        const args: SqlArg[] = expr.args.map((arg, i) => ({
+            sql: i === builtin.unitAt && isStringLiteral(arg) ? '' : this.expression(arg, ctx, scopes),
+            citext: this.isCitextArg(arg),
+            base: this.baseOf(arg),
+            literal: isStringLiteral(arg) ? arg.value : undefined
+        }));
+        return builtin.sql(args, ctx.sqlClock);
+    }
+
+    /** The base type of a single-valued expression, when the type checker is there and knows it. */
+    private baseOf(expr: Expression): SqlArg['base'] {
+        if (!this.typeChecker) return undefined;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && !inferred.type.array ? inferred.type.base : undefined;
+        } catch {
+            return undefined;
+        }
     }
 
     /** True when the argument has type `CITEXT` (needs the type checker, which the language services supply). */
@@ -1080,7 +1151,21 @@ class Ctx {
     private aliasCount = 0;
     private groupCount = 0;
 
-    constructor(readonly outer: OuterResolver) {}
+    constructor(
+        readonly outer: OuterResolver,
+        clock?: BuiltinClock
+    ) {
+        // Without a clock (compiling to show the SQL), the system clock in UTC is bound: `NOW()` is never the database's `now()` (D21).
+        this.clock = clock ?? { now: new Date(), timeZone: 'UTC' };
+    }
+
+    private readonly clock: BuiltinClock;
+
+    /** The run's clock as SQL: each use binds the run's value as a parameter. */
+    readonly sqlClock: SqlClock = {
+        now: () => `${this.bind(this.clock.now.toISOString())}::timestamptz`,
+        zone: () => `${this.bind(this.clock.timeZone)}::text`
+    };
 
     bind(value: unknown): string {
         this.params.push(sqlParameter(value));

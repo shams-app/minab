@@ -16,6 +16,22 @@
  */
 
 import { coded, type CodedMessage } from './diagnostics/codes.js';
+import {
+    addToDate,
+    addToDateTime,
+    dateOf,
+    DATETIME_UNITS,
+    DATE_UNITS,
+    DateError,
+    diffDates,
+    diffDateTimes,
+    localFields,
+    parseDate,
+    parseInstant,
+    parseTime,
+    formatInstant,
+    type DateUnit
+} from './dates.js';
 import { arithmetic, Big, checkInteger, decimalCompare, isDecimal, toNumeric, type Numeric } from './values.js';
 import {
     baseTypesEqual,
@@ -28,6 +44,7 @@ import {
     NULL_TYPE,
     scalarType,
     widenNumeric,
+    type LogicalTypeBase,
     type MinabType,
     type ScalarType
 } from './minab-types.js';
@@ -40,7 +57,9 @@ export type BuiltinKind = 'aggregate' | 'predicate' | 'scalar';
  * What a parameter accepts. A `null` argument fits every kind of a scalar function.
  * - `collection`, `numericCollection`, `orderableCollection`, `booleanCollection`: a collection or an array (of those items);
  * - `text`: `TEXT` or `CITEXT`; `integer`: `INTEGER`; `number`: `INTEGER` or `DECIMAL`;
- * - `orderable`: a type with an order (not an array); `scalar`: any single value.
+ * - `orderable`: a type with an order (not an array); `scalar`: any single value;
+ * - `datish`: `DATE` or `DATETIME`; `timeish`: `TIME` or `DATETIME`;
+ * - `unit`: a text, which the checker also requires to be a literal from the function's list (`unitsFor`).
  */
 export type ParamKind =
     | 'collection'
@@ -51,7 +70,10 @@ export type ParamKind =
     | 'integer'
     | 'number'
     | 'orderable'
-    | 'scalar';
+    | 'scalar'
+    | 'datish'
+    | 'timeish'
+    | 'unit';
 
 export interface BuiltinParam {
     kind: ParamKind;
@@ -65,6 +87,27 @@ export interface BuiltinParam {
 export interface BuiltinArgInfo {
     /** The argument has type `CITEXT`. */
     citext: boolean;
+    /** The type of the argument, when it is a single value and the checker knows it (the date functions read `DATE` and `DATETIME` differently). */
+    base?: LogicalTypeBase;
+    /** The text, when the argument is a text literal (the unit of a date function). */
+    literal?: string;
+}
+
+/** The clock of one run (D21): the instant it started and its time zone. */
+export interface BuiltinClock {
+    now: Date;
+    timeZone: string;
+}
+
+/**
+ * The run's clock in SQL. The instant and the zone are never read from the database
+ * (`now()`): each call binds a new parameter with the run's value, and gives its text.
+ */
+export interface SqlClock {
+    /** `$n::timestamptz` */
+    now(): string;
+    /** `$n::text` */
+    zone(): string;
 }
 
 /** An argument as SQL text, with what the compiler knows about it. */
@@ -90,9 +133,16 @@ export interface BuiltinSignature {
      */
     nullPropagates?: boolean;
     /** Aggregates and predicates get `[items]`; a scalar gets its argument values (an omitted optional one is `undefined`). */
-    evaluate(args: unknown[], info: BuiltinArgInfo[]): unknown;
+    evaluate(args: unknown[], info: BuiltinArgInfo[], clock: BuiltinClock): unknown;
     /** A scalar's SQL form. */
-    sql?(args: SqlArg[]): string;
+    sql?(args: SqlArg[], clock: SqlClock): string;
+    /**
+     * The position of an argument that must be a text literal naming a unit, and the units
+     * the call accepts (from the argument types). The checker reports `call.unknownDateUnit`.
+     * The SQL form reads the unit from `literal`, so the compiler does not compile that argument.
+     */
+    unitAt?: number;
+    unitsFor?(args: MinabType[]): readonly string[];
     /** An aggregate's or predicate's SQL form. */
     sqlAggregate?: SqlAggregate;
     /** Extra checks across arguments (for example "all the same type"). */
@@ -129,7 +179,10 @@ const EXPECTED: Record<ParamKind, string> = {
     integer: 'INTEGER',
     number: 'INTEGER or DECIMAL',
     orderable: 'an orderable type',
-    scalar: 'a single value'
+    scalar: 'a single value',
+    datish: 'DATE or DATETIME',
+    timeish: 'TIME or DATETIME',
+    unit: 'TEXT'
 };
 
 /** Whether `type` fits a parameter kind. */
@@ -147,6 +200,9 @@ function fits(kind: ParamKind, type: MinabType): boolean {
     if (kind === 'integer') return isScalar(type) && !type.array && type.base === 'INTEGER';
     if (kind === 'number') return isNumeric(type);
     if (kind === 'orderable') return isOrderable(type);
+    if (kind === 'datish') return isScalar(type) && !type.array && (type.base === 'DATE' || type.base === 'DATETIME');
+    if (kind === 'timeish') return isScalar(type) && !type.array && (type.base === 'TIME' || type.base === 'DATETIME');
+    if (kind === 'unit') return isTextual(type);
     return isScalar(type) && !type.array;
 }
 
@@ -198,15 +254,38 @@ export function checkBuiltin(builtin: BuiltinSignature, args: MinabType[]): Buil
     const { name, params } = builtin;
     if (!arityFits(params, args.length)) {
         // The aggregates keep their own code (they take one collection); scalars use the general one.
-        if (builtin.kind !== 'scalar') return { ok: false, ...coded('call.builtinArity', { name, actual: args.length }) };
-        return { ok: false, ...coded('call.wrongArgumentCount', { name, expected: arityText(params), actual: args.length }) };
+        if (builtin.kind !== 'scalar')
+            return {
+                ok: false,
+                ...coded('call.builtinArity', { name, actual: args.length })
+            };
+        return {
+            ok: false,
+            ...coded('call.wrongArgumentCount', {
+                name,
+                expected: arityText(params),
+                actual: args.length
+            })
+        };
     }
     for (let i = 0; i < args.length; i++) {
         const param = paramAt(params, i)!;
         if (fits(param.kind, args[i])) continue;
         const code = collectionCode(param.kind);
-        if (code) return { ok: false, ...coded(code, { name, actual: formatType(args[i]) }) };
-        return { ok: false, ...coded('call.argumentType', { name, position: i + 1, expected: EXPECTED[param.kind], actual: formatType(args[i]) }) };
+        if (code)
+            return {
+                ok: false,
+                ...coded(code, { name, actual: formatType(args[i]) })
+            };
+        return {
+            ok: false,
+            ...coded('call.argumentType', {
+                name,
+                position: i + 1,
+                expected: EXPECTED[param.kind],
+                actual: formatType(args[i])
+            })
+        };
     }
     const across = builtin.checkArgs?.(args);
     if (across) return across;
@@ -396,7 +475,15 @@ function commonType(name: string, args: MinabType[]): { ok: true; base: ScalarTy
         } else if (baseTypesEqual(common, arg)) {
             common = scalarType(NUMERIC_BASES.has(common.base) ? widenNumeric(common.base, arg.base) : common.base);
         } else {
-            return { ok: false, ...coded('call.argumentType', { name, position: i + 1, expected: formatType(common), actual: formatType(arg) }) };
+            return {
+                ok: false,
+                ...coded('call.argumentType', {
+                    name,
+                    position: i + 1,
+                    expected: formatType(common),
+                    actual: formatType(arg)
+                })
+            };
         }
     }
     return { ok: true, base: common };
@@ -586,7 +673,194 @@ const SCALARS: BuiltinSignature[] = [
     }
 ];
 
-const BUILTINS: BuiltinSignature[] = [...AGGREGATES, ...SCALARS];
+// ---- the table: dates and times (D21) ---------------------------------
+
+/** A date problem becomes a built-in problem, which the interpreter reports as an evaluation error. */
+function guarded<T>(work: () => T): T {
+    try {
+        return work();
+    } catch (e) {
+        if (e instanceof DateError) throw new BuiltinError(e.message);
+        throw e;
+    }
+}
+
+const DATE_ONLY_TEXT = /^\d{4}-\d{2}-\d{2}$/;
+
+/** `DATETIME` or not: by the inferred type, or (without a checker) by the shape of the value. */
+function isDateTimeArg(info: BuiltinArgInfo | undefined, value: unknown): boolean {
+    if (info?.base) return info.base === 'DATETIME';
+    return !(typeof value === 'string' && DATE_ONLY_TEXT.test(value.trim()));
+}
+
+/** `TIME` or `DATETIME`: by the inferred type, or (without a checker) by the shape of the value. */
+function isTimeArg(info: BuiltinArgInfo | undefined, value: unknown): boolean {
+    if (info?.base) return info.base === 'TIME';
+    return typeof value === 'string' && /^\d{2}:\d{2}/.test(value.trim());
+}
+
+const unit = (info: BuiltinArgInfo): DateUnit => info.literal as DateUnit;
+
+/** The answer of `DATE_ADD` has the type of its first argument. */
+function sameTemporal(args: MinabType[]): MinabType {
+    const first = args[0];
+    const base = first.kind === 'scalar' ? first.base : 'DATETIME';
+    return scalarType(base, { nullable: anyNullable(args) });
+}
+
+const unitsOf = (args: MinabType[]): readonly string[] => (args[0]?.kind === 'scalar' && args[0].base === 'DATE' ? DATE_UNITS : DATETIME_UNITS);
+
+/** The two arguments of `DATE_DIFF` are both `DATE` or both `DATETIME`. */
+function checkSameTemporal(name: string): (args: MinabType[]) => BuiltinCheckResult | undefined {
+    return args => {
+        const [a, b] = args;
+        if (a.kind === 'scalar' && b.kind === 'scalar' && a.base !== b.base) {
+            return {
+                ok: false,
+                ...coded('call.argumentType', {
+                    name,
+                    position: 2,
+                    expected: formatType(a),
+                    actual: formatType(b)
+                })
+            };
+        }
+        return undefined;
+    };
+}
+
+// SQL pieces. A `DATETIME` is read as `timestamptz`; its wall-clock reading in the run's zone is `AT TIME ZONE zone`.
+const asDate = (a: SqlArg): string => `(${a.sql})::date`;
+const asInstant = (a: SqlArg): string => `(${a.sql})::timestamptz`;
+/** A date or a date time as a wall-clock `timestamp`: a date at midnight, a date time in the run's zone. */
+const wallClock = (a: SqlArg, clock: SqlClock): string =>
+    a.base === 'DATETIME' ? `(${asInstant(a)} AT TIME ZONE ${clock.zone()})` : `((${asDate(a)})::timestamp)`;
+
+const INTERVAL_FIELDS: Record<DateUnit, string> = {
+    year: 'years',
+    month: 'months',
+    week: 'weeks',
+    day: 'days',
+    hour: 'hours',
+    minute: 'mins',
+    second: 'secs'
+};
+
+const interval = (u: DateUnit, n: SqlArg): string =>
+    `make_interval(${INTERVAL_FIELDS[u]} => ${u === 'second' ? `(${n.sql})::double precision` : asInteger(n)})`;
+
+/** `YEAR`, `MONTH`, `DAY`: of a `DATE`, or of a `DATETIME` in the run's zone. */
+function dateField(name: 'YEAR' | 'MONTH' | 'DAY'): BuiltinSignature {
+    const part = name.toLowerCase() as 'year' | 'month' | 'day';
+    return {
+        name,
+        kind: 'scalar',
+        params: [{ kind: 'datish' }],
+        returns: args => scalarType('INTEGER', { nullable: anyNullable(args) }),
+        evaluate: (args, info, clock) =>
+            guarded(() => (isDateTimeArg(info[0], args[0]) ? localFields(parseInstant(args[0]), clock.timeZone) : parseDate(args[0]))[part]),
+        sql: (args, clock) => `date_part('${part}', ${wallClock(args[0], clock)})::integer`
+    };
+}
+
+/** `HOUR`, `MINUTE`: of a `TIME`, or of a `DATETIME` in the run's zone. */
+function timeField(name: 'HOUR' | 'MINUTE'): BuiltinSignature {
+    const part = name.toLowerCase() as 'hour' | 'minute';
+    return {
+        name,
+        kind: 'scalar',
+        params: [{ kind: 'timeish' }],
+        returns: args => scalarType('INTEGER', { nullable: anyNullable(args) }),
+        evaluate: (args, info, clock) =>
+            guarded(() => (isTimeArg(info[0], args[0]) ? parseTime(args[0]) : localFields(parseInstant(args[0]), clock.timeZone))[part]),
+        sql: (args, clock) =>
+            args[0].base === 'TIME' ? `date_part('${part}', (${args[0].sql})::time)::integer` : `date_part('${part}', ${wallClock(args[0], clock)})::integer`
+    };
+}
+
+/** Whole months between two wall-clock readings, toward zero (the SQL form of `wholeMonths` in `dates.ts`). */
+function monthsSql(a: string, b: string): string {
+    const index = (x: string) => `(date_part('year', ${x}) * 12 + date_part('month', ${x}))`;
+    const rest = (x: string) => `(${x} - date_trunc('month', ${x}))`;
+    const months = `(${index(a)} - ${index(b)})::integer`;
+    return `(${months} - CASE WHEN ${months} > 0 AND ${rest(a)} < ${rest(b)} THEN 1 WHEN ${months} < 0 AND ${rest(a)} > ${rest(b)} THEN -1 ELSE 0 END)`;
+}
+
+/** Seconds between two `timestamp` (or `timestamptz`) values. */
+const epochDiff = (a: string, b: string): string => `(extract(epoch from ${a}) - extract(epoch from ${b}))`;
+
+const DATE_FUNCTIONS: BuiltinSignature[] = [
+    {
+        name: 'NOW',
+        kind: 'scalar',
+        params: [],
+        returns: () => scalarType('DATETIME'),
+        evaluate: (_args, _info, clock) => formatInstant(clock.now.getTime()),
+        sql: (_args, clock) => clock.now()
+    },
+    {
+        name: 'TODAY',
+        kind: 'scalar',
+        params: [],
+        returns: () => scalarType('DATE'),
+        evaluate: (_args, _info, clock) => dateOf(clock.now.getTime(), clock.timeZone),
+        sql: (_args, clock) => `(${clock.now()} AT TIME ZONE ${clock.zone()})::date`
+    },
+    dateField('YEAR'),
+    dateField('MONTH'),
+    dateField('DAY'),
+    timeField('HOUR'),
+    timeField('MINUTE'),
+    {
+        name: 'DATE_ADD',
+        kind: 'scalar',
+        params: [{ kind: 'datish' }, INTEGER, { kind: 'unit' }],
+        returns: sameTemporal,
+        unitAt: 2,
+        unitsFor: unitsOf,
+        evaluate: (args, info, clock) =>
+            guarded(() =>
+                isDateTimeArg(info[0], args[0])
+                    ? addToDateTime(args[0], args[1] as number, unit(info[2]), clock.timeZone)
+                    : addToDate(args[0], args[1] as number, unit(info[2]))
+            ),
+        sql: (args, clock) => {
+            const u = args[2].literal as DateUnit;
+            if (args[0].base !== 'DATETIME') return `((${asDate(args[0])} + ${interval(u, args[1])})::date)`;
+            if (u === 'hour' || u === 'minute' || u === 'second') return `(${asInstant(args[0])} + ${interval(u, args[1])})`;
+            return `((${wallClock(args[0], clock)} + ${interval(u, args[1])}) AT TIME ZONE ${clock.zone()})`;
+        }
+    },
+    {
+        name: 'DATE_DIFF',
+        kind: 'scalar',
+        params: [{ kind: 'datish' }, { kind: 'datish' }, { kind: 'unit' }],
+        returns: args => scalarType('INTEGER', { nullable: anyNullable(args) }),
+        unitAt: 2,
+        unitsFor: unitsOf,
+        checkArgs: checkSameTemporal('DATE_DIFF'),
+        evaluate: (args, info, clock) =>
+            guarded(() =>
+                isDateTimeArg(info[0], args[0]) ? diffDateTimes(args[0], args[1], unit(info[2]), clock.timeZone) : diffDates(args[0], args[1], unit(info[2]))
+            ),
+        sql: (args, clock) => {
+            const u = args[2].literal as DateUnit;
+            const [a, b] = args;
+            if (a.base !== 'DATETIME') {
+                if (u === 'day') return `(${asDate(a)} - ${asDate(b)})`;
+                if (u === 'week') return `((${asDate(a)} - ${asDate(b)}) / 7)`;
+            } else if (u === 'hour' || u === 'minute' || u === 'second') {
+                const seconds = { hour: 3600, minute: 60, second: 1 }[u];
+                return `trunc(${epochDiff(asInstant(a), asInstant(b))} / ${seconds})::integer`;
+            }
+            const [wa, wb] = [wallClock(a, clock), wallClock(b, clock)];
+            if (u === 'day' || u === 'week') return `trunc(${epochDiff(wa, wb)} / ${u === 'week' ? 604800 : 86400})::integer`;
+            return u === 'month' ? monthsSql(wa, wb) : `(${monthsSql(wa, wb)} / 12)`;
+        }
+    }
+];
+
+const BUILTINS: BuiltinSignature[] = [...AGGREGATES, ...SCALARS, ...DATE_FUNCTIONS];
 
 const BUILTINS_BY_NAME = new Map(BUILTINS.map(b => [b.name, b]));
 

@@ -71,7 +71,7 @@ import {
     type SwitchExpr,
     type Type
 } from './generated/ast.js';
-import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinSignature } from './minab-builtins.js';
+import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinClock, type BuiltinSignature } from './minab-builtins.js';
 import type { AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
@@ -112,7 +112,7 @@ export type EvalResult =
           params?: Record<string, string | number>;
       };
 
-/** The structured result of `MinabInterpreter.run` (R4). `evaluate` keeps the old shape. */
+/** The structured result of `MinabInterpreter.run` (R4). */
 export type InterpretResult = { ok: true; value: MinabValue } | { ok: false; error: MinabError; cause?: unknown };
 
 /** What the host supplies for one evaluation: the connection, the record under validation (spec §6), and `$` when this is a field rule (§6.2). */
@@ -140,17 +140,6 @@ export interface EvalContext {
     record?: Row;
     recordTable?: string;
     fieldValue?: MinabValue;
-    /**
-     * Nothing uses it since R8 moved the playground to `events`. R7 removes it with `evaluate`. Same moment as the
-     * `statement` event, but it hands over the AST node instead of the range.
-     *
-     * Called just before each statement goes to the executor, with the AST
-     * node it was compiled from — the whole `Query` for a query program,
-     * or the smallest subexpression pushed down for a rule. The executor
-     * only ever sees SQL; this is how a host shows *which part* of the
-     * source reached the database and which was answered in memory.
-     */
-    onStatement?: (query: SqlQuery, origin: AstNode) => void;
 }
 
 class EvalError extends Error {
@@ -161,7 +150,7 @@ class EvalError extends Error {
         reason: string,
         readonly code?: string,
         readonly params?: Record<string, string | number>,
-        /** The original error, when a port failed. The old `evaluate` entry throws it again. */
+        /** The original error, when a port failed. A test helper (`test/support/evaluate.ts`) throws it again. */
         readonly cause?: unknown
     ) {
         super(reason);
@@ -186,6 +175,58 @@ interface Frame {
     variables: Map<string, MinabValue>;
 }
 
+/**
+ * The Postgres `LIKE` matcher (`MatchText`), on arrays of characters. It is
+ * a copy of the algorithm and not a regular expression, so a pattern that
+ * ends with `\` fails at the same moments: only when the matcher reaches the
+ * `\` (Postgres: `'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
+ */
+function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | 'false' | 'abort' {
+    const trailing = (): never => fail('LIKE pattern must not end with escape character');
+    while (ti < t.length && pi < p.length) {
+        if (p[pi] === '\\') {
+            pi++;
+            if (pi >= p.length) trailing();
+            if (p[pi] !== t[ti]) return 'false';
+        } else if (p[pi] === '%') {
+            pi++;
+            while (pi < p.length) {
+                if (p[pi] === '%') pi++;
+                else if (p[pi] === '_') {
+                    if (ti >= t.length) return 'abort';
+                    ti++;
+                    pi++;
+                } else break;
+            }
+            if (pi >= p.length) return 'true';
+            let first = p[pi];
+            if (first === '\\') {
+                if (pi + 1 >= p.length) trailing();
+                first = p[pi + 1];
+            }
+            while (ti < t.length) {
+                if (t[ti] === first) {
+                    const matched = likeMatch(t, ti, p, pi);
+                    if (matched !== 'false') return matched;
+                }
+                ti++;
+            }
+            return 'abort';
+        } else if (p[pi] === '_') {
+            ti++;
+            pi++;
+            continue;
+        } else if (p[pi] !== t[ti]) {
+            return 'false';
+        }
+        pi++;
+        ti++;
+    }
+    if (ti < t.length) return 'false';
+    while (pi < p.length && p[pi] === '%') pi++;
+    return pi >= p.length ? 'true' : 'abort';
+}
+
 export class MinabInterpreter {
     constructor(
         private readonly schema: SchemaProvider,
@@ -194,26 +235,12 @@ export class MinabInterpreter {
     ) {}
 
     /**
-     * The old entry, kept until R7 moves the CLI to `PreparedProgram.run` (the playground moved in R8).
-     * It turns the structured result of `run` into the old shape. A port failure is thrown again, as before.
-     *
-     * @deprecated Use `run` (or `PreparedProgram.run`). R7 is the last user: remove it there.
-     */
-    async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
-        const result = await this.run(model, context);
-        if (result.ok) return result;
-        if (result.cause !== undefined) throw result.cause;
-        const { error } = result;
-        // The old shape has no code for a plain failure.
-        if (error.code === 'eval.failed') return { ok: false, reason: error.message };
-        return { ok: false, reason: error.message, code: error.code, params: error.params };
-    }
-
-    /**
      * Runs a program. A program failure, a limit and a cancel come back as `{ ok: false, error }`
      * with a code. Only a bug in Minab throws.
      */
-    async run(model: Model, context: EvalContext): Promise<InterpretResult> {
+    async run(model: Model, given: EvalContext): Promise<InterpretResult> {
+        // The clock is read once: every `NOW()` in this run is the same instant (D21).
+        const context: EvalContext = { ...given, now: given.now ?? new Date(), timeZone: given.timeZone ?? 'UTC' };
         const ownBudget = context.budget === undefined;
         const budget = context.budget ?? new RunBudget(NO_LIMITS, context.signal);
         const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
@@ -242,6 +269,11 @@ export class MinabInterpreter {
         } finally {
             if (ownBudget) budget.dispose();
         }
+    }
+
+    /** The run's clock, for the compiler (it binds the instant and the zone as parameters). */
+    private clockOf(state: State): BuiltinClock {
+        return { now: state.context.now!, timeZone: state.context.timeZone! };
     }
 
     /** An error thrown inside a run, as a structured result. A bug (anything else) is thrown again. */
@@ -296,7 +328,7 @@ export class MinabInterpreter {
     private async mainStatement(statement: MainStatement, state: State): Promise<MinabValue> {
         if (isQuery(statement)) {
             try {
-                const compiled = this.compiler.compileQuery(statement, this.outerResolver(state));
+                const compiled = this.compiler.compileQuery(statement, this.outerResolver(state), this.clockOf(state));
                 if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
                 return await this.runStatement(compiled.query, statement, state);
             } catch (e) {
@@ -316,7 +348,6 @@ export class MinabInterpreter {
     private async runStatement(query: SqlQuery, origin: AstNode, state: State): Promise<Row[]> {
         const { context, budget } = state;
         budget.beforeStatement();
-        context.onStatement?.(query, origin);
         context.events?.emit({
             kind: 'statement',
             sql: query.text,
@@ -367,7 +398,7 @@ export class MinabInterpreter {
      * interpret the node instead and push down its parts.
      */
     private async pushDown(expr: Expression, state: State): Promise<{ pushed: true; value: MinabValue } | { pushed: false }> {
-        const compiled = this.compiler.compileValue(expr, this.outerResolver(state));
+        const compiled = this.compiler.compileValue(expr, this.outerResolver(state), this.clockOf(state));
         if (!compiled.ok) return { pushed: false };
         const rows = await this.runStatement(compiled.query, expr, state);
         return {
@@ -523,7 +554,8 @@ export class MinabInterpreter {
                     array: !!expr.targetType.array
                 },
                 operand?.base,
-                operand?.array
+                operand?.array,
+                state.context.timeZone
             );
         }
         if (isTupleAccess(expr)) {
@@ -630,19 +662,26 @@ export class MinabInterpreter {
             if (expr.args.length !== 1) fail(`${builtin.name} takes one argument`);
             const values = await this.expression(expr.args[0], state);
             const items = Array.isArray(values) ? values : values === null ? [] : [values];
-            return this.runBuiltin(builtin, [items], []);
+            return this.runBuiltin(builtin, [items], [], state);
         }
         const values: MinabValue[] = [];
         for (const arg of expr.args) values.push(await this.expression(arg, state));
         // A function without `nullPropagates: false` gives `null` for a `null` argument (spec §7.7).
         if (builtin.nullPropagates !== false && values.some(v => v === null || v === undefined)) return null;
-        const info = expr.args.map(arg => ({ citext: this.isCitextArg(arg, state) }));
-        return this.runBuiltin(builtin, values, info);
+        const info = expr.args.map((arg): BuiltinArgInfo => {
+            const base = this.staticScalar(arg);
+            return {
+                citext: this.isCitextArg(arg, state),
+                base: base && !base.array ? base.base : undefined,
+                literal: isStringLiteral(arg) ? arg.value : undefined
+            };
+        });
+        return this.runBuiltin(builtin, values, info, state);
     }
 
-    private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[]): MinabValue {
+    private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[], state: State): MinabValue {
         try {
-            return builtin.evaluate(args, info);
+            return builtin.evaluate(args, info, this.clockOf(state)) as MinabValue;
         } catch (e) {
             if (e instanceof BuiltinError) fail(e.message);
             throw e;
@@ -683,19 +722,21 @@ export class MinabInterpreter {
         }
         if (operator === 'IN') {
             const items = Array.isArray(right) ? right : fail('IN needs a collection on the right');
-            return items.some(i => this.equal(left, i, false));
+            const caseInsensitive = this.isCitextArg(expr.left, state) || this.isCitextElements(expr.right, state);
+            return items.some(i => this.equal(left, i, caseInsensitive));
         }
         if (operator === 'LIKE') {
             if (left === null || right === null) fail('LIKE is not a valid operator against null (spec §7.7)');
-            return this.like(String(left), String(right));
+            return this.like(String(left), String(right), this.isCaseInsensitive(expr, state));
         }
         if (operator === '<' || operator === '<=' || operator === '>' || operator === '>=') {
             if (left === null || right === null) {
                 fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
             }
             const exact = decimalCompare(left, right);
-            const a = exact ?? (left as number);
-            const b = exact === undefined ? (right as number) : 0;
+            const folded = exact === undefined && typeof left === 'string' && typeof right === 'string' && this.isCaseInsensitive(expr, state);
+            const a = folded ? (left as string).toLowerCase() : (exact ?? (left as number));
+            const b = folded ? (right as string).toLowerCase() : exact === undefined ? (right as number) : 0;
             switch (operator) {
                 case '<':
                     return a < b;
@@ -748,7 +789,19 @@ export class MinabInterpreter {
 
     /** True when either side of a comparison is a `CITEXT` column. */
     private isCaseInsensitive(expr: BinaryExpression, state: State): boolean {
-        return this.isCitext(expr.left, state) || this.isCitext(expr.right, state);
+        return this.isCitextArg(expr.left, state) || this.isCitextArg(expr.right, state);
+    }
+
+    /** True when the right side of `IN` is a `CITEXT` array (D15). */
+    private isCitextElements(expr: Expression, state: State): boolean {
+        if (isListLiteral(expr)) return expr.items.some(item => this.isCitextArg(item, state));
+        if (!this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && inferred.type.kind === 'scalar' && inferred.type.array && inferred.type.base === 'CITEXT';
+        } catch {
+            return false;
+        }
     }
 
     private isCitext(expr: Expression, state: State): boolean {
@@ -759,9 +812,15 @@ export class MinabInterpreter {
         return column?.type.kind === 'scalar' && column.type.type.base === 'CITEXT';
     }
 
-    private like(value: string, pattern: string): boolean {
-        const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp(`^${escaped.replace(/%/g, '.*').replace(/_/g, '.')}$`).test(value);
+    /**
+     * `LIKE` as in Postgres (spec §7.2): `%` is any run, `_` is one character,
+     * `\` makes the next character plain. With `ignoreCase` (a `CITEXT` side,
+     * D15) both sides are lower-cased first.
+     */
+    private like(value: string, pattern: string, ignoreCase: boolean): boolean {
+        const text = Array.from(ignoreCase ? value.toLowerCase() : value);
+        const pat = Array.from(ignoreCase ? pattern.toLowerCase() : pattern);
+        return likeMatch(text, 0, pat, 0) === 'true';
     }
 
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */

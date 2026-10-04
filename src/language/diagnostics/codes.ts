@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule, wire.
  *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
@@ -84,6 +84,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins`,
         doc: 'Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it.'
+    }),
+    'call.unknownDateUnit': entry<{ name: string; unit: string; allowed: string }>({
+        severity: error,
+        message: p => `${p.name}: the unit ${p.unit} is not allowed here — use a text literal that is one of ${p.allowed}`,
+        doc: 'The unit of a date function must be a text literal such as "day", written in the call. A DATE accepts year, month, week and day; a DATETIME also accepts hour, minute and second.'
     }),
     'call.unknownFunction': entry<{ name: string }>({
         severity: error,
@@ -570,6 +575,32 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `unsupported operator "${p.operator}"`,
         doc: 'The checker does not know this operator. Report it as a Minab bug.'
+    }),
+
+    'wire.invalidRequest': entry<{ path: string; reason: string }>({
+        severity: error,
+        message: p => `the request is not valid at ${p.path}: ${p.reason}`,
+        doc: 'The wire request does not have the shape of wire format v1. params.path says where. Fix the request; the value itself is never copied into the error.'
+    }),
+    'wire.invalidResponse': entry<{ path: string; reason: string }>({
+        severity: error,
+        message: p => `the response is not valid at ${p.path}: ${p.reason}`,
+        doc: 'The wire response does not have the shape of wire format v1. params.path says where. A client should treat the server as broken.'
+    }),
+    'wire.invalidValue': entry<{ path: string; expected: string }>({
+        severity: error,
+        message: p => `the value at ${p.path} is not a valid ${p.expected}`,
+        doc: 'A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error.'
+    }),
+    'wire.tooManyRuns': entry<{ limit: number; used: number }>({
+        severity: error,
+        message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,
+        doc: 'One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests.'
+    }),
+    'wire.unsupportedVersion': entry<{ version: string; supported: string }>({
+        severity: error,
+        message: p => `wire format version ${p.version} is not supported (supported: ${p.supported})`,
+        doc: 'The "v" field of the request names a wire format this server does not know. Use one of the supported versions.'
     })
 } as const;
 

@@ -221,28 +221,6 @@ describe('compile errors', () => {
     });
 });
 
-describe('the old evaluate entry (until R7 and R8)', () => {
-    async function evaluate(source: string, executor: DataPort) {
-        const { document } = await validationHelper<Model>(services)(source);
-        return services.interpreter.evaluate(document.parseResult.value, { executor });
-    }
-
-    test('a failure keeps the old shape: a reason, and a code only when it has a specific one', async () => {
-        const executor: DataPort = { execute: async () => [] };
-        expect(await evaluate('1 / 0', executor)).toEqual({ ok: false, reason: 'division by zero', code: 'eval.divisionByZero', params: {} });
-        expect(await evaluate('.total > null', executor)).toEqual({ ok: false, reason: expect.stringContaining('against null') });
-    });
-
-    test('a data port failure is thrown again, as before', async () => {
-        await expect(evaluate('FROM Order SELECT .id', failingWith('42P01', 'down'))).rejects.toThrow('down');
-    });
-
-    test('it has no limits, so a run of any length works', async () => {
-        const executor: DataPort = { execute: async () => Array.from({ length: 20_000 }, (_, i) => ({ id: i })) };
-        expect(await evaluate('FROM Order SELECT .id', executor)).toMatchObject({ ok: true });
-    });
-});
-
 describe('a real database (PGlite, or Postgres when MINAB_TEST_DATABASE_URL is set)', () => {
     let database: TestDatabase;
     beforeAll(async () => {

@@ -78,10 +78,11 @@ import {
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
-import { checkBuiltin, getBuiltin } from './minab-builtins.js';
+import { checkBuiltin, getBuiltin, type BuiltinSignature } from './minab-builtins.js';
 import { type ScopeResolution, type MinabScopeResolver } from './minab-scope-resolver.js';
 import {
     baseTypesEqual,
+    comparableTypes,
     formatType,
     isNumeric,
     isOrderable,
@@ -413,6 +414,16 @@ export class MinabTypeChecker {
         return model?.declarations.find((d): d is FunctionDecl => isFunctionDecl(d) && d.name === name);
     }
 
+    /** The unit of a date function must be a text literal from the list for the argument types (D21). */
+    private checkDateUnit(node: CallExpression, builtin: BuiltinSignature, argTypes: MinabType[]): TypeResult | undefined {
+        if (builtin.unitAt === undefined || !builtin.unitsFor) return undefined;
+        const allowed = builtin.unitsFor(argTypes);
+        const arg = node.args[builtin.unitAt];
+        if (isStringLiteral(arg) && allowed.includes(arg.value)) return undefined;
+        const shown = isStringLiteral(arg) ? JSON.stringify(arg.value) : 'that is not a text literal';
+        return err('call.unknownDateUnit', { name: builtin.name, unit: shown, allowed: allowed.map(u => JSON.stringify(u)).join(', ') });
+    }
+
     private inferCallExpression(node: CallExpression): TypeResult {
         if (!isNameRef(node.callee)) {
             return err('call.calleeNotName');
@@ -430,7 +441,7 @@ export class MinabTypeChecker {
             argTypes.push(argType.type);
         }
         const result = checkBuiltin(builtin, argTypes);
-        if (result.ok) return ok(result.type);
+        if (result.ok) return this.checkDateUnit(node, builtin, argTypes) ?? ok(result.type);
         // In a grouped query an aggregate reads the group: `SUM(.total)` has one value per row.
         const promoted = builtin.kind === 'scalar' || argTypes.length !== 1 ? undefined : this.promoteForGroupedAggregate(node, argTypes[0]);
         if (promoted) {
@@ -601,7 +612,7 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') return ok(scalarType('BOOLEAN'));
-        if (!baseTypesEqual(left.type, right.type)) {
+        if (!comparableTypes(left.type, right.type)) {
             return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
@@ -618,7 +629,7 @@ export class MinabTypeChecker {
         if (!isOrderable(left.type) || !isOrderable(right.type)) {
             return err('type.orderingNeedsOrderable', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
-        if (!baseTypesEqual(left.type, right.type)) {
+        if (!comparableTypes(left.type, right.type)) {
             return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
@@ -647,7 +658,7 @@ export class MinabTypeChecker {
             }
             const itemType = this.inferType(q.selectClause.items[0].expression);
             if (!itemType.ok) return itemType;
-            if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !baseTypesEqual(left.type, itemType.type)) {
+            if (left.type.kind !== 'null' && itemType.type.kind !== 'null' && !comparableTypes(left.type, itemType.type)) {
                 return err('type.inSubqueryMismatch', { left: formatType(left.type), right: formatType(itemType.type) });
             }
             return ok(scalarType('BOOLEAN'));
@@ -659,7 +670,7 @@ export class MinabTypeChecker {
         if (!rightElement) {
             return err('type.inNeedsCollection', { actual: formatType(right.type) });
         }
-        if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !baseTypesEqual(left.type, rightElement)) {
+        if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !comparableTypes(left.type, rightElement)) {
             return err('type.inCollectionMismatch', { left: formatType(left.type), right: formatType(rightElement) });
         }
         return ok(scalarType('BOOLEAN'));

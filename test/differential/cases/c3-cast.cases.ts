@@ -132,10 +132,10 @@ export const cases: DifferentialCase[] = [
     fromText('text with a fraction to TIME', '08:30:00.50', 'TIME', '08:30:00.5'),
     fromText('hour 25 to TIME fails', '25:00:00', 'TIME', fails),
     fromText('words to TIME fails', 'noon', 'TIME', fails),
-    fromText('text to DATETIME', '2026-10-02T08:30:00', 'DATETIME', '2026-10-02 08:30:00'),
-    fromText('text with Z to DATETIME', '2026-10-02T08:30:00Z', 'DATETIME', '2026-10-02 08:30:00'),
-    fromText('text with a space to DATETIME', '2026-10-02 08:30:00', 'DATETIME', '2026-10-02 08:30:00'),
-    fromText('a date alone to DATETIME', '2026-10-02', 'DATETIME', '2026-10-02 00:00:00'),
+    fromText('text to DATETIME', '2026-10-02T08:30:00', 'DATETIME', '2026-10-02T08:30:00.000Z'),
+    fromText('text with Z to DATETIME', '2026-10-02T08:30:00Z', 'DATETIME', '2026-10-02T08:30:00.000Z'),
+    fromText('text with a space to DATETIME', '2026-10-02 08:30:00', 'DATETIME', '2026-10-02T08:30:00.000Z'),
+    fromText('a date alone to DATETIME', '2026-10-02', 'DATETIME', '2026-10-02T00:00:00.000Z'),
     fromText('letters to DATETIME fails', '2026-10-02 later', 'DATETIME', fails),
 
     // JSON
