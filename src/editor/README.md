@@ -21,6 +21,7 @@ No Node, no DOM, no LSP types and no Monaco types. Lines and columns are
 - `semantic-tokens.ts`: `semanticTokens(doc)`. The legend is `SEMANTIC_TOKEN_TYPES` and `SEMANTIC_TOKEN_MODIFIERS` (in `types.ts`).
 - `quick-fixes.ts`: `quickFixes(doc, diagnostic)`. It reads the stable code and parameters of a diagnostic: "Did you mean …?" for `call.unknownFunction` and `scope.unknownName`, and "Add CAST(… AS T)" for `type.implicitCoercion`.
 - `builtin-docs.ts`: the signature and one sentence of every built-in, and `parseSignature`.
+- `tokens.ts`: the one tokenizer (`tokenizeLine`, `tokenize`) and the keyword lists. Pure. The Monaco integration, the playground editor and the static snippets use it. `playground/test/tokens.test.ts` fails when the grammar gains a keyword it does not know.
 - `describe.ts`: shared text: types, columns, tables, host function signatures, and `nameText` (backticks for names that are not plain words).
 
 ## Rules

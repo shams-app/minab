@@ -13,7 +13,7 @@ describe('browser bundle guard', () => {
     test('the browser entries have no Node-only module and report sizes', async () => {
         const { sizes, offenders } = await measure();
         expect(offenders).toEqual([]);
-        expect(Object.keys(sizes)).toEqual(['app', 'browser', 'pglite', 'worker']);
+        expect(Object.keys(sizes)).toEqual(['app', 'browser', 'monaco', 'pglite', 'worker']);
         for (const size of Object.values(sizes)) {
             expect(size.gzip).toBeGreaterThan(0);
             expect(size.gzip).toBeLessThan(size.bytes);

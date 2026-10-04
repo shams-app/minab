@@ -12,6 +12,7 @@
  * Nothing here may touch Node or the DOM.
  */
 
+import { complete, hover, parseDocument, signatureHelp } from '../editor/index.js';
 import { coded } from '../language/diagnostics/codes.js';
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import { createMinab } from '../runtime/minab.js';
@@ -19,7 +20,9 @@ import { PortError, type ClockPort, type DataPort, type EventSink, type HostFunc
 import { runError } from '../runtime/errors.js';
 import type { Minab, MinabError, PreparedProgram, RunPorts } from '../runtime/types.js';
 import { decodeValue, type Json } from '../runtime/wire.js';
-import { parseTypeWord } from '../language/host-declarations.js';
+import { parseTypeWord, resolveHostDeclarations, type ResolvedHost } from '../language/host-declarations.js';
+import { DEFAULT_RULE_CONTEXT } from '../language/schema.js';
+import { ServiceCache } from '../runtime/service-cache.js';
 import {
     BRIDGE_VERSION,
     bridgeError,
@@ -70,6 +73,8 @@ function portFailure(error: MinabError): Error {
 export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {}): { close(): void } {
     let minab: Minab | undefined;
     let runtimeOptions: WorkerRuntimeOptions | undefined;
+    // The editor services (phase E5): their own small cache, because a document here is never checked or run.
+    let editorServices: { cache: ServiceCache; host: ResolvedHost } | undefined;
     const programs = new Map<string, { program: PreparedProgram; types: InputTypes }>();
     const runs = new Map<string, AbortController>();
     const pending = new Map<string, PendingCall>();
@@ -192,6 +197,10 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
                 try {
                     runtimeOptions = message.options;
                     minab = createMinab(message.options);
+                    editorServices = {
+                        cache: new ServiceCache(4, message.options.mode ?? 'production'),
+                        host: resolveHostDeclarations({ functions: message.options.functions, inputs: message.options.inputs }, message.options.schema)
+                    };
                     answer(message.id, null);
                 } catch (error) {
                     fail(message.id, toMinabError(error));
@@ -222,6 +231,21 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
                 answer(message.id, entry.program.compile());
                 return;
             }
+            case 'editor': {
+                if (!runtimeOptions || !editorServices) return fail(message.id, bridgeError('the runtime was not created'));
+                try {
+                    const ruleContext = message.ruleContext ?? runtimeOptions.ruleContext ?? DEFAULT_RULE_CONTEXT;
+                    const { services } = editorServices.cache.get(runtimeOptions.schema, ruleContext, editorServices.host);
+                    const doc = parseDocument(services, message.source);
+                    if (message.method === 'complete') answer(message.id, await complete(doc, message.offset));
+                    else if (message.method === 'hover') answer(message.id, hover(doc, message.offset) ?? null);
+                    else if (message.method === 'signatureHelp') answer(message.id, signatureHelp(doc, message.offset) ?? null);
+                    else fail(message.id, bridgeError(`unknown editor method ${String(message.method)}`));
+                } catch (error) {
+                    fail(message.id, toMinabError(error));
+                }
+                return;
+            }
             case 'run':
                 return handleRun(message);
             case 'cancel':
@@ -233,6 +257,8 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
             case 'dispose':
                 minab?.dispose();
                 minab = undefined;
+                editorServices?.cache.clear();
+                editorServices = undefined;
                 programs.clear();
                 for (const controller of runs.values()) controller.abort();
                 answer(message.id, null);

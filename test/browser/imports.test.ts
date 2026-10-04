@@ -1,5 +1,5 @@
 /**
- * Production plan phase H4 — `@shamsine/minab/browser` and `@shamsine/minab/browser/worker`
+ * Production plan phase H4 — `@shamsine/minab/browser`, `@shamsine/minab/browser/worker` and (E5) `@shamsine/minab/monaco`
  * run in a browser and in a Worker, so their import graphs must pass the same guard as the runtime.
  */
 
@@ -12,7 +12,7 @@ const root = resolve(import.meta.dirname, '../..');
 const readFromDisk = (file: string) => (existsSync(file) ? readFileSync(file, 'utf8') : undefined);
 
 describe('the browser entries do not depend on the environment', () => {
-    for (const entry of ['src/browser/index.ts', 'src/browser/worker.ts']) {
+    for (const entry of ['src/browser/index.ts', 'src/browser/worker.ts', 'src/monaco/index.ts']) {
         test(`${entry} has no Node module, no database driver, no window or document`, () => {
             const { files, problems } = walk(resolve(root, entry), readFromDisk);
             expect(files.length).toBeGreaterThan(10);

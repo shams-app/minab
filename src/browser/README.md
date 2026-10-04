@@ -11,6 +11,8 @@ them over a message bridge and waits for the answer (decision D30).
 
 - `index.ts`: `createWorkerMinab({ worker, schema, functions, inputs, ... })`. It has `prepare` and
   `run` like `createMinab`, but `prepare`, `compile` and `run` are asynchronous. `dependsOn` is not.
+- `index.ts` also has `complete`, `hover` and `signatureHelp` (phase E5). They send an `editor` message, and the
+  worker answers with `src/editor/`. No `prepare` is needed, and the worker keeps no program for them.
 - `worker.ts`: `serveMinab(endpoint, { ports })` hosts a runtime and answers the bridge messages.
   In a Web Worker this file starts itself. Write your own worker file when a port must live inside the
   worker (the playground keeps PGlite there): `serveMinab(self, { ports: { data } })`.
@@ -29,6 +31,10 @@ them over a message bridge and waits for the answer (decision D30).
   programs go to the server (D30).
 
 ## The bridge
+
+The bridge is version 1. Phase E5 added one request, `editor` (`method` is `complete`, `hover` or `signatureHelp`,
+with `source` and `offset`). A message that an older worker does not know is ignored, so a new main thread and an
+old worker fail by timeout, not by a wrong answer: keep both sides from the same package version.
 
 - Every request has an `id` and the answer carries it back. Two runs at once do not mix.
 - `port-call` goes from the worker to the main thread: `{ callId, runId, port, method, args }` with `port`
