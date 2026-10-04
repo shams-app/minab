@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minab.dev/schemas/wire-v1.request.json",
+  "title": "Minab wire format v1: request",
+  "description": "Run programs with inputs. Values in inputs, record and fieldValue use the value encoding of docs/reference/wire-format.md (a DECIMAL is a string). A server may allow fewer runs than the default of 100 (the batchRuns limit), so maxItems is not set here.",
+  "type": "object",
+  "required": ["v", "runs"],
+  "properties": {
+    "v": { "const": 1 },
+    "runs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/run" } }
+  },
+  "$defs": {
+    "json": {
+      "description": "Any JSON value.",
+      "type": ["null", "boolean", "number", "string", "array", "object"]
+    },
+    "run": {
+      "type": "object",
+      "required": ["id", "program"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Chosen by the client, echoed back. Unique in the request." },
+        "program": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["ref"],
+              "properties": {
+                "ref": {
+                  "type": "object",
+                  "required": ["id", "version"],
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "version": { "type": "string", "minLength": 1 }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["source"],
+              "properties": {
+                "source": { "type": "string", "description": "Accepted only by a server in development mode." }
+              }
+            }
+          ]
+        },
+        "inputs": { "type": "object", "description": "Values of the declared host inputs, by name." },
+        "record": { "type": "object", "description": "The record under validation." },
+        "fieldValue": { "$ref": "#/$defs/json", "description": "The value of $." },
+        "options": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "description": "Can only make the host's limits tighter.",
+              "properties": {
+                "sourceLength": { "type": "number", "exclusiveMinimum": 0 },
+                "nestingDepth": { "type": "number", "exclusiveMinimum": 0 },
+                "wallTimeMs": { "type": "number", "exclusiveMinimum": 0 },
+                "statements": { "type": "number", "exclusiveMinimum": 0 },
+                "rowsPerStatement": { "type": "number", "exclusiveMinimum": 0 },
+                "loopIterations": { "type": "number", "exclusiveMinimum": 0 },
+                "callDepth": { "type": "number", "exclusiveMinimum": 0 },
+                "logEntries": { "type": "number", "exclusiveMinimum": 0 },
+                "batchRuns": { "type": "number", "exclusiveMinimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "logs": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}

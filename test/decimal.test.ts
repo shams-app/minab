@@ -8,6 +8,7 @@ import { createMinabServices } from '../src/language/minab-module.js';
 import { scalarType, type MinabSchema } from '../src/language/schema.js';
 import { formatValue } from '../src/host/format.js';
 import { Big, decimalText, externalize } from '../src/language/values.js';
+import { evaluate } from './support/evaluate.js';
 
 /**
  * Production plan C2 (decision D17): exact decimals in the interpreter, the
@@ -52,7 +53,7 @@ beforeAll(() => {
 async function run(source: string, context: Partial<EvalContext> = {}): Promise<EvalResult> {
     const document = await parse(source);
     expect(document.parseResult.parserErrors.map(e => e.message)).toEqual([]);
-    return await interpreter.evaluate(document.parseResult.value, { executor: new Recorder(), ...context });
+    return await evaluate(interpreter, document.parseResult.value, { executor: new Recorder(), ...context });
 }
 
 async function value(source: string, context: Partial<EvalContext> = {}): Promise<unknown> {

@@ -1,0 +1,171 @@
+{
+  "first-query": {
+    "stage": "done",
+    "result": {
+      "kind": "rows",
+      "columns": [
+        "id",
+        "total",
+        "customer_name"
+      ],
+      "rows": [
+        {
+          "id": "ord-190",
+          "total": 1302.5,
+          "customer_name": "Margaret Hamilton"
+        },
+        {
+          "id": "ord-104",
+          "total": 980,
+          "customer_name": "Ada Lovelace"
+        },
+        {
+          "id": "ord-87",
+          "total": 412.5,
+          "customer_name": "Grace Hopper"
+        },
+        {
+          "id": "ord-171",
+          "total": 190,
+          "customer_name": "Barbara Liskov"
+        }
+      ]
+    },
+    "trace": [
+      {
+        "index": 1,
+        "text": "SELECT \"Order\".\"id\", \"Order\".\"total\", (SELECT \"_r0\".\"name\" FROM \"Customer\" AS \"_r0\" WHERE \"_r0\".\"id\" = \"Order\".\"customer_id\") AS \"customer_name\" FROM \"Order\" WHERE (\"Order\".\"status\" IS NOT DISTINCT FROM $1 AND (SELECT \"_r1\".\"country\" FROM \"Customer\" AS \"_r1\" WHERE \"_r1\".\"id\" = \"Order\".\"customer_id\") IS NOT DISTINCT FROM $2) ORDER BY \"Order\".\"total\" DESC LIMIT 20",
+        "params": [
+          "shipped",
+          "US"
+        ],
+        "formatted": "SELECT \"Order\".\"id\", \"Order\".\"total\", (SELECT \"_r0\".\"name\" FROM \"Customer\" AS \"_r0\" WHERE \"_r0\".\"id\" = \"Order\".\"customer_id\") AS \"customer_name\" FROM \"Order\" WHERE (\"Order\".\"status\" IS NOT DISTINCT FROM $1 AND (SELECT \"_r1\".\"country\" FROM \"Customer\" AS \"_r1\" WHERE \"_r1\".\"id\" = \"Order\".\"customer_id\") IS NOT DISTINCT FROM $2) ORDER BY \"Order\".\"total\" DESC LIMIT 20\n-- parameters\n--   $1 = \"shipped\"\n--   $2 = \"US\"",
+        "rowCount": 4,
+        "preview": [
+          {
+            "id": "ord-190",
+            "total": 1302.5,
+            "customer_name": "Margaret Hamilton"
+          },
+          {
+            "id": "ord-104",
+            "total": 980,
+            "customer_name": "Ada Lovelace"
+          },
+          {
+            "id": "ord-87",
+            "total": 412.5,
+            "customer_name": "Grace Hopper"
+          },
+          {
+            "id": "ord-171",
+            "total": 190,
+            "customer_name": "Barbara Liskov"
+          }
+        ],
+        "columns": [
+          "id",
+          "total",
+          "customer_name"
+        ],
+        "origin": {
+          "range": {
+            "start": {
+              "line": 8,
+              "character": 0
+            },
+            "end": {
+              "line": 12,
+              "character": 8
+            }
+          },
+          "type": "Query",
+          "text": "FROM Order\nWHERE .status == \"shipped\" AND .customer.country == \"US\"\nSELECT .id, .total, .customer.name AS customer_name\nORDERBY .total DESC\nLIMIT 20"
+        }
+      }
+    ]
+  },
+  "booking-overlap": {
+    "stage": "done",
+    "result": {
+      "kind": "verdict",
+      "value": true
+    },
+    "trace": [
+      {
+        "index": 1,
+        "text": "SELECT EXISTS (SELECT 1 FROM \"Booking\" AS \"_r0\" WHERE (((\"_r0\".\"id\" IS DISTINCT FROM $1 AND \"_r0\".\"room_id\" IS NOT DISTINCT FROM $2) AND \"_r0\".\"start_date\" < $3) AND \"_r0\".\"end_date\" > $4)) AS \"value\"",
+        "params": [
+          "bkg-new",
+          "room-7",
+          "2026-10-05",
+          "2026-10-01"
+        ],
+        "formatted": "SELECT EXISTS (SELECT 1 FROM \"Booking\" AS \"_r0\" WHERE (((\"_r0\".\"id\" IS DISTINCT FROM $1 AND \"_r0\".\"room_id\" IS NOT DISTINCT FROM $2) AND \"_r0\".\"start_date\" < $3) AND \"_r0\".\"end_date\" > $4)) AS \"value\"\n-- parameters\n--   $1 = \"bkg-new\"\n--   $2 = \"room-7\"\n--   $3 = \"2026-10-05\"\n--   $4 = \"2026-10-01\"",
+        "rowCount": 1,
+        "preview": [
+          {
+            "value": false
+          }
+        ],
+        "columns": [
+          "value"
+        ],
+        "origin": {
+          "range": {
+            "start": {
+              "line": 10,
+              "character": 32
+            },
+            "end": {
+              "line": 13,
+              "character": 1
+            }
+          },
+          "type": "CallExpression",
+          "text": "EXISTS(\n    #Booking[. != ^ AND .room_id == ^.room_id\n             AND .start_date < ^.end_date AND .end_date > ^.start_date]\n)"
+        }
+      }
+    ]
+  },
+  "customer-exists": {
+    "stage": "done",
+    "result": {
+      "kind": "verdict",
+      "value": true
+    },
+    "trace": [
+      {
+        "index": 1,
+        "text": "SELECT EXISTS (SELECT 1 FROM \"Customer\" AS \"_r0\" WHERE \"_r0\".\"id\" IS NOT DISTINCT FROM $1) AS \"value\"",
+        "params": [
+          "cus-ada"
+        ],
+        "formatted": "SELECT EXISTS (SELECT 1 FROM \"Customer\" AS \"_r0\" WHERE \"_r0\".\"id\" IS NOT DISTINCT FROM $1) AS \"value\"\n-- parameters\n--   $1 = \"cus-ada\"",
+        "rowCount": 1,
+        "preview": [
+          {
+            "value": true
+          }
+        ],
+        "columns": [
+          "value"
+        ],
+        "origin": {
+          "range": {
+            "start": {
+              "line": 11,
+              "character": 0
+            },
+            "end": {
+              "line": 11,
+              "character": 27
+            }
+          },
+          "type": "CallExpression",
+          "text": "EXISTS(#Customer[.id == $])"
+        }
+      }
+    ]
+  }
+}

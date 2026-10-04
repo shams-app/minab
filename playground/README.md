@@ -41,9 +41,9 @@ The `predev`, `prebuild` and `pretest` scripts run `scripts/prepare.mjs`, which 
 ```
 src/
   engine/     the Minab engine — runs in ONE Web Worker, no DOM
-    engine.ts       check / compile / run → RunReport; two queues (language, database)
-    language.ts     Langium services per host (schema + rule context), parse-from-string
-    program.ts      program kind (query / record rule / field rule / value), check-only constructs
+    engine.ts       check / compile / run through the runtime API (`src/runtime/`) → RunReport; two queues (language, database)
+    language.ts     one `Minab` runtime per host (schema + rule context), and the syntax tree for editor intelligence
+    program.ts      program info for the UI: kind and type from the runtime, check-only constructs and symbols from the syntax tree
     intel.ts        hover, completion, go-to-definition, AST view (via the type checker)
     database.ts     PGlite: lazy boot, citext, JSON-shaped results, preview, SQL console
     ddl.ts          host schema + seed rows → CREATE TABLE / INSERT (also the exported seed.sql)
@@ -61,7 +61,7 @@ src/
 ```
 
 **Things worth knowing:**
-- **Hybrid execution, made visible.** The interpreter calls `EvalContext.onStatement(query, origin)` just before each statement reaches the database (`src/language/minab-interpreter.ts`). The engine records each origin node's source range, so the Execution tab can highlight exactly which span of the program became which SQL.
+- **Hybrid execution, made visible.** The runtime sends a `statement` event, with the source range, just before each statement reaches the data port (`src/runtime/ports.ts`). The engine keeps each range, so the Execution tab can highlight exactly which span of the program became which SQL.
 - **One parse serves everything.**
   - The engine answers `analyze` (diagnostics, program kind, compiled SQL) on every pause in typing.
   - It answers `run` on auto-run or ⌘↵.

@@ -130,7 +130,7 @@ export class RunBudget {
         this.deadline = performance.now() + limits.wallTimeMs;
         // The timer aborts the signal that ports see. The deadline check in `check()` covers a
         // run that never gives the event loop a turn, where a timer cannot fire.
-        // A limit of `Infinity` is for the old `evaluate` entry, which has no wall time.
+        // A limit of `Infinity` (`NO_LIMITS`) has no wall time.
         this.timer = Number.isFinite(limits.wallTimeMs) ? setTimeout(() => this.expire(), limits.wallTimeMs) : undefined;
         this.onHostAbort = () => this.controller.abort();
         if (hostSignal?.aborted) this.controller.abort();
@@ -231,7 +231,7 @@ export class RunBudget {
     }
 }
 
-/** No limit at all. Only the old `evaluate` entry uses it, until R7 and R8 move the CLI and the playground to `run`. */
+/** No limit at all. `MinabInterpreter.run` uses it when a caller gives no budget (tests do). */
 export const NO_LIMITS: Readonly<Limits> = Object.freeze({
     sourceLength: Infinity,
     nestingDepth: Infinity,

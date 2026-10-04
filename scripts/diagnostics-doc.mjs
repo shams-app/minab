@@ -29,7 +29,8 @@ const AREAS = {
     data: 'The data port failed or is missing.',
     cancelled: 'The host aborted the run.',
     query: 'A query is used in a way its shape does not allow.',
-    rule: 'A rule cannot be checked in this setting.'
+    rule: 'A rule cannot be checked in this setting.',
+    wire: 'A wire request, response or value does not follow wire format v1 (R6).'
 };
 
 /** The message with every parameter shown as `{name}`, and the names of the parameters in order of use. */

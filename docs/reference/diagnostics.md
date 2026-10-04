@@ -195,3 +195,15 @@ A rule cannot be checked in this setting.
 | --- | --- | --- | --- | --- |
 | `rule.fieldTypeMissing` | error | the host did not supply a type for "$" (MinabRuleContext.fieldType) | none | This is a host setup problem. The host must give the type of the field when it checks a field-level rule. |
 | `rule.fieldValueOutsideFieldRule` | error | '$' is only valid in a field-level rule; this program isn't being validated as one | none | The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule. |
+
+## wire
+
+A wire request, response or value does not follow wire format v1 (R6).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `wire.invalidRequest` | error | the request is not valid at {path}: {reason} | `path`, `reason` | The wire request does not have the shape of wire format v1. params.path says where. Fix the request; the value itself is never copied into the error. |
+| `wire.invalidResponse` | error | the response is not valid at {path}: {reason} | `path`, `reason` | The wire response does not have the shape of wire format v1. params.path says where. A client should treat the server as broken. |
+| `wire.invalidValue` | error | the value at {path} is not a valid {expected} | `path`, `expected` | A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error. |
+| `wire.tooManyRuns` | error | the request has {used} runs, and the limit is {limit} | `used`, `limit` | One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests. |
+| `wire.unsupportedVersion` | error | wire format version {version} is not supported (supported: {supported}) | `version`, `supported` | The "v" field of the request names a wire format this server does not know. Use one of the supported versions. |

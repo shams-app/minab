@@ -112,7 +112,7 @@ export type EvalResult =
           params?: Record<string, string | number>;
       };
 
-/** The structured result of `MinabInterpreter.run` (R4). `evaluate` keeps the old shape. */
+/** The structured result of `MinabInterpreter.run` (R4). */
 export type InterpretResult = { ok: true; value: MinabValue } | { ok: false; error: MinabError; cause?: unknown };
 
 /** What the host supplies for one evaluation: the connection, the record under validation (spec §6), and `$` when this is a field rule (§6.2). */
@@ -140,17 +140,6 @@ export interface EvalContext {
     record?: Row;
     recordTable?: string;
     fieldValue?: MinabValue;
-    /**
-     * Kept until R8 moves the playground to `events`. Same moment as the
-     * `statement` event, but it hands over the AST node instead of the range.
-     *
-     * Called just before each statement goes to the executor, with the AST
-     * node it was compiled from — the whole `Query` for a query program,
-     * or the smallest subexpression pushed down for a rule. The executor
-     * only ever sees SQL; this is how a host shows *which part* of the
-     * source reached the database and which was answered in memory.
-     */
-    onStatement?: (query: SqlQuery, origin: AstNode) => void;
 }
 
 class EvalError extends Error {
@@ -161,7 +150,7 @@ class EvalError extends Error {
         reason: string,
         readonly code?: string,
         readonly params?: Record<string, string | number>,
-        /** The original error, when a port failed. The old `evaluate` entry throws it again. */
+        /** The original error, when a port failed. A test helper (`test/support/evaluate.ts`) throws it again. */
         readonly cause?: unknown
     ) {
         super(reason);
@@ -244,22 +233,6 @@ export class MinabInterpreter {
         private readonly compiler: MinabSqlCompiler,
         private readonly typeChecker?: MinabTypeChecker
     ) {}
-
-    /**
-     * The old entry, kept until R7 and R8 move the CLI and the playground to `PreparedProgram.run`.
-     * It turns the structured result of `run` into the old shape. A port failure is thrown again, as before.
-     *
-     * @deprecated Use `run` (or `PreparedProgram.run`). Remove it in R8, or in whichever of R7 and R8 merges last.
-     */
-    async evaluate(model: Model, context: EvalContext): Promise<EvalResult> {
-        const result = await this.run(model, context);
-        if (result.ok) return result;
-        if (result.cause !== undefined) throw result.cause;
-        const { error } = result;
-        // The old shape has no code for a plain failure.
-        if (error.code === 'eval.failed') return { ok: false, reason: error.message };
-        return { ok: false, reason: error.message, code: error.code, params: error.params };
-    }
 
     /**
      * Runs a program. A program failure, a limit and a cancel come back as `{ ok: false, error }`
@@ -375,7 +348,6 @@ export class MinabInterpreter {
     private async runStatement(query: SqlQuery, origin: AstNode, state: State): Promise<Row[]> {
         const { context, budget } = state;
         budget.beforeStatement();
-        context.onStatement?.(query, origin);
         context.events?.emit({
             kind: 'statement',
             sql: query.text,
