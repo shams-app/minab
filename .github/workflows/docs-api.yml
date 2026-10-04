@@ -1,0 +1,21 @@
+# Builds the API reference with TypeDoc (G1). Warnings are errors, so a public
+# symbol without a doc comment fails this job. The output (out/api) is not committed.
+name: Docs API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  docs-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The "predocs:api" script generates the parser first. TypeDoc needs its types.
+      - run: npm run docs:api

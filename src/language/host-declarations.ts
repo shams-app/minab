@@ -24,6 +24,7 @@ export interface HostFunctionDeclaration {
 /** A type word (`TEXT`, `TEXT?`, `TEXT[]`), or an object of typed fields (`{ id: 'TEXT', roles: 'TEXT[]' }`). */
 export type HostInputType = string | { [field: string]: string };
 
+/** The host functions and host inputs a host declares to the checker. */
 export interface HostDeclarations {
     functions?: readonly HostFunctionDeclaration[];
     inputs?: Readonly<Record<string, HostInputType>>;
@@ -48,6 +49,7 @@ export interface ResolvedHost {
 
 export const EMPTY_HOST: ResolvedHost = { functions: new Map(), inputs: new Map(), inputTables: new Map(), key: '' };
 
+/** Thrown by `createMinab` when a declared host function or input is wrong: a bad name or a bad type word. */
 export class HostDeclarationError extends Error {
     constructor(message: string) {
         super(message);

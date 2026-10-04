@@ -9,23 +9,31 @@ It also has a full type system, user-defined functions, `if`/`if!`/`switch`, thr
 
 ## Status
 
-Minab parses, resolves, validates, type-checks, compiles, and runs. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan and what each phase actually shipped; [`docs/status.md`](docs/status.md) is the running session log.
+Minab parses, resolves, validates, type-checks, compiles, and runs. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
 
-- **Parsing** — the full v2 grammar.
+What runs:
+
+- **Parsing** — the full grammar.
 - **Scope resolution** — `.` / `^` / `#alias` / `KEY` against the spec §2.2 scope stack.
 - **Validation and type checking** — sigil placement, no implicit coercion, the §3.4 collection-vs-scalar boundary, §7.7 null rules.
-- **Execution** — a hybrid ([ADR 0001](docs/adr/0001-execution-strategy.md)): the relational layer compiles to parameterized SQL, everything else is interpreted against the record the host holds, with the interpreter pushing the smallest table-touching subexpression down to the compiler.
+- **Execution** — a hybrid ([ADR 0001](docs/adr/0001-execution-strategy.md)): the relational layer compiles to parameterized SQL, everything else is interpreted against the record the host holds, with the interpreter pushing the smallest table-touching subexpression down to the compiler. Statements, all three loop forms, `LOG`, exact `DECIMAL` values and run limits all work.
 - **A CLI** — `minab run` / `compile` / `check`, documented below.
-- **Editor support** — a language server (live diagnostics, `#alias` hover and go-to-definition) and a VS Code extension with syntax highlighting; see [`vscode-extension/`](vscode-extension/README.md).
+- **Editor support** — a language server and a VS Code extension, and Monaco support for web apps; see [`vscode-extension/`](vscode-extension/README.md).
 - **A web playground** — write, check, compile and run Minab in the browser against a real PostgreSQL (PGlite, WebAssembly), with a guided tour and a verified example gallery; see [`playground/`](playground/README.md).
 
-Not executed yet, each failing with an explicit reason rather than a wrong answer: loops (§9.4), `INSERT`/`UPDATE`/`DELETE` (§10), and `.$index` (§3.5). They still parse, resolve, and type-check, so `minab check` works on them.
+What you can embed (see [Use Minab from your app](#use-minab-from-your-app)):
 
-The language spec is **Stable**. Its §12 lists a handful of open questions; those are deferred additions to the language, not gaps in what's specified today.
+- **One runtime API** — `createMinab`, `prepare`, `run`, with ports for the database, host functions, the clock and events. The CLI and the playground use it too.
+- **NestJS** — a module, a service, an exception filter and a run endpoint for stored programs (`@shamsine/minab/nestjs`).
+- **The browser** — the runtime in a Web Worker, local runs, runs delegated to a server by program id, and Monaco (`@shamsine/minab/browser`, `@shamsine/minab/monaco`).
+
+Not executed yet, each failing with an explicit reason rather than a wrong answer: `INSERT`/`UPDATE`/`DELETE` (§10) and writes to a record path. They still parse, resolve, and type-check, so `minab check` works on them.
+
+The language is still in development, so any release before 1.0 may break something. The language spec §12 lists a handful of open questions; those are deferred additions to the language, not gaps in what's specified today.
 
 ## Install
 
-Requires Node.js 20.10 or newer.
+Requires Node.js 22.12 or newer.
 
 ```bash
 npm install -g @shamsine/minab    # puts `minab` on your PATH
@@ -35,6 +43,22 @@ minab --version
 Or run it without installing: `npx @shamsine/minab check my-rule.minab`.
 
 The package contains the CLI and the language server. The VS Code extension is a separate download: build or download `minab-vscode-<version>.vsix` and install it with `code --install-extension minab-vscode-<version>.vsix` (see [`vscode-extension/`](vscode-extension/README.md)).
+
+## Use Minab from your app
+
+Minab is a library as well as a command line. A host app (a NestJS server, a web app) gives Minab a schema, and Minab checks and runs programs that your users write.
+
+```ts
+import { createMinab } from '@shamsine/minab';
+
+const minab = createMinab({ schema, ruleContext: { isFieldRule: false, recordTable: 'Order' } });
+const program = await minab.prepare('.total <= 1000', { expect: 'boolean' });
+if (program.ok) console.log(await program.run({ record: { total: '24.90' } }));
+```
+
+- The [embedding guide](docs/guides/embedding.md) explains the ports, where programs run, and how to wire a NestJS server and a browser app.
+- Two tested example apps show it: [`examples/nestjs`](examples/nestjs/README.md) (a rule inside a request transaction) and [`examples/browser`](examples/browser/README.md) (a worker, local and remote rules, Monaco).
+- The API reference is generated with `npm run docs:api`. The [documentation index](docs/README.md) lists everything else.
 
 ## Setup (working on Minab itself)
 

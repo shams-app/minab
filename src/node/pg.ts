@@ -12,8 +12,11 @@ import { wrapQuery } from './query-function.js';
 
 /** What the port needs from `pg`'s `Client`, and all it uses. The import is untyped, so this is explicit. */
 export interface PgClientLike {
+    /** Opens the connection. */
     connect(): Promise<void>;
+    /** Runs one statement with `$1`-style parameters. */
     query(text: string, params: unknown[]): Promise<{ rows: Row[] }>;
+    /** Closes the connection. */
     end(): Promise<void>;
 }
 
@@ -22,9 +25,11 @@ export function pgDataPort(client: Pick<PgClientLike, 'query'>): DataPort {
     return wrapQuery((text, params) => client.query(text, params));
 }
 
+/** A data port over a connection that `connectPostgres` opened. The host closes it with `close`. */
 export interface PostgresConnection extends DataPort {
     /** Every statement sent through this connection. */
     readonly statements: SqlQuery[];
+    /** Closes the connection. */
     close(): Promise<void>;
 }
 

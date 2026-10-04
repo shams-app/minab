@@ -126,6 +126,8 @@
     "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json && tsc -p tsconfig.nestjs.build.json && node scripts/build-cjs.mjs",
     "build:cjs": "node scripts/build-cjs.mjs",
     "prepack": "npm run build:release",
+    "predocs:api": "npm run langium:generate",
+    "docs:api": "typedoc",
     "docs:diagnostics": "tsc -b tsconfig.json && node scripts/diagnostics-doc.mjs",
     "prelint": "npm run langium:generate",
     "lint": "oxlint --type-aware src test scripts && oxlint vscode-extension/src",
@@ -190,6 +192,7 @@
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "typedoc": "^0.28.20",
     "typescript": "~5.9.3",
     "vitest": "~5.0.0"
   }

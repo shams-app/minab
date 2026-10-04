@@ -109,7 +109,9 @@ export interface RunAnswer {
 
 /** The message ends of both sides. A `Worker`, a `MessagePort` and a worker's `self` all fit. */
 export interface BridgeEndpoint {
+    /** Sends a message to the other side. */
     postMessage(message: unknown): void;
+    /** Listens for the messages of the other side. */
     addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
     /** A `MessagePort` needs it. */
     start?(): void;
