@@ -31,5 +31,27 @@
         }
       }
     ]
+  },
+  "data": {
+    "responses": [
+      {
+        "match": "days_ago",
+        "value": 120
+      },
+      {
+        "match": "FROM \"Customers\"",
+        "rows": [
+          {
+            "id": "c-1",
+            "balance": 1500,
+            "metadata": {
+              "note": "disputed"
+            },
+            "status": "ok",
+            "flaggedAt": 0
+          }
+        ]
+      }
+    ]
   }
 }

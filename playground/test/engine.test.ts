@@ -55,9 +55,20 @@ describe('analysis', () => {
 
     test('flags check-only constructs statically', async () => {
         await engine.setHost(demo());
-        const report = await engine.analyze('fn f(): INTEGER { let n: INTEGER = 0; loop i from 1 to 3 { n = n + i; } n }\nf()');
+        const report = await engine.analyze('DELETE #Order[.total > 1];\ntrue');
         expect(report.program.checkOnly).toBe(true);
-        expect(report.program.checkOnlyConstructs.map(c => c.type)).toEqual(['LoopStatement']);
+        expect(report.program.checkOnlyConstructs.map(c => c.type)).toEqual(['DeleteStatement']);
+    });
+
+    test('loops, .$index and tuples are not check-only any more (X4)', async () => {
+        await engine.setHost(demo());
+        const source = 'let n: INTEGER = 0;\nloop x in [10, 20, 30] where .$index > 0 { n += x; }\nlet t: (INTEGER, INTEGER) = (n, 1);\nt[0]';
+        const report = await engine.analyze(source);
+        expect(report.diagnostics).toEqual([]);
+        expect(report.program.checkOnly).toBe(false);
+        const run = await engine.run(source, 6);
+        expect(run.stage).toBe('done');
+        expect(run.result).toMatchObject({ kind: 'value', value: 50 });
     });
 
     test('assignment and if! are not check-only any more (X3)', async () => {
@@ -139,10 +150,10 @@ describe('running', () => {
 
     test('a construct the interpreter does not run yet is a refusal, not an error', async () => {
         await engine.setHost(demo());
-        const report = await engine.run('let n: INTEGER = 0;\nloop i from 1 to 3 { n = n + i; }\nn', 8);
+        const report = await engine.run('DELETE #Order[.total > 1];\ntrue', 8);
         expect(report.stage).toBe('run');
         expect(report.error).toBeUndefined();
-        expect(report.refusal).toMatchObject({ construct: 'LoopStatement' });
+        expect(report.refusal).toMatchObject({ construct: 'DeleteStatement' });
     });
 
     test('a program that needs no data runs while the database has not booted', async () => {

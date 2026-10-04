@@ -115,6 +115,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'eval.hostFunctionFailed': { via: 'runtime' }, // needs host declarations: test/run-errors.test.ts
     'eval.hostFunctionMissing': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
+    'eval.indexNeedsArray': { via: 'runtime' }, // test/loops.test.ts
     'eval.missingInput': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.programInvalid': { via: 'runtime' }, // test/runtime.test.ts
     'eval.writesNotSupported': { via: 'runtime' }, // test/ports.test.ts

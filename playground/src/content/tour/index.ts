@@ -318,13 +318,14 @@ export const lessons: Lesson[] = [
         id: 'whats-next',
         number: 12,
         title: 'What’s next',
-        summary: 'Loops and writes: checked today, executed later.',
+        summary: 'Loops run. Writes are checked today, executed later.',
         body: nextBody,
         starter: nextStarter,
         solution: nextSolution,
         host: { dataset: 'demo' },
         task: 'Run the loop and read the answer.',
-        goal: ({ report }) => report.refusal?.construct === 'LoopStatement' && report.diagnostics.length === 0,
+        goal: ({ report }) =>
+            report.stage === 'done' && (report.result?.kind === 'verdict' || report.result?.kind === 'value') && report.diagnostics.length === 0,
         hints: ['Just press Run.'],
         focus: 'result'
     }

@@ -26,13 +26,13 @@
  * Evaluation is async throughout: every user function is implicitly
  * asynchronous (spec §8) and every pushdown is a round trip.
  *
- * Statements (X3) run in one place, `runStatements`: `let`, assignment to a
- * local name, and `if!`. A block gets its own scope. A write (a record path
+ * Statements (X3, X4) run in one place, `runStatements`: `let`, assignment to a
+ * local name, `if!` and the three loops with `break` and `continue`. A block gets its own scope. A write (a record path
  * as an assignment target) fails with `eval.writesNotSupported`.
  *
  * Not implemented yet (each fails with an explicit reason rather than a
- * wrong answer): loops (§9.4, X4), `INSERT`/`UPDATE`/`DELETE` execution
- * (§10, X5, X6), and `.$index` (§3.5, X4). ADR 0001 covers how writes execute.
+ * wrong answer): `INSERT`/`UPDATE`/`DELETE` execution (§10, X5, X6). ADR 0001
+ * covers how writes execute.
  */
 
 import {
@@ -40,6 +40,10 @@ import {
     isBinaryExpression,
     isBlock,
     isBooleanLiteral,
+    isBreakStatement,
+    isContinueStatement,
+    isLoopStatement,
+    isTupleLiteral,
     isCallExpression,
     isCastExpr,
     isCurrentRecord,
@@ -76,6 +80,7 @@ import {
     type FunctionDecl,
     type IfStatement,
     type IfStatementElse,
+    type LoopStatement,
     type MainStatement,
     type Model,
     type SwitchExpr,
@@ -174,6 +179,14 @@ function placeError(e: unknown, node: AstNode): void {
     }
 }
 
+/** `break` and `continue` travel up to their loop as a thrown value. A loop catches the ones that name it. */
+class LoopSignal {
+    constructor(
+        readonly kind: 'break' | 'continue',
+        readonly label?: string
+    ) {}
+}
+
 function fail(reason: string, code?: string, params?: Record<string, string | number>): never {
     throw new EvalError(reason, code, params);
 }
@@ -183,6 +196,8 @@ interface Frame {
     record?: Row;
     table?: string;
     variables: Map<string, MinabValue>;
+    /** The position of `.` in an array source (`.$index`, spec §3.5). Not set for the rows of a table. */
+    index?: number;
     /** The declared type of each name in `variables`, so an assignment keeps the type (`DECIMAL` stays exact). */
     types: Map<string, Type>;
     /**
@@ -292,6 +307,11 @@ export class MinabInterpreter {
 
     /** An error thrown inside a run, as a structured result. A bug (anything else) is thrown again. */
     private failure(e: unknown): InterpretResult {
+        if (e instanceof LoopSignal)
+            return {
+                ok: false,
+                error: { code: 'eval.failed', message: `"${e.kind}" is not inside a loop`, params: { reason: `"${e.kind}" is not inside a loop` } }
+            };
         if (e instanceof EvalError || e instanceof NumberError) {
             const params = { ...e.params };
             // `reason` carries the text of an uncoded failure, so the message can be built from the registry.
@@ -577,21 +597,34 @@ export class MinabInterpreter {
         if (isFilterAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
             if (!Array.isArray(receiver)) fail('a filter needs a collection');
-            return await this.filterArray(receiver, expr.filter, state);
+            // The rows of a table have no position (spec §3.5): only an array source sets `.$index`.
+            return await this.filterArray(receiver, expr.filter, state, !this.isRelational(expr.receiver, state));
         }
         if (isGroupKeyRef(expr)) fail('KEY is only meaningful inside a grouped query, which runs as SQL');
-        if (isIndexRef(expr)) fail('".$index" is not evaluated yet (Phase 5 scope)');
+        if (isIndexRef(expr)) {
+            const index = state.currentIndex();
+            if (index === undefined) fail(coded('eval.indexNeedsArray').reason, 'eval.indexNeedsArray');
+            return index;
+        }
+        if (isTupleLiteral(expr)) {
+            // A tuple is an array of fixed size; `[n]` reads a position.
+            const items: MinabValue[] = [];
+            for (const item of expr.items) items.push(await this.expression(item, state));
+            return items;
+        }
         fail(`"${expr.$type}" is not evaluated yet (Phase 5 scope)`);
     }
 
-    private async filterArray(rows: MinabValue[], filter: Expression, state: State): Promise<MinabValue[]> {
+    private async filterArray(rows: MinabValue[], filter: Expression, state: State, indexed = true): Promise<MinabValue[]> {
         const kept: MinabValue[] = [];
-        for (const row of rows) {
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
             const frame: Frame = {
                 record: row as Row,
                 table: undefined,
                 variables: new Map(),
-                types: new Map()
+                types: new Map(),
+                index: indexed ? i : undefined
             };
             if (this.truthy(await this.expression(filter, state.push(frame)))) kept.push(row);
         }
@@ -648,7 +681,7 @@ export class MinabInterpreter {
         return block.tail ? await this.mainStatement(block.tail, inner) : null;
     }
 
-    /** Runs statements in order in the innermost scope of `state`. X4 adds loops here, X5 and X6 add writes. */
+    /** Runs statements in order in the innermost scope of `state`. X5 and X6 add writes. */
     private async runStatements(statements: BodyStatement[], state: State): Promise<void> {
         for (const statement of statements) {
             state.budget.check();
@@ -661,6 +694,12 @@ export class MinabInterpreter {
                     await this.assign(statement, state);
                 } else if (isIfStatement(statement)) {
                     await this.ifStatement(statement, state);
+                } else if (isLoopStatement(statement)) {
+                    await this.loop(statement, state);
+                } else if (isBreakStatement(statement)) {
+                    throw new LoopSignal('break', statement.label);
+                } else if (isContinueStatement(statement)) {
+                    throw new LoopSignal('continue', statement.label);
                 } else {
                     fail(`"${statement.$type}" is not executed yet`);
                 }
@@ -669,6 +708,84 @@ export class MinabInterpreter {
                 throw e;
             }
         }
+    }
+
+    // ---- loops (X4) -----------------------------------------------------
+
+    /**
+     * A loop (§9.4). Every step, also a skipped one, counts toward `limits.loopIterations`.
+     * Each step runs in a new frame. The loop gives no value: the tail of the body is dropped.
+     */
+    private async loop(loop: LoopStatement, state: State): Promise<void> {
+        const step = async (frame: Frame): Promise<'next' | 'stop'> => {
+            state.budget.countIteration();
+            const inner = state.push(frame);
+            if (loop.whereClause && !this.truthy(await this.expression(loop.whereClause.condition, inner))) return 'next';
+            try {
+                await this.runStatements(loop.statements, inner);
+                if (loop.tail) await this.mainStatement(loop.tail, inner);
+            } catch (e) {
+                // An unlabeled signal belongs to the innermost loop; a labeled one to the loop with that label.
+                if (e instanceof LoopSignal && (e.label === undefined || e.label === loop.label)) return e.kind === 'break' ? 'stop' : 'next';
+                throw e;
+            }
+            return 'next';
+        };
+        const names = (value?: MinabValue): Frame => ({
+            variables: new Map(loop.variable ? [[loop.variable, value ?? null]] : []),
+            types: new Map(),
+            scopeOnly: true
+        });
+
+        if (loop.lowerBound && loop.upperBound) {
+            const from = this.loopInteger(await this.expression(loop.lowerBound, state));
+            const to = this.loopInteger(await this.expression(loop.upperBound, state));
+            const by = loop.stepClause ? this.loopInteger(await this.expression(loop.stepClause.step, state)) : 1;
+            if (by <= 0) fail('the step of a loop must be a positive whole number');
+            for (let i = from; i <= to; i += by) {
+                if ((await step(names(i))) === 'stop') return;
+            }
+        } else if (loop.iterable) {
+            const { source, table, relational } = await this.loopSource(loop.iterable, state);
+            if (source === null) return;
+            if (!Array.isArray(source)) fail('a loop needs an array or a collection to go through');
+            for (let i = 0; i < source.length; i++) {
+                const frame: Frame = {
+                    record: source[i] as Row,
+                    table,
+                    variables: new Map(loop.variable ? [[loop.variable, source[i]]] : []),
+                    types: new Map(),
+                    index: relational ? undefined : i
+                };
+                if ((await step(frame)) === 'stop') return;
+            }
+        } else if (loop.condition) {
+            while (this.truthy(await this.expression(loop.condition, state))) {
+                if ((await step(names())) === 'stop') return;
+            }
+        }
+    }
+
+    /**
+     * What a for-in loop goes through. A collection over a table is read once, as rows, with one
+     * statement; the loop then runs in memory. Anything else is an ordinary value (an array).
+     */
+    private async loopSource(iterable: Expression, state: State): Promise<{ source: MinabValue; table?: string; relational: boolean }> {
+        if (this.isRelational(iterable, state)) {
+            const compiled = this.compiler.compileRows(iterable, this.outerResolver(state), this.clockOf(state));
+            if (compiled.ok) {
+                const rows = await this.runStatement(compiled.query, iterable, state);
+                return { source: rows.map(row => this.normalizeRecord(row, compiled.table)), table: compiled.table, relational: true };
+            }
+        }
+        return { source: await this.expression(iterable, state), relational: false };
+    }
+
+    /** A loop bound or step: a whole number. */
+    private loopInteger(value: MinabValue): number {
+        const numeric = this.number(value);
+        if (typeof numeric !== 'number' || !Number.isInteger(numeric)) fail('the bounds and the step of a loop must be whole numbers');
+        return numeric;
     }
 
     /** `if!`: the first branch whose condition is true runs. A branch is a block; its tail value is dropped. */
@@ -970,7 +1087,8 @@ export class MinabInterpreter {
 
     /** A number literal reads its own text, so `0.30` and 20-digit numbers are not rounded by JavaScript. */
     private numberLiteral(expr: { value: number; $cstNode?: { text: string } }): Numeric {
-        return literal(expr.$cstNode?.text ?? String(expr.value));
+        // The first item of a tuple shares its syntax node with the tuple, so the text can start with "(".
+        return literal(expr.$cstNode?.text.replace(/^[\s(]+/, '') ?? String(expr.value));
     }
 
     /** `$`: the value the host supplied. A number with a fraction is a `DECIMAL`. */
@@ -1085,6 +1203,11 @@ class State {
 
     currentTable(): string | undefined {
         return this.recordFrames[0]?.table;
+    }
+
+    /** `.$index`: the position of `.` when it comes from an array. `undefined` for the rows of a table. */
+    currentIndex(): number | undefined {
+        return this.recordFrames[0]?.index;
     }
 
     parentRecord(): Row | undefined {

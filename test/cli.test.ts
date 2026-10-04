@@ -187,9 +187,9 @@ describe('minab run', () => {
     });
 
     test('a construct the evaluator does not implement yet reports its reason, not a stack trace', async () => {
-        // Loops are Phase 5's explicit "next increment" (spec §9.4).
-        write('loop.minab', 'loop n from 0 to 3 { }');
-        const result = await cli('run', 'loop.minab');
+        // Writes come with X5 and X6 (spec §10).
+        write('delete.minab', 'DELETE #Order[.total > 100]; true');
+        const result = await cli('run', 'delete.minab');
         expect(result.code).toBe(EXIT_PROGRAM_ERROR);
         expect(result.errors).toContain('minab: cannot evaluate this program:');
         expect(result.errors).not.toContain('at ');

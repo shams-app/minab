@@ -6,8 +6,9 @@
 // each candidate row, so the loop's own customer is reached by its alias
 // (`customer.id`), not by a bare `.id`.
 //
-// CHECK-ONLY: it parses, resolves, and type-checks, but loops and writes are
-// not executed yet — `minab run` says so.
+// CHECK-ONLY: it parses, resolves, and type-checks, and the loop runs, but the
+// writes are not executed yet — `minab run` stops at the first `UPDATE` and
+// says so.
 //
 //   minab check reconcile-overdue-accounts.minab
 

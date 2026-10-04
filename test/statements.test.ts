@@ -128,8 +128,8 @@ describe('limits', () => {
 });
 
 describe('what does not run yet', () => {
-    test('a loop in a function body is still refused, by name', async () => {
-        const result = await run('fn f(): INTEGER { loop i from 1 to 3 { } 1 }\nf()');
-        expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('"LoopStatement" is not executed yet') } });
+    test('a write in a function body is still refused, by name', async () => {
+        const result = await run('fn f(): INTEGER { DELETE #Order[.total > 1]; 1 }\nf()');
+        expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('"DeleteStatement" is not executed yet') } });
     });
 });

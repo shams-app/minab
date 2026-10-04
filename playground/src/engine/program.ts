@@ -18,14 +18,9 @@ import type { CheckOnlyConstruct, ProgramInfo, Range } from './protocol.js';
  * (README "Status"; `minab-interpreter.ts`). Keyed by AST `$type`.
  */
 export const CHECK_ONLY: Record<string, { label: string; specRef: string }> = {
-    LoopStatement: { label: 'loops', specRef: '§9.4' },
-    BreakStatement: { label: 'break', specRef: '§9.4' },
-    ContinueStatement: { label: 'continue', specRef: '§9.4' },
     InsertStatement: { label: 'INSERT', specRef: '§10.1' },
     DeleteStatement: { label: 'DELETE', specRef: '§10.2' },
-    UpdateStatement: { label: 'UPDATE', specRef: '§10.3' },
-    IndexRef: { label: '.$index', specRef: '§3.5' },
-    TupleLiteral: { label: 'tuples', specRef: '§7.6' }
+    UpdateStatement: { label: 'UPDATE', specRef: '§10.3' }
 };
 
 export function rangeOf(node: AstNode | undefined): Range | undefined {
@@ -101,7 +96,6 @@ export function describeProgram(document: LangiumDocument<Model>, prepared: Pick
  */
 export function explainRefusal(reason: string): { construct: string; label: string; specRef: string } | undefined {
     if (!/is not (executed|evaluated) yet|are not executed yet/.test(reason)) return undefined;
-    if (reason.startsWith('".$index"')) return { construct: 'IndexRef', ...CHECK_ONLY.IndexRef };
     const type = /^"(\w+)"/.exec(reason)?.[1];
     if (type && CHECK_ONLY[type]) return { construct: type, ...CHECK_ONLY[type] };
     return { construct: type ?? 'unknown', label: type ?? 'this construct', specRef: '' };

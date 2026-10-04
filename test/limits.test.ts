@@ -390,7 +390,7 @@ describe('statements and rows', () => {
     });
 });
 
-describe('loop iterations (X4 will call the counter)', () => {
+describe('loop iterations (X4 counts each step)', () => {
     test('the counter trips at the limit, counted over all loops of the run', () => {
         const budget = new RunBudget(resolveLimits({ loopIterations: 3 }));
         try {

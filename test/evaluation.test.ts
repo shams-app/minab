@@ -343,12 +343,11 @@ describe('the interpreted layer proper', () => {
         expect(result).toBe(true);
     });
 
-    test('a construct Phase 5 does not execute says so rather than answering wrongly', async () => {
+    test('a construct that does not execute yet says so rather than answering wrongly', async () => {
         const executor = new RecordingExecutor();
         const result = await run(
             `
-            loop i from 1 to 3 {
-            }
+            DELETE #Order[.total > 100];
 
             .total > 0
             `,
