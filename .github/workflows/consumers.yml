@@ -1,0 +1,25 @@
+# Packs the package and loads it from five kinds of project: ES module, CommonJS,
+# Jest, Bun, and TypeScript with `moduleResolution: node` (H1, D32, D06).
+name: Consumers
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  consumers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+      - run: npm run test:consumers

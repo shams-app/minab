@@ -22,15 +22,18 @@
   "exports": {
     ".": {
       "types": "./out/src/runtime/index.d.ts",
-      "import": "./out/src/runtime/index.js"
+      "import": "./out/src/runtime/index.js",
+      "require": "./out/cjs/index.cjs"
     },
     "./node": {
       "types": "./out/src/node/index.d.ts",
-      "import": "./out/src/node/index.js"
+      "import": "./out/src/node/index.js",
+      "require": "./out/cjs/node.cjs"
     },
     "./nestjs": {
       "types": "./out/src/nestjs/index.d.ts",
-      "import": "./out/src/nestjs/index.js"
+      "import": "./out/src/nestjs/index.js",
+      "require": "./out/cjs/nestjs.cjs"
     },
     "./browser": {
       "types": "./out/src/browser/index.d.ts",
@@ -91,6 +94,7 @@
   },
   "files": [
     "out/src",
+    "out/cjs",
     "schemas",
     "!out/src/**/*.map",
     "README.md",
@@ -110,13 +114,15 @@
   "scripts": {
     "langium:generate": "langium generate",
     "langium:watch": "langium generate --watch",
-    "build": "npm run langium:generate && tsc -b tsconfig.json",
+    "build": "npm run langium:generate && tsc -b tsconfig.json && node scripts/build-cjs.mjs",
     "watch": "concurrently -k -r \"npm:langium:watch\" \"npm:build:watch\"",
     "build:watch": "tsc -b tsconfig.json --watch",
     "cli": "node out/src/cli/bin.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json",
+    "test:consumers": "node test/consumers/run.mjs",
+    "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json && node scripts/build-cjs.mjs",
+    "build:cjs": "node scripts/build-cjs.mjs",
     "prepack": "npm run build:release",
     "docs:diagnostics": "tsc -b tsconfig.json && node scripts/diagnostics-doc.mjs",
     "prelint": "npm run langium:generate",
@@ -169,6 +175,7 @@
     "@types/node": "^22.20.3",
     "@types/pg": "^8.23.1",
     "concurrently": "^9.0.0",
+    "esbuild": "^0.28.2",
     "langium-cli": "~4.4.0",
     "oxfmt": "^0.71.0",
     "oxlint": "^1.86.0",
