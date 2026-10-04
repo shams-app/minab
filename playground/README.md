@@ -44,7 +44,7 @@ src/
     engine.ts       check / compile / run through the runtime API (`src/runtime/`) → RunReport; two queues (language, database)
     language.ts     one `Minab` runtime per host (schema + rule context), and the syntax tree for editor intelligence
     program.ts      program info for the UI: kind and type from the runtime, check-only constructs and symbols from the syntax tree
-    intel.ts        hover, completion, go-to-definition, AST view (via the type checker)
+    intel.ts        calls src/editor/ for hover, completion and go-to-definition; builds the AST view
     database.ts     PGlite: lazy boot, citext, JSON-shaped results, preview, SQL console
     ddl.ts          host schema + seed rows → CREATE TABLE / INSERT (also the exported seed.sql)
     protocol.ts     every type that crosses the worker boundary
