@@ -230,7 +230,7 @@ export function ResultView({ report, running, stale, subject, onRun, onShowProbl
                     value={result.value}
                     kind={report.program.kind}
                     subject={subject}
-                    statements={report.trace.length}
+                    statements={report.trace.filter(entry => !entry.dryRun).length}
                     onShowExecution={onShowExecution}
                 />
             );
@@ -238,6 +238,8 @@ export function ResultView({ report, running, stale, subject, onRun, onShowProbl
         return <ValueView value={result.value} type={result.type} />;
     })();
     const rows = report.result?.kind === 'rows' ? report.result.rows.length : undefined;
+    const dryWrites = report.trace.filter(entry => entry.dryRun).length;
+    const reads = report.trace.length - dryWrites;
     return (
         <div className="mb-result" data-state={stale ? 'stale' : running ? 'running' : 'fresh'}>
             {body}
@@ -248,8 +250,13 @@ export function ResultView({ report, running, stale, subject, onRun, onShowProbl
                     </span>
                 )}
                 <span>
-                    {report.trace.length} statement{report.trace.length === 1 ? '' : 's'}
+                    {reads} statement{reads === 1 ? '' : 's'}
                 </span>
+                {dryWrites > 0 && (
+                    <span>
+                        {dryWrites} write{dryWrites === 1 ? '' : 's'} (dry run)
+                    </span>
+                )}
                 <span>{report.totalMs.toFixed(1)} ms</span>
                 {stale && <Badge tone="warning">edited since this run</Badge>}
                 {running && <Spinner size={12} label="Running" />}

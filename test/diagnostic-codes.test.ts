@@ -108,9 +108,16 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.notSql': { via: 'runtime' }, // test/run-errors.test.ts
     'compile.programHasErrors': { via: 'runtime' }, // test/runtime.test.ts
 
+    'compile.writeColumn': { via: 'compiler', program: 'INSERT #Order VALUES { bogus: 1 };' },
+    'compile.writeEmptySet': { via: 'compiler', program: 'UPDATE #Order SET { };' },
+    'compile.writeNeedsName': { via: 'compiler', program: 'INSERT #Order VALUES FROM #Order SELECT .total + 1;' },
+    'compile.writePath': { via: 'runtime' }, // test/writes-json-paths.test.ts
+    'compile.writeTarget': { via: 'compiler', program: 'INSERT #Order[.total > 1] VALUES { total: 1 };' },
+
     'data.error': { via: 'runtime' }, // needs a failing data port: test/run-errors.test.ts
     'data.noPort': { via: 'runtime' }, // test/runtime.test.ts
 
+    'eval.cannotCreateRecord': { via: 'runtime' }, // test/writes-json-paths.test.ts
     'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
     'eval.failed': { via: 'runtime' }, // test/run-errors.test.ts
@@ -120,6 +127,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'eval.indexNeedsArray': { via: 'runtime' }, // test/loops.test.ts
     'eval.missingInput': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.programInvalid': { via: 'runtime' }, // test/runtime.test.ts
+    'eval.writeModeMissing': { via: 'runtime' }, // test/writes.test.ts
     'eval.writesNotSupported': { via: 'runtime' }, // test/ports.test.ts
 
     'limit.callDepth': { via: 'runtime' }, // test/limits.test.ts
@@ -147,6 +155,7 @@ const CASES: Record<DiagnosticCode, Case> = {
 
     'rule.fieldTypeMissing': { via: 'checker', program: '$', target: ofType('FieldValue'), setting: 'fieldWithoutType' },
     'rule.fieldValueOutsideFieldRule': { via: 'validator', program: '$ == 1' },
+    'rule.writeInRule': { via: 'validator', program: 'DELETE #Order[.total > 1];' },
 
     'scope.assignToInput': { via: 'runtime' }, // needs host inputs: test/ports.test.ts
     'scope.columnNeedsTable': {
@@ -219,6 +228,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'wire.invalidValue': { via: 'runtime' }, // test/wire.test.ts
     'wire.programNotFound': { via: 'runtime' }, // test/nestjs/service.test.ts
     'wire.remoteFailed': { via: 'runtime' }, // test/browser/remote.test.ts
+    'wire.requestFailed': { via: 'runtime' }, // test/browser/requests.test.ts
     'wire.tooManyRuns': { via: 'runtime' }, // test/wire.test.ts
     'wire.unsupportedVersion': { via: 'runtime' }, // test/wire.test.ts
     'wire.workerFailed': { via: 'runtime' } // test/browser/bridge.test.ts
@@ -299,9 +309,11 @@ describe('every code is reported by a program', () => {
             }
             case 'compiler': {
                 const { document } = await validate.record(testCase.program);
-                const query = AstUtils.streamAst(document.parseResult.value).find(node => node.$type === 'Query');
-                expect(query, 'the program has a query to compile').toBeDefined();
-                const result = services.record.sqlCompiler.compileQuery(query as never);
+                const nodes = AstUtils.streamAst(document.parseResult.value);
+                const write = nodes.find(node => ['InsertStatement', 'UpdateStatement', 'DeleteStatement'].includes(node.$type));
+                const query = nodes.find(node => node.$type === 'Query');
+                expect(write ?? query, 'the program has a query or a write to compile').toBeDefined();
+                const result = write ? services.record.sqlCompiler.compileWrite(write as never) : services.record.sqlCompiler.compileQuery(query as never);
                 expect(result.ok).toBe(false);
                 if (!result.ok) {
                     expect(result.code).toBe(expected);

@@ -14,9 +14,11 @@ export interface SqlQuery {
     params: unknown[];
 }
 
+/** One result row: column name to value. */
 export type Row = Record<string, unknown>;
 
 /** The data port before R3 (see `DataPort` in `src/runtime/ports.ts`). */
 export interface QueryExecutor {
+    /** Runs one statement and returns its rows. */
     execute(query: SqlQuery): Promise<Row[]>;
 }

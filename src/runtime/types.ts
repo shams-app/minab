@@ -21,8 +21,10 @@ export interface SourceRange {
     end: { line: number; character: number };
 }
 
+/** How serious a diagnostic is. Only `error` makes a program invalid. */
 export type MinabSeverity = 'error' | 'warning' | 'info' | 'hint';
 
+/** A problem found when a program is prepared: a syntax error, a type error, a warning. Hosts map it to an editor marker by `code`. */
 export interface MinabDiagnostic {
     severity: MinabSeverity;
     /** A stable code, for example `type.implicitCoercion`. Hosts translate by code. */
@@ -37,6 +39,7 @@ export interface MinabDiagnostic {
 /** The type the host wants back. Shamsine uses the six words. */
 export type ExpectedType = 'text' | 'number' | 'boolean' | 'date' | 'dateTime' | 'list' | { minab: string };
 
+/** What a host gives to `createMinab`. Everything except `schema` is optional. */
 export interface MinabOptions {
     /** The whole read surface of every program (D29). Give `version` so services can be cached by it. */
     schema: MinabSchema;
@@ -65,6 +68,7 @@ export interface MinabOptions {
     mode?: 'development' | 'production';
 }
 
+/** Options for one `prepare` call. */
 export interface PrepareOptions {
     /** Where the program sits: which table `.` means, and whether `$` exists. */
     ruleContext?: MinabRuleContext;
@@ -88,7 +92,7 @@ export interface RunInputs {
 export interface RunPorts {
     /** Without it, a statement fails with `data.noPort`. */
     data?: DataPort;
-    /** Without it, a write fails with `eval.writesNotSupported` (X5 builds writes). */
+    /** Needed to apply writes (`writes: 'apply'`). Without it, applying fails with `eval.writesNotSupported`. A dry run needs no port. */
     write?: WritePort;
     hostFunctions?: HostFunctions;
     /** Default: the system clock, in UTC. Read once for each run. */
@@ -96,6 +100,7 @@ export interface RunPorts {
     events?: EventSink;
 }
 
+/** Options for one `run` call. */
 export interface RunOptions {
     /**
      * Aborts the run. The interpreter checks it between steps, and every port call gets it.
@@ -105,8 +110,29 @@ export interface RunOptions {
     signal?: AbortSignal;
     /** Limits for this run. Each one is the smaller of this value and the host's: a run never raises a limit. */
     limits?: Partial<Limits>;
+    /**
+     * What a program that writes does (D26). There is no default: a host must choose, and a program
+     * that writes with no choice fails with `eval.writeModeMissing` before any port is called.
+     * `dry-run`: reads run, writes are collected in `RunResult.writes` and not run.
+     * `apply`: all writes of the run run in one transaction of `RunPorts.write`.
+     * A program that does not write ignores it.
+     */
+    writes?: WriteMode;
 }
 
+/** How a run treats `INSERT`, `UPDATE` and `DELETE`: collect them (`dry-run`) or run them in one transaction (`apply`). */
+export type WriteMode = 'dry-run' | 'apply';
+
+/** One `INSERT`, `UPDATE` or `DELETE` of a run. */
+export interface WriteStatement {
+    sql: string;
+    params: unknown[];
+    range?: SourceRange;
+    /** Rows the database changed. Only when the run applied the write. */
+    rowCount?: number;
+}
+
+/** A run error or a compile error. A host maps it by `code`, never by `message`. */
 export interface MinabError {
     /** A stable code from the registry, for example `eval.divisionByZero` or `limit.timeout`. */
     code: string;
@@ -120,13 +146,16 @@ export interface MinabError {
 
 /** What a run used. */
 export interface RunStats {
-    /** Statements sent to the data port. */
+    /** Statements sent to the data port, writes included. */
     statements: number;
     /** Rows read, over all statements. */
     rows: number;
+    /** Writes of the run (a run on this side of the wire always sets it). In a dry run `rows` is 0, because nothing ran. */
+    writes?: { statements: number; rows: number };
     durationMs: number;
 }
 
+/** What `run` answers. It never throws for a failed program: look at `ok`. */
 export type RunResult =
     | {
           ok: true;
@@ -135,10 +164,13 @@ export type RunResult =
           logs: string[];
           /** `true` when more entries were logged than the limit allows. The extra ones were dropped. It is not an error. */
           logsTruncated?: boolean;
+          /** The mode of the run, and its write statements in order. Empty when the program did not write. */
+          writes?: { mode: WriteMode | null; statements: WriteStatement[] };
           stats: RunStats;
       }
     | { ok: false; error: MinabError };
 
+/** What `compile` answers: the program as one SQL statement, or the reason it is not one. */
 export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 
 /**
@@ -173,6 +205,7 @@ export interface ProgramAnalysis {
     tier: 'local' | 'data';
 }
 
+/** A program that was parsed and checked once. It can run many times, also at the same time. */
 export interface PreparedProgram {
     /** Syntax errors, type errors, warnings, and `expect` mismatches. Empty when the program is valid. */
     readonly diagnostics: readonly MinabDiagnostic[];
@@ -191,6 +224,7 @@ export interface PreparedProgram {
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
 }
 
+/** Numbers about the service cache. Useful in tests and in a health check. */
 export interface CacheStats {
     /** Service sets in the cache now. */
     size: number;
@@ -202,9 +236,11 @@ export interface CacheStats {
     openDocuments: number;
 }
 
+/** The runtime a host holds. Make it once with `createMinab`. */
 export interface Minab {
     /** Parses and checks. Resolves with diagnostics for a bad program. Rejects only for a bad call. */
     prepare(source: string, options?: PrepareOptions): Promise<PreparedProgram>;
+    /** How full the service cache is, and how often it was hit. */
     cacheStats(): CacheStats;
     /** Frees the caches. A disposed runtime throws on use. */
     dispose(): void;

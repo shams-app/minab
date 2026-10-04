@@ -28,12 +28,14 @@ function requestIdOf(header: string | string[] | undefined): string {
     return value && value.trim() !== '' ? oneLine(value.trim().slice(0, 100)) : randomUUID();
 }
 
+/** The run endpoint: `POST` of a wire format v1 request. It runs stored programs with the ports and inputs of the server. */
 export class MinabRunController {
     constructor(
         @Inject(MinabService) private readonly service: MinabService,
         @Inject(MINAB_OPTIONS) private readonly options: MinabModuleOptions
     ) {}
 
+    /** Runs the batch of a request and answers with one result for each run. A valid request is HTTP 200 even when some runs fail. */
     @Post()
     @HttpCode(200)
     async run(@Body() body: unknown, @Req() request: unknown, @Headers('x-request-id') requestIdHeader?: string | string[]): Promise<WireResponse> {

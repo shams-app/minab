@@ -130,6 +130,11 @@ A program cannot become SQL.
 | `compile.notSql` | error | this program does not compile to SQL on its own: {reason} | `reason` | Part of the program has no SQL form (for example a user function or a statement). The interpreter runs it; use run instead of compile. |
 | `compile.nothingToCompile` | error | nothing to compile: the program has no query or expression | none | A program with only declarations has no value to turn into SQL. Add a query or an expression at the end. |
 | `compile.programHasErrors` | error | the program has errors, so it cannot be compiled | none | Fix the diagnostics of the program first. A program with errors is never compiled. |
+| `compile.writeColumn` | error | "{column}" is not a column of "{table}" that a write can set | `column`, `table` | INSERT and UPDATE set plain columns of the target table. Use a column name from the schema. A relation is set through its foreign key column. |
+| `compile.writeEmptySet` | error | SET needs at least one assignment | none | An UPDATE with an empty SET changes nothing. Add an assignment, or remove the statement. |
+| `compile.writeNeedsName` | error | give this column a name with AS, so INSERT can match it to a column of the target | none | INSERT ... VALUES query matches the columns of the query to the columns of the target by name. Name each computed column with AS. |
+| `compile.writePath` | error | this record path cannot be assigned: {reason} | `reason` | A path assignment walks relations from a record, one step at a time. Every step before the last must be a relation, and a step after a filtered or to-many step cannot create records. Assign through a loop variable or a shorter path. |
+| `compile.writeTarget` | error | the target of a write must be a table (#Table), a to-many relation of a record (.orders) or a JSON array column (.tags) | none | INSERT, UPDATE and DELETE write to a table or to a JSON array column. An INSERT target cannot have a filter or a position. |
 
 ## eval
 
@@ -137,6 +142,7 @@ A program fails while it runs.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `eval.cannotCreateRecord` | error | cannot create the missing "{table}" record: the column "{column}" needs a value and has no default | `table`, `column` | A "!" in a path assignment creates the missing related record with default values. The table needs a value that has no default. Create the record with INSERT and give the value, then assign. |
 | `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
 | `eval.divisionByZero` | error | division by zero | none | "/" and "%" fail when the right side is zero. Check the divisor first, for example with "if". |
 | `eval.failed` | error | {reason} | `reason` | The program failed while it ran. params.reason has the English reason. Specific failures have their own code. |
@@ -146,6 +152,7 @@ A program fails while it runs.
 | `eval.integerOutOfRange` | error | an INTEGER result is outside the safe range of -9007199254740991 to 9007199254740991 | none | INTEGER values are whole numbers in the safe JavaScript range. Use DECIMAL for larger numbers. |
 | `eval.missingInput` | error | the host input "{name}" has no value for this run | `name` | The program reads a declared host input, but run got no value for it. Give a value in the hostInputs of run. |
 | `eval.programInvalid` | error | the program has errors, so it cannot run | none | Fix the diagnostics of the program first. A program with errors never runs. |
+| `eval.writeModeMissing` | error | the program writes data, so the run must say how: writes "dry-run" or "apply" | none | A host must choose. Give writes: "dry-run" to collect the statements without running them, or writes: "apply" to run them in one transaction. |
 | `eval.writesNotSupported` | error | this run has no write port, so the program cannot write | none | The program writes data, and the host gave run no write port. Give a write port, or remove the write. |
 
 ## limit
@@ -201,6 +208,7 @@ A rule cannot be checked in this setting.
 | --- | --- | --- | --- | --- |
 | `rule.fieldTypeMissing` | error | the host did not supply a type for "$" (MinabRuleContext.fieldType) | none | This is a host setup problem. The host must give the type of the field when it checks a field-level rule. |
 | `rule.fieldValueOutsideFieldRule` | error | '$' is only valid in a field-level rule; this program isn't being validated as one | none | The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule. |
+| `rule.writeInRule` | error | a validation rule cannot write: INSERT, UPDATE, DELETE and record assignment are not allowed here | none | A record rule or field rule only reads. Move the write into a program that a host runs on purpose, for example a command. |
 
 ## wire
 
@@ -213,6 +221,7 @@ A wire request, response or value does not follow wire format v1 (R6).
 | `wire.invalidValue` | error | the value at {path} is not a valid {expected} | `path`, `expected` | A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error. |
 | `wire.programNotFound` | error | no stored program with id "{id}" and version "{version}" | `id`, `version` | The run endpoint runs stored programs by id and version, and the host program store has none with this id and version. Check the ref of the run. A server never runs program text sent by a client unless it is in development mode. |
 | `wire.remoteFailed` | error | the remote run failed: {reason} | `reason` | The browser could not get an answer from the server: the network failed, the server answered with an HTTP error that is not a Minab error, or its answer was missing a result. Try again. params.reason says which. |
+| `wire.requestFailed` | error | {reason} | `reason` | A request that the host app made to its own browser worker (`WorkerMinab.request`) failed: the handler threw, or no handler has this name. The message is the one of the handler. |
 | `wire.tooManyRuns` | error | the request has {used} runs, and the limit is {limit} | `used`, `limit` | One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests. |
 | `wire.unsupportedVersion` | error | wire format version {version} is not supported (supported: {supported}) | `version`, `supported` | The "v" field of the request names a wire format this server does not know. Use one of the supported versions. |
 | `wire.workerFailed` | error | the Minab worker failed: {reason} | `reason` | The browser worker could not do the work: it stopped, it was disposed, it did not know the program, or it got a message it could not read. Create the runtime again. |

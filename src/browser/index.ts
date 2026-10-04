@@ -49,7 +49,8 @@ import {
     type ToWorker
 } from './protocol.js';
 
-export type { BridgeEndpoint } from './protocol.js';
+export type { BridgeEndpoint, InputTypes } from './protocol.js';
+export type { CompletionItem, CompletionKind, CompletionResult, EditorPosition, EditorRange, HoverResult, SignatureHelpResult } from '../editor/types.js';
 export { consoleEventSink, emitLogs } from './console.js';
 export type { ConsoleLike, ConsoleSinkOptions } from './console.js';
 export { createRemoteMinab } from './remote.js';
@@ -57,6 +58,7 @@ export type { FetchLike, FetchResponse, RemoteMinab, RemoteMinabOptions, RemoteP
 export { routeByTier } from './route.js';
 export type { LocalMinab, RoutedProgram, RouteOptions, StoredProgram, TierRouter } from './route.js';
 
+/** Options of `createWorkerMinab`: the runtime options, and a function that makes the worker. */
 export interface WorkerMinabOptions extends Pick<MinabOptions, 'schema' | 'functions' | 'inputs' | 'ruleContext' | 'limits' | 'serviceCacheSize' | 'mode'> {
     /**
      * Makes the worker. A web app writes:
@@ -75,6 +77,7 @@ export interface WorkerPreparedProgram {
     readonly analysis: ProgramAnalysis;
     /** Does a change of this record field change the result? It answers at once: the analysis is already here. */
     dependsOn(field: string): boolean;
+    /** The whole program as one SQL statement, or the reason it is not one. */
     compile(): Promise<CompileResult>;
     /** Never throws for a failed program: the answer says `ok: false`. The ports stay on this thread. */
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
@@ -82,7 +85,9 @@ export interface WorkerPreparedProgram {
     release(): void;
 }
 
+/** The runtime of a web app: `prepare` and the editor services, all answered by the worker. */
 export interface WorkerMinab {
+    /** Parses and checks a program in the worker. It resolves with diagnostics for a bad program. */
     prepare(source: string, options?: PrepareOptions): Promise<WorkerPreparedProgram>;
     /**
      * Editor services, computed in the worker (phase E5). `offset` is a UTF-16 offset into `source`,
@@ -90,8 +95,18 @@ export interface WorkerMinab {
      * answer the worker cannot give is an empty result (`hover` and `signatureHelp`: `undefined`).
      */
     complete(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<CompletionResult>;
+    /** Hover text for the symbol at `offset`, or `undefined` when there is none. */
     hover(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<HoverResult | undefined>;
+    /** Signature help for the call at `offset`, or `undefined` when there is none. */
     signatureHelp(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<SignatureHelpResult | undefined>;
+    /**
+     * Calls a handler that the host app put in `serveMinab` (`requests`) and gives its answer. The payload and the
+     * answer must be clonable by `postMessage`. A failure throws an `Error` with the message of the handler. An abort
+     * through `signal` cancels the request in the worker and throws `cancelled` at once.
+     */
+    request<T = unknown>(name: string, payload?: unknown, options?: { signal?: AbortSignal }): Promise<T>;
+    /** Listens to the events that the worker code sends with `emit`. Gives a function that stops the listener. */
+    onEvent(listener: (name: string, payload: unknown) => void): () => void;
     /** Stops the worker. A disposed runtime throws on use. */
     dispose(): void;
 }
@@ -113,12 +128,14 @@ class BridgeFailure extends Error {
     }
 }
 
+/** Starts the runtime in a Web Worker. Call it once and keep the result. The parser stays off the main thread; the ports stay on it. */
 export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
     const { worker: makeWorker, ...runtimeOptions } = options;
     const endpoint = makeWorker();
     const requests = new Map<string, Request>();
     const activeRuns = new Map<string, ActiveRun>();
     const callControllers = new Map<string, AbortController>();
+    const eventListeners = new Set<(name: string, payload: unknown) => void>();
     const declaredFunctions = new Map<string, HostFunctionDeclaration>((options.functions ?? []).map(f => [f.name, f]));
     let counter = 0;
     let disposed = false;
@@ -236,6 +253,15 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
             case 'cancel-call':
                 callControllers.get(message.callId)?.abort();
                 return;
+            case 'event':
+                for (const listener of [...eventListeners]) {
+                    try {
+                        listener(message.name, message.payload);
+                    } catch {
+                        // A listener that throws must not stop the others.
+                    }
+                }
+                return;
         }
     });
     // A worker that fails to load or crashes: every waiting request fails with a code.
@@ -329,6 +355,35 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
     }
 
     return {
+        async request<T>(name: string, payload?: unknown, requestOptions: { signal?: AbortSignal } = {}): Promise<T> {
+            if (disposed) throw new Error('this Minab runtime was disposed');
+            const { signal } = requestOptions;
+            if (signal?.aborted) throw new Error(runError('cancelled', undefined).message);
+            const id = nextId('r');
+            const answered = request({ v: BRIDGE_VERSION, type: 'request', id, name, ...(payload === undefined ? {} : { payload }) });
+            let onAbort: (() => void) | undefined;
+            const cancelled = new Promise<never>((_, reject) => {
+                onAbort = () => {
+                    requests.delete(id);
+                    post({ v: BRIDGE_VERSION, type: 'cancel', id });
+                    reject(new Error(runError('cancelled', undefined).message));
+                };
+                signal?.addEventListener('abort', onAbort, { once: true });
+            });
+            cancelled.catch(() => {});
+            try {
+                return (await Promise.race([answered, cancelled])) as T;
+            } catch (failure) {
+                if (failure instanceof BridgeFailure) throw new Error(failure.error.message);
+                throw failure;
+            } finally {
+                if (onAbort) signal?.removeEventListener('abort', onAbort);
+            }
+        },
+        onEvent(listener) {
+            eventListeners.add(listener);
+            return () => eventListeners.delete(listener);
+        },
         complete: async (source, offset, o) => (await editor('complete', source, offset, o?.ruleContext)) as CompletionResult,
         hover: async (source, offset, o) => ((await editor('hover', source, offset, o?.ruleContext)) as HoverResult | null) ?? undefined,
         signatureHelp: async (source, offset, o) =>
@@ -357,6 +412,7 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
             if (disposed) return;
             disposed = true;
             for (const run of activeRuns.values()) run.controller.abort();
+            eventListeners.clear();
             // The worker gets `dispose`, then the thread is stopped. Pending requests end with an error code.
             endpoint.postMessage({ v: BRIDGE_VERSION, type: 'dispose', id: nextId('r') } satisfies ToWorker);
             breakAll(bridgeError('the runtime was disposed'));

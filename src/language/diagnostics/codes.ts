@@ -148,6 +148,31 @@ export const DIAGNOSTICS = {
         message: () => 'the program has errors, so it cannot be compiled',
         doc: 'Fix the diagnostics of the program first. A program with errors is never compiled.'
     }),
+    'compile.writeColumn': entry<{ table: string; column: string }>({
+        severity: error,
+        message: p => `"${p.column}" is not a column of "${p.table}" that a write can set`,
+        doc: 'INSERT and UPDATE set plain columns of the target table. Use a column name from the schema. A relation is set through its foreign key column.'
+    }),
+    'compile.writeEmptySet': entry({
+        severity: error,
+        message: () => 'SET needs at least one assignment',
+        doc: 'An UPDATE with an empty SET changes nothing. Add an assignment, or remove the statement.'
+    }),
+    'compile.writeNeedsName': entry({
+        severity: error,
+        message: () => 'give this column a name with AS, so INSERT can match it to a column of the target',
+        doc: 'INSERT ... VALUES query matches the columns of the query to the columns of the target by name. Name each computed column with AS.'
+    }),
+    'compile.writePath': entry<{ reason: string }>({
+        severity: error,
+        message: p => `this record path cannot be assigned: ${p.reason}`,
+        doc: 'A path assignment walks relations from a record, one step at a time. Every step before the last must be a relation, and a step after a filtered or to-many step cannot create records. Assign through a loop variable or a shorter path.'
+    }),
+    'compile.writeTarget': entry({
+        severity: error,
+        message: () => 'the target of a write must be a table (#Table), a to-many relation of a record (.orders) or a JSON array column (.tags)',
+        doc: 'INSERT, UPDATE and DELETE write to a table or to a JSON array column. An INSERT target cannot have a filter or a position.'
+    }),
     'data.error': entry({
         severity: error,
         message: () => 'the data source failed',
@@ -157,6 +182,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => 'this program needs data, and no data port was given',
         doc: 'The program reads a table, but the host gave run no data port. Give a data port, or run a program that needs no data.'
+    }),
+    'eval.cannotCreateRecord': entry<{ table: string; column: string }>({
+        severity: error,
+        message: p => `cannot create the missing "${p.table}" record: the column "${p.column}" needs a value and has no default`,
+        doc: 'A "!" in a path assignment creates the missing related record with default values. The table needs a value that has no default. Create the record with INSERT and give the value, then assign.'
     }),
     'eval.castFailed': entry<{ value: string; from: string; to: string }>({
         severity: error,
@@ -203,6 +233,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => 'the program has errors, so it cannot run',
         doc: 'Fix the diagnostics of the program first. A program with errors never runs.'
+    }),
+    'eval.writeModeMissing': entry({
+        severity: error,
+        message: () => 'the program writes data, so the run must say how: writes "dry-run" or "apply"',
+        doc: 'A host must choose. Give writes: "dry-run" to collect the statements without running them, or writes: "apply" to run them in one transaction.'
     }),
     'eval.writesNotSupported': entry({
         severity: error,
@@ -307,6 +342,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => "'$' is only valid in a field-level rule; this program isn't being validated as one",
         doc: 'The "$" sigil means the field value, and only a field-level rule has one. Use "." for a record-level rule.'
+    }),
+    'rule.writeInRule': entry({
+        severity: error,
+        message: () => 'a validation rule cannot write: INSERT, UPDATE, DELETE and record assignment are not allowed here',
+        doc: 'A record rule or field rule only reads. Move the write into a program that a host runs on purpose, for example a command.'
     }),
 
     'scope.assignToInput': entry<{ name: string }>({
@@ -652,6 +692,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `the remote run failed: ${p.reason}`,
         doc: 'The browser could not get an answer from the server: the network failed, the server answered with an HTTP error that is not a Minab error, or its answer was missing a result. Try again. params.reason says which.'
+    }),
+    'wire.requestFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => p.reason,
+        doc: 'A request that the host app made to its own browser worker (`WorkerMinab.request`) failed: the handler threw, or no handler has this name. The message is the one of the handler.'
     }),
     'wire.tooManyRuns': entry<{ limit: number; used: number }>({
         severity: error,

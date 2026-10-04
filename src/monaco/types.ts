@@ -13,12 +13,25 @@ import type { PrepareOptions, PreparedProgram } from '../runtime/types.js';
  * Only the diagnostics of the prepared program are read, and it is released after each check.
  */
 export interface MinabEditorClient {
-    prepare(source: string, options?: PrepareOptions): Promise<Pick<PreparedProgram, 'diagnostics'> & { release?(): void }>;
+    /** Checks a program. Only the diagnostics are read. */
+    prepare(
+        source: string,
+        options?: PrepareOptions
+    ): Promise<
+        Pick<PreparedProgram, 'diagnostics'> & {
+            /** Frees the program in the worker. */
+            release?(): void;
+        }
+    >;
+    /** Completion items at `offset`. */
     complete(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<CompletionResult>;
+    /** Hover text at `offset`, or `undefined`. */
     hover(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<HoverResult | undefined>;
+    /** Signature help at `offset`, or `undefined`. */
     signatureHelp(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<SignatureHelpResult | undefined>;
 }
 
+/** Options of `registerMinab`. */
 export interface RegisterMinabOptions {
     /** The runtime in the worker. */
     client: MinabEditorClient;
@@ -36,6 +49,7 @@ export interface RegisterMinabOptions {
     onError?: (error: unknown) => void;
 }
 
+/** What `registerMinab` gives back: a way to stop it, and a way to check a model now. */
 export interface MinabRegistration {
     /** Removes the providers and the markers and stops the checks. The language id stays registered (Monaco cannot unregister it). */
     dispose(): void;

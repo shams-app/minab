@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { demoDataset } from '../src/content/datasets/demo.js';
+import { explainRefusal } from '../src/engine/program.js';
 import { Engine } from '../src/engine/engine.js';
 import type { EngineStatus, HostSettings } from '../src/engine/protocol.js';
 
@@ -53,11 +54,23 @@ describe('analysis', () => {
         expect(report.compiled).toMatchObject({ ok: false, pushesDown: true });
     });
 
-    test('flags check-only constructs statically', async () => {
+    test('table writes are not check-only any more (X5): they run as a dry run and show in the Execution tab', async () => {
         await engine.setHost(demo());
-        const report = await engine.analyze('DELETE #Order[.total > 1];\ntrue');
-        expect(report.program.checkOnly).toBe(true);
-        expect(report.program.checkOnlyConstructs.map(c => c.type)).toEqual(['DeleteStatement']);
+        const source = 'DELETE #Order[.total > 1];\nUPDATE #Order SET { status: "x" };\ntrue';
+        const report = await engine.analyze(source);
+        expect(report.diagnostics).toEqual([]);
+        expect(report.program.checkOnly).toBe(false);
+        const run = await engine.run(source, 9);
+        expect(run.stage).toBe('done');
+        expect(run.result).toMatchObject({ kind: 'value', value: true });
+        expect(run.trace.map(entry => [entry.dryRun, entry.text.split(' ')[0]])).toEqual([
+            [true, 'DELETE'],
+            [true, 'UPDATE']
+        ]);
+        expect(run.trace[0]).toMatchObject({ rowCount: 0, params: [1], origin: { type: 'DeleteStatement' } });
+        // Nothing changed: no row has the new status.
+        const changed = await engine.sql('SELECT count(*)::int AS n FROM "Order" WHERE status = \'x\'');
+        expect(changed.statements[0]?.rows).toEqual([{ n: 0 }]);
     });
 
     test('loops, .$index and tuples are not check-only any more (X4)', async () => {
@@ -148,12 +161,9 @@ describe('running', () => {
         expect(report.trace[0].error).toBe(report.error?.message);
     });
 
-    test('a construct the interpreter does not run yet is a refusal, not an error', async () => {
-        await engine.setHost(demo());
-        const report = await engine.run('DELETE #Order[.total > 1];\ntrue', 8);
-        expect(report.stage).toBe('run');
-        expect(report.error).toBeUndefined();
-        expect(report.refusal).toMatchObject({ construct: 'DeleteStatement' });
+    test('a refusal of the interpreter ("not executed yet") is explained, and a real failure is not (X5: table writes now run)', () => {
+        expect(explainRefusal('"SomeStatement" is not executed yet')).toMatchObject({ construct: 'SomeStatement' });
+        expect(explainRefusal('division by zero')).toBeUndefined();
     });
 
     test('a program that needs no data runs while the database has not booted', async () => {

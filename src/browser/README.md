@@ -16,6 +16,12 @@ them over a message bridge and waits for the answer (decision D30).
 - `worker.ts`: `serveMinab(endpoint, { ports })` hosts a runtime and answers the bridge messages.
   In a Web Worker this file starts itself. Write your own worker file when a port must live inside the
   worker (the playground keeps PGlite there): `serveMinab(self, { ports: { data } })`.
+- `serveMinab` also takes `requests` (host requests: handlers that your own worker code answers, by name) and returns
+  `emit(name, payload)` (host events). On the main thread, `request(name, payload, { signal })` and `onEvent(listener)`
+  are the other end. Use them when the worker holds more than Minab (the playground's engine is one host request).
+  A failure of a handler is `wire.requestFailed` with the handler's own message; an abort cancels the handler's `signal`.
+  `serveMinab` on an endpoint that is already served replaces the earlier server, so a worker file that imports this
+  module (it starts itself in a Web Worker) can call `serveMinab(self, ...)` with no second server.
 - `protocol.ts`: the message types (version 1), the value encoding and the error helpers. Both sides use it.
 - `remote.ts`: `createRemoteMinab({ endpoint, fetch?, headers?, maxBatch?, types?, events? })`. `run(ref, inputs, options)`
   runs a stored program `{ id, version }` on the server with wire format v1. Runs made in the same tick go out in one
@@ -33,7 +39,7 @@ them over a message bridge and waits for the answer (decision D30).
 ## The bridge
 
 The bridge is version 1. Phase E5 added one request, `editor` (`method` is `complete`, `hover` or `signatureHelp`,
-with `source` and `offset`). A message that an older worker does not know is ignored, so a new main thread and an
+with `source` and `offset`). Phase H7 added the request `request` and the event `event` (host requests and host events). A message that an older worker does not know is ignored, so a new main thread and an
 old worker fail by timeout, not by a wrong answer: keep both sides from the same package version.
 
 - Every request has an `id` and the answer carries it back. Two runs at once do not mix.
@@ -54,7 +60,7 @@ old worker fail by timeout, not by a wrong answer: keep both sides from the same
 ## Rules
 
 - Nothing here imports Node or uses `window` or `document`. `test/browser/imports.test.ts` checks both entries.
-- The playground does not use this yet (H7).
+- The playground uses this entry (H7): its worker is `serveMinab(self, { requests })` and its client is `createWorkerMinab`.
 - `scripts/browser-bundle.mjs` builds these entries for the browser and fails if a Node-only module gets in
   (`pg`, `node:*`, `langium/node`, `vscode-languageserver/node`). Sizes are in `bench/bundle.json`.
 - The tests run the worker code in Node with a `MessageChannel` pair. The bridge does not care what is at the other end.

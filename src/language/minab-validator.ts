@@ -32,8 +32,12 @@
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
     isBlock,
+    isCurrentRecord,
     isFilterAccess,
+    isInsertStatement,
     isFunctionDecl,
+    isJsonObjectLiteral,
+    isListLiteral,
     isLoopStatement,
     isCallExpression,
     isMemberAccess,
@@ -49,6 +53,7 @@ import {
     type CallExpression,
     type CallStatement,
     type CurrentRecord,
+    type DeleteStatement,
     type Expression,
     type FieldValue,
     type FilterAccess,
@@ -57,6 +62,7 @@ import {
     type GroupKeyRef,
     type HavingClause,
     type IfExpr,
+    type InsertStatement,
     type ListLiteral,
     type MemberAccess,
     type MinabAstType,
@@ -68,11 +74,13 @@ import {
     type Subquery,
     type TupleAccess,
     type UnaryExpression,
+    type UpdateStatement,
     type VariableDecl,
     type WhereClause
 } from './generated/ast.js';
 import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
+import { splitSelectors } from './minab-json-writes.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
@@ -110,7 +118,10 @@ export function registerValidationChecks(services: MinabServices): void {
         WhereClause: validator.checkConditionIsBoolean,
         HavingClause: validator.checkConditionIsBoolean,
         GroupByClause: [validator.checkGroupKeysNotCollection, validator.checkGroupKeyNamesUnique, validator.checkGroupKeysNamed],
-        AssignmentStatement: validator.checkAssignmentTypeCompatible,
+        AssignmentStatement: [validator.checkAssignmentTypeCompatible, validator.checkAssignmentNotInRule],
+        InsertStatement: [validator.checkWriteNotInRule, validator.checkInsertColumns],
+        UpdateStatement: [validator.checkWriteNotInRule, validator.checkUpdateColumns],
+        DeleteStatement: [validator.checkWriteNotInRule, validator.checkWriteTarget],
         VariableDecl: [validator.checkVariableDeclTypeCompatible, validator.checkVariableNotFunctionName, validator.checkLetNotRepeated],
         Param: validator.checkParamNotFunctionName,
         FunctionDecl: [validator.checkFunctionDeclName, validator.checkFunctionDeclReturnType]
@@ -310,6 +321,100 @@ export class MinabValidator {
         if (earlier) report(accept, coded('scope.duplicateLet', { name: node.name }), { node, property: 'name' });
     }
 
+    // ---- writes (X5, D26) ---------------------------------------------------
+
+    /** Is the program checked as a record rule or a field rule? Those only read. */
+    private get inRule(): boolean {
+        const context = this.services.ruleContext;
+        return context.isFieldRule || context.recordTable !== undefined;
+    }
+
+    /** A rule cannot write (D26): the write is for a program that a host runs on purpose. */
+    checkWriteNotInRule(node: InsertStatement | UpdateStatement | DeleteStatement, accept: ValidationAcceptor): void {
+        if (this.inRule) report(accept, coded('rule.writeInRule'), { node });
+    }
+
+    /** `.field = x` writes to the record under validation. A local variable is not a write. */
+    checkAssignmentNotInRule(node: AssignmentStatement, accept: ValidationAcceptor): void {
+        if (this.inRule && !this.assignmentRoot(node.target)) report(accept, coded('rule.writeInRule'), { node, property: 'target' });
+    }
+
+    /**
+     * The table an INSERT, UPDATE or DELETE writes to, or a diagnostic when the target is no table.
+     * A `JSON` array column (`.tags`, `.tags[2]`) is a target too (X6): it has no table, so the answer is `undefined` and the columns are free.
+     */
+    checkWriteTarget(node: InsertStatement | UpdateStatement | DeleteStatement, accept: ValidationAcceptor): string | undefined {
+        const { base, selectors } = splitSelectors(node.target);
+        const column = this.services.typeChecker.inferType(base);
+        if (column.ok && column.type.kind === 'scalar' && column.type.base === 'JSON' && (isMemberAccess(base) || (isCurrentRecord(base) && base.field))) {
+            // An INSERT adds an element to the array. A position or a filter on it says nothing.
+            if (isInsertStatement(node) && selectors.length > 0) report(accept, coded('compile.writeTarget'), { node, property: 'target' });
+            return undefined;
+        }
+        const target = this.services.typeChecker.inferType(node.target);
+        // A failed inference has its own diagnostic at the node that failed.
+        if (!target.ok) return undefined;
+        if (target.type.kind !== 'collection') {
+            report(accept, coded('compile.writeTarget'), { node, property: 'target' });
+            return undefined;
+        }
+        return target.type.table;
+    }
+
+    checkInsertColumns(node: InsertStatement, accept: ValidationAcceptor): void {
+        const table = this.checkWriteTarget(node, accept);
+        if (!table) return;
+        const payload = node.payload;
+        const objects = isJsonObjectLiteral(payload) ? [payload] : isListLiteral(payload) ? payload.items.filter(isJsonObjectLiteral) : [];
+        for (const object of objects) {
+            for (const property of object.properties) {
+                const value = property.value ?? ({ $type: 'NameRef', name: property.key } as NameRef);
+                this.checkColumnValue(table, property.key, ':', value, property, accept);
+            }
+        }
+    }
+
+    checkUpdateColumns(node: UpdateStatement, accept: ValidationAcceptor): void {
+        const table = this.checkWriteTarget(node, accept);
+        if (!table) return;
+        const assignments = node.setClause.assignments;
+        if (assignments.length === 0) report(accept, coded('compile.writeEmptySet'), { node: node.setClause });
+        for (const assignment of assignments) {
+            this.checkColumnValue(table, assignment.key, assignment.operator, assignment.value, assignment, accept);
+        }
+    }
+
+    /** A written column must be a plain column of the table, and the value must fit its type (no implicit coercion). */
+    private checkColumnValue(table: string, name: string, operator: string, value: Expression, where: AstNode, accept: ValidationAcceptor): void {
+        const column = this.services.schema.getColumn(table, name);
+        if (!column || column.type.kind !== 'scalar') {
+            report(accept, coded('compile.writeColumn', { table, column: name }), { node: where });
+            return;
+        }
+        const result = this.services.typeChecker.inferType(value);
+        if (!result.ok) return;
+        const columnType = column.type.type;
+        // `+:` `-:` `*:` `/:` and `:|` take a value of the kind they combine with; a plain `:` takes the column's own type.
+        const expected = operator === ':|' ? undefined : columnType;
+        if (operator !== ':' && operator !== ':|') {
+            const numeric = columnType.kind === 'scalar' && !columnType.array && (columnType.base === 'INTEGER' || columnType.base === 'DECIMAL');
+            const text = columnType.kind === 'scalar' && !columnType.array && (columnType.base === 'TEXT' || columnType.base === 'CITEXT');
+            if (!(numeric || (operator === '+:' && text))) {
+                report(accept, coded('type.assignNeedsNumericTarget', { operator, actual: formatType(columnType) }), { node: where });
+                return;
+            }
+        }
+        if (operator === ':|') {
+            if (!(columnType.kind === 'scalar' && !columnType.array && columnType.base === 'JSON')) {
+                report(accept, coded('type.mergeAssignTarget', { actual: formatType(columnType) }), { node: where });
+            }
+            return;
+        }
+        if (expected && !isAssignableTo(result.type, expected)) {
+            report(accept, coded('type.assignMismatch', { actual: formatType(result.type), expected: formatType(expected) }), { node: where });
+        }
+    }
+
     checkAssignmentTypeCompatible(node: AssignmentStatement, accept: ValidationAcceptor): void {
         const root = this.assignmentRoot(node.target);
         if (root && this.isHostInputRef(root)) {
@@ -319,8 +424,30 @@ export class MinabValidator {
         const targetResult = this.services.typeChecker.inferType(node.target);
         const valueResult = this.services.typeChecker.inferType(node.value);
         if (!targetResult.ok || !valueResult.ok) return;
-        const target = targetResult.type;
+        let target = targetResult.type;
         const value = valueResult.type;
+        // A column of the rows of a to-many step (`.doctor.patients[...].active`) is a list of values; one value goes to each row.
+        if (target.kind === 'scalar' && target.array && this.crossesCollection(node.target)) {
+            target = { ...target, array: false, arrayNullable: false };
+        }
+        // A relation takes an object (spec §9.3): `.doctor |= { name: "x" }`, `.doctor!.id = ...`, `.a! = { name: "x" }`.
+        if (
+            (target.kind === 'record' || target.kind === 'collection') &&
+            isJsonObjectLiteral(node.value) &&
+            (node.operator === '=' || node.operator === '|=')
+        ) {
+            for (const property of node.value.properties) {
+                this.checkColumnValue(
+                    target.table,
+                    property.key,
+                    ':',
+                    property.value ?? ({ $type: 'NameRef', name: property.key } as NameRef),
+                    property,
+                    accept
+                );
+            }
+            return;
+        }
         const isNumericTarget = target.kind === 'scalar' && !target.array && (target.base === 'INTEGER' || target.base === 'DECIMAL');
         const isTextTarget = target.kind === 'scalar' && !target.array && (target.base === 'TEXT' || target.base === 'CITEXT');
 
@@ -348,7 +475,7 @@ export class MinabValidator {
                 }
                 break;
             case '|=':
-                if (!(target.kind === 'record' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
+                if (!(target.kind === 'record' || target.kind === 'collection' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
                     report(accept, coded('type.mergeAssignTarget', { actual: formatType(target) }), { node, property: 'operator' });
                 }
                 return;
@@ -358,6 +485,17 @@ export class MinabValidator {
         if (!isAssignableTo(value, target)) {
             report(accept, coded('type.assignMismatch', { actual: formatType(value), expected: formatType(target) }), { node, property: 'value' });
         }
+    }
+
+    /** Does the path go through a to-many step (a `collection`) before its last column? */
+    private crossesCollection(target: Expression): boolean {
+        let current: Expression = target;
+        while (isMemberAccess(current) || isFilterAccess(current) || isTupleAccess(current)) {
+            current = current.receiver;
+            const result = this.services.typeChecker.inferType(current);
+            if (result.ok && result.type.kind === 'collection') return true;
+        }
+        return false;
     }
 
     /** The bare name an assignment target starts from: `currentUser` in `currentUser.id = 1;`. */

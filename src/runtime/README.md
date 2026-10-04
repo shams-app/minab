@@ -12,7 +12,7 @@ database driver. A test checks the imports.
   declared functions and inputs (D27). They are checked here: a bad name or type word
   throws a `HostDeclarationError`.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
-  (interface only), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
+  (one transaction for the writes of a run, X5), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
   which counts what one run uses and stops it at a limit or an abort.
 - `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
@@ -93,7 +93,7 @@ record. It does not look at other tables: a rule that reads data may change when
 
 | Area | Codes | Meaning |
 |---|---|---|
-| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `programInvalid`, `failed` | The program failed while it ran |
+| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `cannotCreateRecord`, `programInvalid`, `failed` | The program failed while it ran |
 | `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
 | `limit.*` | see below | A limit stopped the program |
 | `data.*` | `error`, `noPort` | The data port failed or is missing |
@@ -107,7 +107,7 @@ Limits are always on (D01). `createMinab({ limits })` sets them. A run can only 
 | Limit | Default | Checked | Code |
 |---|---|---|---|
 | `sourceLength` | 64 KB (UTF-8 bytes) | `prepare`, before parsing | `limit.sourceTooLong` (a diagnostic) |
-| `nestingDepth` | 200 | `prepare`: a bracket scan before parsing, then the depth of the expressions | `limit.tooDeep` (a diagnostic) |
+| `nestingDepth` | 200 | `prepare`: a scan before parsing that counts brackets and runs of `-`, `+` and `NOT`, then the depth of the expressions | `limit.tooDeep` (a diagnostic) |
 | `wallTimeMs` | 1,000 | `run`: between steps, and around every port call | `limit.timeout` |
 | `statements` | 100 | before each data call | `limit.tooManyStatements` |
 | `rowsPerStatement` | 10,000 | after each data call | `limit.tooManyRows` |
@@ -138,6 +138,8 @@ to its driver. The timer is cleared when the run ends.
   the workspace.
 - Services are cached by `schema.version` (or a hash of the schema when it is
   missing). Two schemas with the same version must be the same schema.
+- In `production` mode every service set shares one Langium parser (it is about 2 MB and has nothing of the
+  schema in it). `development` builds one parser per set. Speed budgets are in `bench/` and `docs/performance.md`.
 - `mode` is `production` by default. `development` re-checks the grammar on every
   parser build and is slow (about 2.8 s per service set).
 - Do not import `node:*`, `langium/node`, `vscode-languageserver/node` or `pg` from here.
@@ -153,9 +155,18 @@ to its driver. The timer is cleared when the run ends.
 - `expect` is optional. Without it nothing is checked and the program may return any type;
   `resultType` still reports the type.
 
+## Writes (X5, D26)
+
+- A program with `INSERT`, `UPDATE` or `DELETE` needs `run(inputs, ports, { writes })`. `'dry-run'` collects the statements
+  and runs none. `'apply'` runs them in one transaction of `ports.write`. There is no default: a missing choice is
+  `eval.writeModeMissing`, before any port is called. A program that does not write ignores the option.
+- In an applied run the reads share the transaction, so they see what the run wrote. Any failure rolls everything back.
+- The result has `writes: { mode, statements: [{ sql, params, range, rowCount? }] }` and `stats.writes: { statements, rows }`.
+  Writes count toward `limits.statements`. The event `dryRun` comes when a dry run collects a write; an applied write sends `statement`.
+- A record rule or field rule cannot write: the checker reports `rule.writeInRule`.
+
 ## Not done yet
 
 - A `QueryExecutor` (one argument) still fits the data port. The CLI (R7) and the playground (R8)
   use `DataPort`.
-- The write port is an interface. No statement uses it until X5.
 - The HTTP endpoint is built (H2, `src/nestjs/`). The browser client (H5) is not built yet.

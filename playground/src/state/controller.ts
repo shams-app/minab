@@ -23,6 +23,7 @@ let analyzeTimer: ReturnType<typeof setTimeout> | undefined;
 let runTimer: ReturnType<typeof setTimeout> | undefined;
 let analyzeSeq = 0;
 let runSeq = 0;
+let runAbort: AbortController | undefined;
 let appliedHostKey: string | undefined;
 let toastSeq = 0;
 let connected = false;
@@ -72,11 +73,14 @@ export async function analyzeNow(): Promise<void> {
 export async function run(): Promise<void> {
     clearTimeout(runTimer);
     const seq = ++runSeq;
+    // The run this one replaces is stopped in the worker, not only ignored here.
+    runAbort?.abort();
+    const abort = (runAbort = new AbortController());
     setState({ running: true });
     try {
         await applyHost();
         const source = getState().workspace.source;
-        const report = await engine().call('run', source, seq);
+        const report = await engine().run(source, seq, abort.signal);
         if (seq !== runSeq) return;
         setState({ report, reportSource: source, analysis: report, running: false, highlight: undefined });
         announce(report);

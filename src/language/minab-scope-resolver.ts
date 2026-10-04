@@ -27,6 +27,7 @@ import {
     isBlock,
     isFilterAccess,
     isFunctionDecl,
+    isDeleteStatement,
     isLoopStatement,
     isMemberAccess,
     isModel,
@@ -36,6 +37,7 @@ import {
     isParentRecord,
     isQuery,
     isTableRef,
+    isUpdateStatement,
     isVariableDecl,
     type CurrentRecord,
     type Expression,
@@ -229,6 +231,7 @@ export class MinabScopeResolver {
      * first (`stack[0]` is what `.` means; `stack[1]` is what `^` means).
      *
      * Pushed by: entering a `Query`'s clauses (but not its own `source`),
+     * the clauses of an `UPDATE` or `DELETE` (but not its own `target`),
      * a `[...]` filter's condition (but not its own `receiver`), and a
      * `for-in` loop's body/guard (but not its own `iterable`) — mirroring
      * spec §2.2's push list. `#Table` and joins don't add stack depth on
@@ -252,6 +255,9 @@ export class MinabScopeResolver {
                 });
             } else if (isFilterAccess(current) && current.receiver !== child) {
                 raw.push({ owner: current, receiver: current.receiver, aliasDefs: [] });
+            } else if ((isUpdateStatement(current) || isDeleteStatement(current)) && current.target !== child) {
+                // `WHERE`, `ORDERBY`, `LIMIT` and `SET` of a write: `.` is a row of the target (spec §10, X5).
+                raw.push({ owner: current, receiver: current.target, aliasDefs: [] });
             } else if (isLoopStatement(current) && current.iterable && current.iterable !== child) {
                 raw.push({
                     owner: current,

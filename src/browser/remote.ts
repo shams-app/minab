@@ -15,15 +15,18 @@ import { parseResponse, type Json, type WireResult, type WireRun } from '../runt
 import { emitLogs } from './console.js';
 import { decodeBy, encodeInputs, encodeLoose, resultWireType, toMinabError, type InputTypes } from './protocol.js';
 
+/** The part of `fetch` that the client uses. The global `fetch` fits. */
 export type FetchLike = (url: string, init: { method: 'POST'; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<FetchResponse>;
 
 /** The part of a `Response` that the client reads. */
 export interface FetchResponse {
     ok: boolean;
     status: number;
+    /** Reads the body as JSON. */
     json(): Promise<unknown>;
 }
 
+/** Options of `createRemoteMinab`. */
 export interface RemoteMinabOptions {
     /** The URL of the run endpoint (the NestJS controller of H2, or any server that speaks wire v1). */
     endpoint: string;
@@ -42,6 +45,7 @@ export interface RemoteMinabOptions {
     events?: EventSink;
 }
 
+/** Options of one remote run. */
 export interface RemoteRunOptions {
     /** Aborts the run. A request is aborted when all its runs are aborted. */
     signal?: AbortSignal;
@@ -55,11 +59,13 @@ export interface RemoteRunOptions {
     events?: EventSink;
 }
 
+/** Names a stored program on the server. The client sends this, never program text. */
 export interface RemoteProgramRef {
     id: string;
     version: string;
 }
 
+/** Runs stored programs on the server with wire format v1. Runs made in the same tick go out in one request. */
 export interface RemoteMinab {
     /** Runs a stored program. It never throws: a failure is `{ ok: false, error }`. */
     run(ref: RemoteProgramRef, inputs?: RunInputs, options?: RemoteRunOptions): Promise<RunResult>;
@@ -80,6 +86,7 @@ function failure(reason: string): MinabError {
     return runError('wire.remoteFailed', undefined, { reason });
 }
 
+/** Makes a client for the run endpoint of the server. */
 export function createRemoteMinab(options: RemoteMinabOptions): RemoteMinab {
     const maxBatch = Math.max(1, Math.floor(options.maxBatch ?? DEFAULT_LIMITS.batchRuns));
     const inFlight = new Set<AbortController>();

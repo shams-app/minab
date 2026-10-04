@@ -127,6 +127,7 @@ class Prepared implements PreparedProgram {
             const result = await this.interpreter.run(this.model, {
                 executor: ports.data ?? NO_DATA_PORT,
                 write: ports.write ?? REFUSING_WRITE_PORT,
+                writeMode: options.writes,
                 hostInputs: inputs.hostInputs as Record<string, unknown> | undefined,
                 hostFunctions: ports.hostFunctions,
                 now: clock.now(),
@@ -140,7 +141,8 @@ class Prepared implements PreparedProgram {
             const durationMs = performance.now() - started;
             if (result.ok) {
                 const logs = { logs: budget.logs, ...(budget.logsTruncated ? { logsTruncated: true } : {}) };
-                return { ok: true, value: result.value, ...logs, stats: { ...budgetStats(budget), durationMs } };
+                const writes = { mode: budget.writes.length > 0 ? (options.writes ?? null) : null, statements: budget.writes };
+                return { ok: true, value: result.value, ...logs, writes, stats: { ...budgetStats(budget), durationMs } };
             }
             return { ok: false, error: result.error };
         } finally {
@@ -150,8 +152,12 @@ class Prepared implements PreparedProgram {
     }
 }
 
-function budgetStats(budget: RunBudget): { statements: number; rows: number } {
-    return { statements: budget.counts.statements, rows: budget.counts.rows };
+function budgetStats(budget: RunBudget): { statements: number; rows: number; writes: { statements: number; rows: number } } {
+    return {
+        statements: budget.counts.statements,
+        rows: budget.counts.rows,
+        writes: { statements: budget.writes.length, rows: budget.writeRows }
+    };
 }
 
 /** A sink that must not throw: if the host's sink throws, the runtime drops the error (ADR 0002, 4.5). */
@@ -175,15 +181,28 @@ function utf8Length(text: string): number {
 
 /**
  * How deep `(`, `[` and `{` are nested in the source, found in one pass without a parser. Text in strings,
- * quoted names and comments does not count. The parser takes more than linear time and stack on deep
- * programs (a 64 KB source could use gigabytes), so this check comes first.
+ * quoted names and comments does not count. A run of prefix operators (`-`, `+`, `NOT`) counts too: each
+ * one nests the tree one level, and `-` repeated 5,000 times costs the parser as much as 5,000 brackets.
+ * The parser takes more than linear time and stack on deep programs (a 64 KB source could use gigabytes),
+ * so this check comes first.
  */
+/** A source nested at least this deep is a suspect when the parser fails with a TypeError. Overflows were seen from about 80 levels. */
+const STACK_SUSPECT_DEPTH = 40;
+
 export function bracketDepth(source: string): number {
     let depth = 0;
     let deepest = 0;
+    // Prefix operators in a row, and whether the last token ended an operand (then `-` is a binary minus).
+    let prefixes = 0;
+    let afterOperand = false;
+    const note = () => {
+        if (depth + prefixes > deepest) deepest = depth + prefixes;
+    };
     for (let i = 0; i < source.length; i++) {
         const c = source[i];
         if (c === '"' || c === "'" || c === '`') {
+            prefixes = 0;
+            afterOperand = true;
             for (i++; i < source.length && source[i] !== c; i++) if (source[i] === '\\') i++;
         } else if (c === '/' && source[i + 1] === '/') {
             while (i < source.length && source[i] !== '\n' && source[i] !== '\r') i++;
@@ -191,9 +210,32 @@ export function bracketDepth(source: string): number {
             const end = source.indexOf('*/', i + 2);
             i = end < 0 ? source.length : end + 1;
         } else if (c === '(' || c === '[' || c === '{') {
-            if (++depth > deepest) deepest = depth;
-        } else if ((c === ')' || c === ']' || c === '}') && depth > 0) {
-            depth--;
+            prefixes = 0;
+            afterOperand = false;
+            depth++;
+            note();
+        } else if (c === ')' || c === ']' || c === '}') {
+            prefixes = 0;
+            afterOperand = true;
+            if (depth > 0) depth--;
+        } else if (c === '-' || c === '+') {
+            if (afterOperand) {
+                afterOperand = false;
+                prefixes = 0;
+            } else {
+                prefixes++;
+                note();
+            }
+        } else if (/\s/.test(c)) {
+            continue;
+        } else if (source.startsWith('NOT', i) && !/[\p{L}\p{N}_]/u.test(source[i + 3] ?? '') && !/[\p{L}\p{N}_]/u.test(source[i - 1] ?? '')) {
+            prefixes++;
+            afterOperand = false;
+            note();
+            i += 2;
+        } else {
+            prefixes = 0;
+            afterOperand = !',;:=<>*/%&|!?^\\.'.includes(c);
         }
     }
     return deepest;
@@ -244,7 +286,9 @@ export async function prepareProgram(
         } catch (e) {
             // The parser ran out of stack on a deep program (some shapes fail at about 80 levels). The depth it
             // could not take counts as over the limit, and `used` is a lower bound.
-            if (e instanceof RangeError) {
+            // An overflow at an unlucky place can also surface as a TypeError (a node was half built, seen on
+            // Node 24 with a warm parser), so a TypeError on a deeply nested source counts as an overflow too.
+            if (e instanceof RangeError || (e instanceof TypeError && brackets >= STACK_SUSPECT_DEPTH)) {
                 return stoppedAtPrepare(
                     set,
                     recordTable,

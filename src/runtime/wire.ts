@@ -38,6 +38,7 @@ export interface WireProgramSource {
     source: string;
 }
 
+/** Options of one run in a wire request. */
 export interface WireRunOptions {
     /** Limits for this run. They can only make the host's limits tighter. */
     limits?: Partial<Limits>;
@@ -59,15 +60,18 @@ export interface WireRun {
     options?: WireRunOptions;
 }
 
+/** A wire format v1 request: a batch of runs of stored programs. */
 export interface WireRequest {
     v: 1;
     runs: WireRun[];
 }
 
+/** The answer to one run of a request. Failed runs are normal answers: the request is still successful. */
 export type WireResult =
     | { id: string; ok: true; value: Json; logs?: string[]; stats: RunStats }
     | { id: string; ok: false; error: MinabError; logs?: string[]; stats?: RunStats };
 
+/** A wire format v1 response: one result for each run, in the same order. */
 export interface WireResponse {
     v: 1;
     results: WireResult[];
@@ -79,6 +83,7 @@ export interface WireErrorResponse {
     error: MinabError;
 }
 
+/** The result of a check of a request or a response: the value, or a coded error. */
 export type WireParse<T> = { ok: true; value: T } | { ok: false; error: MinabError };
 
 /**
@@ -410,6 +415,7 @@ function versionError(obj: Record<string, unknown>): MinabError | undefined {
     return runError('wire.unsupportedVersion', undefined, { version: shown, supported: WIRE_VERSIONS.join(', ') });
 }
 
+/** Options of `parseRequest`. */
 export interface ParseRequestOptions {
     /** The most runs in one request. Default: `DEFAULT_LIMITS.batchRuns` (100, D36). */
     maxRuns?: number;

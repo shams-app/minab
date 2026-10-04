@@ -28,11 +28,17 @@
  *
  * Statements (X3, X4) run in one place, `runStatements`: `let`, assignment to a
  * local name, `if!` and the three loops with `break` and `continue`. A block gets its own scope. A write (a record path
- * as an assignment target) fails with `eval.writesNotSupported`.
+ * as an assignment target) is a path assignment (X6).
  *
- * Not implemented yet (each fails with an explicit reason rather than a
- * wrong answer): `INSERT`/`UPDATE`/`DELETE` execution (§10, X5, X6). ADR 0001
- * covers how writes execute.
+ * Table writes (X5): `INSERT`, `UPDATE` and `DELETE` compile to one parameterized statement
+ * each (`MinabSqlCompiler.compileWrite`). A run that has any of them needs a write mode
+ * (D26). `dry-run` collects the statements in `RunBudget.writes`. `apply` runs the whole
+ * run inside one transaction of the write port: reads and writes share it, and any failure
+ * rolls everything back.
+ *
+ * Writes, part 2 (X6): a `JSON` array column is read, changed in memory (`minab-json-writes.ts`)
+ * and written back with one `UPDATE`. A record path assignment (`.doctor!.id = 21;`) is one
+ * `UPDATE` of the rows the path ends at, after a check and a creating statement for each `!` step.
  */
 
 import {
@@ -53,7 +59,10 @@ import {
     isFunctionDecl,
     isGroupKeyRef,
     isIfExpr,
+    isDeleteStatement,
     isIfStatement,
+    isInsertStatement,
+    isUpdateStatement,
     isIndexRef,
     isJsonObjectLiteral,
     isListLiteral,
@@ -79,17 +88,20 @@ import {
     type Block,
     type BodyStatement,
     type Expression,
+    type DeleteStatement,
     type FunctionDecl,
     type IfStatement,
     type IfStatementElse,
+    type InsertStatement,
     type LoopStatement,
     type MainStatement,
     type Model,
     type SwitchExpr,
-    type Type
+    type Type,
+    type UpdateStatement
 } from './generated/ast.js';
 import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinClock, type BuiltinSignature } from './minab-builtins.js';
-import type { AstNode } from 'langium';
+import { AstUtils, type AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
 import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
@@ -110,12 +122,13 @@ import {
     type Numeric
 } from './values.js';
 import { castValue } from './casts.js';
-import { dataFailure } from '../runtime/errors.js';
+import { dataFailure, sqlstateOf } from '../runtime/errors.js';
 import { formatLogMessage } from '../runtime/log-format.js';
 import { NO_LIMITS, RunBudget, RunStopped } from '../runtime/limits.js';
-import { PortError } from '../runtime/ports.js';
-import type { MinabError, SourceRange } from '../runtime/types.js';
+import { PortError, type WriteTransaction } from '../runtime/ports.js';
+import type { MinabError, SourceRange, WriteMode } from '../runtime/types.js';
 import { coded } from './diagnostics/codes.js';
+import { JsonArrayError, removeAt, selectIndices, splitSelectors, updateAt, type ElementEvaluator } from './minab-json-writes.js';
 import type { LogicalTypeBase } from './minab-types.js';
 
 export type MinabValue = unknown;
@@ -137,8 +150,12 @@ export type InterpretResult = { ok: true; value: MinabValue } | { ok: false; err
 export interface EvalContext {
     /** The data port (ADR 0002, 4.1). A plain `QueryExecutor` fits: it ignores the second argument. */
     executor: DataPort;
-    /** The write port (X5 builds it). Not used yet. */
+    /** The write port. Needed when `writeMode` is `apply`. */
     write?: WritePort;
+    /** What a program that writes does (D26). Missing: a program that writes fails with `eval.writeModeMissing`. */
+    writeMode?: WriteMode;
+    /** The open transaction of an applied run. Set by the interpreter, not by the host. Reads use it too. */
+    writeTransaction?: WriteTransaction;
     /** Values of the declared host inputs (D27). A declared input with no value is the run error `eval.missingInput`. */
     hostInputs?: Record<string, MinabValue>;
     hostFunctions?: HostFunctions;
@@ -211,55 +228,89 @@ interface Frame {
 }
 
 /**
- * The Postgres `LIKE` matcher (`MatchText`), on arrays of characters. It is
- * a copy of the algorithm and not a regular expression, so a pattern that
- * ends with `\` fails at the same moments: only when the matcher reaches the
- * `\` (Postgres: `'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
+ * The Postgres `LIKE` matcher, on arrays of characters. It has no recursion and no regular
+ * expression: it keeps the place of the last `%` and, when a character does not match, tries
+ * again one text character later. It never overflows the stack, and its time is at most the
+ * text length times the pattern length (security, phase Q3). A pattern that ends with `\`
+ * fails at the same moments as in Postgres: only when the matcher reaches the `\`
+ * (`'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
  */
-function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | 'false' | 'abort' {
-    const trailing = (): never => fail('LIKE pattern must not end with escape character');
-    while (ti < t.length && pi < p.length) {
-        if (p[pi] === '\\') {
-            pi++;
-            if (pi >= p.length) trailing();
-            if (p[pi] !== t[ti]) return 'false';
-        } else if (p[pi] === '%') {
-            pi++;
-            while (pi < p.length) {
-                if (p[pi] === '%') pi++;
-                else if (p[pi] === '_') {
-                    if (ti >= t.length) return 'abort';
+function likeMatch(t: string[], p: string[]): boolean {
+    let ti = 0;
+    let pi = 0;
+    let starPi = -1;
+    let starTi = 0;
+    while (ti < t.length) {
+        if (pi < p.length) {
+            const c = p[pi];
+            if (c === '%') {
+                while (p[pi] === '%') pi++;
+                starPi = pi;
+                starTi = ti;
+                continue;
+            }
+            if (c === '\\') {
+                if (pi + 1 >= p.length) fail('LIKE pattern must not end with escape character');
+                if (p[pi + 1] === t[ti]) {
+                    pi += 2;
                     ti++;
-                    pi++;
-                } else break;
-            }
-            if (pi >= p.length) return 'true';
-            let first = p[pi];
-            if (first === '\\') {
-                if (pi + 1 >= p.length) trailing();
-                first = p[pi + 1];
-            }
-            while (ti < t.length) {
-                if (t[ti] === first) {
-                    const matched = likeMatch(t, ti, p, pi);
-                    if (matched !== 'false') return matched;
+                    continue;
                 }
+            } else if (c === '_' || c === t[ti]) {
+                pi++;
                 ti++;
+                continue;
             }
-            return 'abort';
-        } else if (p[pi] === '_') {
-            ti++;
-            pi++;
-            continue;
-        } else if (p[pi] !== t[ti]) {
-            return 'false';
         }
-        pi++;
-        ti++;
+        if (starPi < 0) return false;
+        starTi++;
+        ti = starTi;
+        pi = starPi;
     }
-    if (ti < t.length) return 'false';
-    while (pi < p.length && p[pi] === '%') pi++;
-    return pi >= p.length ? 'true' : 'abort';
+    while (p[pi] === '%') pi++;
+    return pi >= p.length;
+}
+
+/** The column a NOT NULL violation names. The driver gives it as `column`; some give only the message. */
+function missingColumn(error: unknown): string {
+    const column = (error as { column?: unknown } | null)?.column;
+    if (typeof column === 'string' && column !== '') return column;
+    const message = (error as { message?: unknown } | null)?.message;
+    return (typeof message === 'string' && /column "([^"]+)"/.exec(message)?.[1]) || '?';
+}
+
+/** A boolean that a driver may give as `true`, `"t"` or `1`. */
+function isTrue(value: unknown): boolean {
+    return value === true || value === 't' || value === 1 || value === '1';
+}
+
+/** The root of a member path: `customer` in `customer.doctor.id`. */
+function pathStart(expr: Expression): Expression {
+    let current = expr;
+    while (isMemberAccess(current)) current = current.receiver;
+    return current;
+}
+
+/** What a dry run holds for a `JSON` column that it "wrote": the next write to the same column starts from it. One map for each run. */
+const dryRunMemory = new WeakMap<RunBudget, Map<string, MinabValue>>();
+function dryRunValues(budget: RunBudget): Map<string, MinabValue> {
+    let values = dryRunMemory.get(budget);
+    if (!values) dryRunMemory.set(budget, (values = new Map()));
+    return values;
+}
+
+const writeCache = new WeakMap<Model, boolean>();
+
+/** Does the program have an `INSERT`, `UPDATE`, `DELETE` or an assignment through a record path anywhere (also in a function it may never call)? */
+function hasWrites(model: Model): boolean {
+    let found = writeCache.get(model);
+    if (found === undefined) {
+        found = AstUtils.streamAst(model).some(
+            node => isInsertStatement(node) || isUpdateStatement(node) || isDeleteStatement(node) || (isAssignmentStatement(node) && !isNameRef(node.target))
+        );
+        writeCache.set(model, found);
+    }
+    return found;
 }
 
 export class MinabInterpreter {
@@ -278,28 +329,54 @@ export class MinabInterpreter {
         const context: EvalContext = { ...given, now: given.now ?? new Date(), timeZone: given.timeZone ?? 'UTC' };
         const ownBudget = context.budget === undefined;
         const budget = context.budget ?? new RunBudget(NO_LIMITS, context.signal);
-        const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
         try {
-            state.frames.push({
-                record: this.normalizeRecord(context.record, context.recordTable),
-                table: context.recordTable,
-                variables: new Map(),
-                types: new Map()
-            });
             budget.check();
-            // Top-level statements run in order. A function is known from the start (`collectFunctions`).
-            for (const declaration of model.declarations) {
-                if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
-            }
-            if (!model.tail) return { ok: true, value: null };
-            return {
-                ok: true,
-                value: externalize(await this.mainStatement(model.tail, state))
-            };
+            const writes = hasWrites(model);
+            // A host must choose (D26). The choice is checked before any port is called.
+            if (writes && !context.writeMode) fail(coded('eval.writeModeMissing').reason, 'eval.writeModeMissing');
+            const value =
+                writes && context.writeMode === 'apply'
+                    ? await this.inTransaction(context, budget, inner => this.runModel(model, inner, budget))
+                    : await this.runModel(model, context, budget);
+            return { ok: true, value };
         } catch (e) {
             return this.failure(e);
         } finally {
             if (ownBudget) budget.dispose();
+        }
+    }
+
+    private async runModel(model: Model, context: EvalContext, budget: RunBudget): Promise<MinabValue> {
+        const state = new State(context, budget, [], this.collectFunctions(model), name => this.readHostInput(name, context));
+        state.frames.push({
+            record: this.normalizeRecord(context.record, context.recordTable),
+            table: context.recordTable,
+            variables: new Map(),
+            types: new Map()
+        });
+        // Top-level statements run in order. A function is known from the start (`collectFunctions`).
+        for (const declaration of model.declarations) {
+            if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
+        }
+        if (!model.tail) return null;
+        return externalize(await this.mainStatement(model.tail, state));
+    }
+
+    /**
+     * One run is one transaction (D26). The work gets a context whose data port is the transaction,
+     * so a read sees the rows the run wrote. An error rolls everything back: the port rolls back
+     * when `work` throws, and the error comes out of here.
+     */
+    private async inTransaction(context: EvalContext, budget: RunBudget, work: (inner: EvalContext) => Promise<MinabValue>): Promise<MinabValue> {
+        const port = context.write;
+        if (!port) fail(coded('eval.writesNotSupported').reason, 'eval.writesNotSupported');
+        try {
+            return await port.transaction(tx => work({ ...context, executor: tx, writeTransaction: tx }), { signal: budget.signal });
+        } catch (e) {
+            if (e instanceof EvalError || e instanceof NumberError || e instanceof RunStopped || e instanceof PortError || e instanceof LoopSignal) throw e;
+            // The database failed to commit or to roll back. As for any other port failure, only a code leaves.
+            const failure = dataFailure(e);
+            throw new EvalError(failure.message, failure.code, failure.params, e);
         }
     }
 
@@ -684,7 +761,7 @@ export class MinabInterpreter {
         return block.tail ? await this.mainStatement(block.tail, inner) : null;
     }
 
-    /** Runs statements in order in the innermost scope of `state`. X5 and X6 add writes. */
+    /** Runs statements in order in the innermost scope of `state`. */
     private async runStatements(statements: BodyStatement[], state: State): Promise<void> {
         for (const statement of statements) {
             state.budget.check();
@@ -702,18 +779,151 @@ export class MinabInterpreter {
                     await this.ifStatement(statement, state);
                 } else if (isLoopStatement(statement)) {
                     await this.loop(statement, state);
+                } else if (isInsertStatement(statement) || isUpdateStatement(statement) || isDeleteStatement(statement)) {
+                    await this.writeStatement(statement, state);
                 } else if (isBreakStatement(statement)) {
                     throw new LoopSignal('break', statement.label);
                 } else if (isContinueStatement(statement)) {
                     throw new LoopSignal('continue', statement.label);
                 } else {
-                    fail(`"${statement.$type}" is not executed yet`);
+                    fail(`unknown statement "${statement.$type}"`);
                 }
             } catch (e) {
                 placeError(e, statement);
                 throw e;
             }
         }
+    }
+
+    // ---- table writes (X5) -----------------------------------------------
+
+    /**
+     * `INSERT`, `UPDATE` or `DELETE` on a table. It becomes one parameterized statement. In a dry run it
+     * is only recorded. When applied, it goes to the run's transaction and the row count is recorded.
+     * Both count toward `limits.statements`, so a loop cannot make an endless list.
+     */
+    private async writeStatement(statement: InsertStatement | UpdateStatement | DeleteStatement, state: State): Promise<void> {
+        // A `JSON` array column is changed in memory and written back (X6, ADR 0001).
+        if (this.compiler.isJsonColumn(splitSelectors(statement.target).base, this.outerResolver(state))) {
+            await this.jsonArrayWrite(statement, state);
+            return;
+        }
+        const compiled = this.compiler.compileWrite(statement, this.outerResolver(state), this.clockOf(state));
+        if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
+        await this.performWrite(compiled.query, statement, state);
+    }
+
+    /**
+     * Sends one write statement. In a dry run it is only recorded. When applied, it goes to the run's
+     * transaction and the row count is recorded. Both count toward `limits.statements`.
+     * `creating` names the table that a `!` step creates: a missing required value then is `eval.cannotCreateRecord`.
+     */
+    private async performWrite(query: SqlQuery, origin: AstNode, state: State, creating?: string): Promise<void> {
+        const { context, budget } = state;
+        const range = origin.$cstNode?.range;
+        const record = { sql: query.text, params: query.params, ...(range ? { range } : {}) };
+        budget.beforeStatement();
+        const transaction = context.writeTransaction;
+        if (context.writeMode !== 'apply' || !transaction) {
+            budget.writes.push(record);
+            context.events?.emit({ kind: 'dryRun', ...record });
+            return;
+        }
+        context.events?.emit({ kind: 'statement', ...record });
+        const started = performance.now();
+        try {
+            const result = await budget.race(Promise.resolve().then(() => transaction.executeWrite(query, { signal: budget.signal })));
+            budget.writes.push({ ...record, rowCount: result.affected });
+            budget.writeRows += result.affected;
+        } catch (e) {
+            if (e instanceof RunStopped || e instanceof PortError) throw e;
+            // NOT NULL violation while a `!` creates a row: say which table and column (never the driver's text).
+            if (creating && sqlstateOf(e) === '23502') {
+                const column = missingColumn(e);
+                throw new EvalError(
+                    coded('eval.cannotCreateRecord', { table: creating, column }).reason,
+                    'eval.cannotCreateRecord',
+                    { table: creating, column },
+                    e
+                );
+            }
+            const failure = dataFailure(e);
+            throw new EvalError(failure.message, failure.code, failure.params, e);
+        } finally {
+            context.events?.emit({ kind: 'timing', phase: 'data', durationMs: performance.now() - started });
+        }
+    }
+
+    // ---- JSON arrays (X6) ----------------------------------------------
+
+    /**
+     * `INSERT`, `UPDATE` or `DELETE` on a `JSON` array column. The column is read, changed in memory and
+     * written back with one `UPDATE`. In a dry run, nothing is written, so the run keeps the value it
+     * would have written; a later write to the same column starts from it.
+     */
+    private async jsonArrayWrite(statement: InsertStatement | UpdateStatement | DeleteStatement, state: State): Promise<void> {
+        const outer = this.outerResolver(state);
+        const clock = this.clockOf(state);
+        const { base, selectors } = splitSelectors(statement.target);
+        if (isInsertStatement(statement) && selectors.length > 0) fail(coded('compile.writeTarget').reason, 'compile.writeTarget');
+        const read = this.compiler.compileJsonRead(base, outer, clock);
+        if (!read.ok) fail(read.reason, read.code === 'compile.notSql' ? undefined : read.code, read.params);
+        const overlay = dryRunValues(state.budget);
+        const key = read.query.text + JSON.stringify(read.query.params);
+        let current: MinabValue;
+        if (overlay.has(key)) {
+            current = overlay.get(key);
+        } else {
+            const rows = await this.runStatement(read.query, statement, state);
+            // No such record: nothing to change.
+            if (rows.length === 0) return;
+            current = rows[0].value ?? null;
+        }
+        const evaluator = this.elementEvaluator(state);
+        let next: MinabValue[];
+        try {
+            if (isInsertStatement(statement)) {
+                const array = current === null ? [] : this.jsonArray(current);
+                const payload = await this.mainStatement(statement.payload, state);
+                // A list is many elements (as it is many rows for a table). Wrap it in a list to append one list.
+                next = [...array, ...(Array.isArray(payload) ? payload : [payload])];
+            } else {
+                // A `null` column has no element to change.
+                if (current === null) return;
+                const array = this.jsonArray(current);
+                const indices = await selectIndices(array, selectors, statement, evaluator);
+                if (indices.length === 0) return;
+                next = isDeleteStatement(statement) ? removeAt(array, indices) : await updateAt(array, indices, statement.setClause.assignments, evaluator);
+            }
+        } catch (e) {
+            if (e instanceof JsonArrayError) fail(e.message);
+            throw e;
+        }
+        const write = this.compiler.compileJsonWrite(base, next, outer, clock);
+        if (!write.ok) fail(write.reason, write.code === 'compile.notSql' ? undefined : write.code, write.params);
+        await this.performWrite(write.query, statement, state);
+        if (state.context.writeMode !== 'apply') overlay.set(key, next);
+    }
+
+    private jsonArray(value: MinabValue): MinabValue[] {
+        if (!Array.isArray(value)) fail('the target of a write is not a JSON array');
+        return value;
+    }
+
+    /** Evaluates the expressions of a write for the elements of a `JSON` array: `.` is the element, `.$index` its position. */
+    private elementEvaluator(state: State): ElementEvaluator {
+        return {
+            at: async (expr, element, index) =>
+                await this.expression(expr, state.push({ record: element as Row, table: undefined, variables: new Map(), types: new Map(), index })),
+            truthy: value => this.truthy(value),
+            arithmetic: (operator, current, value) =>
+                operator === '+' && this.isTextAssign(current, value, undefined)
+                    ? current === null || value === null
+                        ? null
+                        : String(current) + String(value)
+                    : arithmetic(operator, this.number(current), this.number(value)),
+            merge: (current, value) => this.merge(current, value)
+        };
     }
 
     // ---- loops (X4) -----------------------------------------------------
@@ -810,12 +1020,49 @@ export class MinabInterpreter {
         }
     }
 
-    /** Assignment to a local name. Any other target is a write, and writes come with X5 and X6. */
+    /**
+     * Assignment through a record path (spec §9.3): `.doctor.id = 21;`, `.doctor!.id = 21;`, `.doctor |= { ... };`.
+     * A `!` step may need a new row: it asks if the link is empty, and if so creates and links a row.
+     * Then one `UPDATE` sets the value. In a dry run the creation is not run, so the steps after it
+     * are listed as if the new row were there (a new row has empty links, so only another `!` goes on).
+     */
+    private async assignPath(statement: AssignmentStatement, state: State): Promise<void> {
+        const value = await this.expression(statement.value, state);
+        const compiled = this.compiler.compilePathAssign(statement, value, this.outerResolver(state), this.clockOf(state));
+        if (!compiled.ok) {
+            // A name that holds no record: not a write (X3 kept this refusal for a non-record target).
+            if (compiled.code === 'compile.writePath' && isMemberAccess(statement.target) && isNameRef(pathStart(statement.target))) {
+                fail(coded('eval.writesNotSupported').reason, 'eval.writesNotSupported');
+            }
+            fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
+        }
+        const { stages, final } = compiled.plan;
+        const applying = state.context.writeMode === 'apply';
+        let fresh = false;
+        for (const stage of stages) {
+            if (fresh) {
+                if (!stage.vivify) return;
+                await this.performWrite(stage.create, statement, state, stage.table);
+                continue;
+            }
+            if (!stage.vivify) continue;
+            const rows = await this.runStatement(stage.check, statement, state);
+            // The record that owns the link is not there: nothing to assign into.
+            if (rows.length === 0) return;
+            if (!isTrue(rows[0].missing)) continue;
+            await this.performWrite(stage.create, statement, state, stage.table);
+            fresh = !applying;
+        }
+        await this.performWrite(final, statement, state);
+    }
+
+    /** Assignment to a local name. Any other target is a path through a record (X6). */
     private async assign(statement: AssignmentStatement, state: State): Promise<void> {
         const target = statement.target;
         const frame = isNameRef(target) ? state.frameOf(target.name) : undefined;
         if (!isNameRef(target) || !frame) {
-            fail(coded('eval.writesNotSupported').reason, 'eval.writesNotSupported');
+            await this.assignPath(statement, state);
+            return;
         }
         const name = target.name;
         const type = frame.types.get(name);
@@ -1057,7 +1304,7 @@ export class MinabInterpreter {
     private like(value: string, pattern: string, ignoreCase: boolean): boolean {
         const text = Array.from(ignoreCase ? value.toLowerCase() : value);
         const pat = Array.from(ignoreCase ? pattern.toLowerCase() : pattern);
-        return likeMatch(text, 0, pat, 0) === 'true';
+        return likeMatch(text, pat);
     }
 
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */
@@ -1141,20 +1388,33 @@ export class MinabInterpreter {
             resolveRecord: (frameIndex: number) => {
                 const result = guard(() => this.outerRecord(state, frameIndex));
                 return result.found ? { found: true, record: result.value } : result;
+            },
+            resolveNamedRecord: (name: string) => {
+                const result = guard(() => this.namedRecord(state, name));
+                return result.found ? { found: true, record: result.value } : result;
             }
         };
+    }
+
+    /** The row that a local name holds: a loop variable over the rows of a table. */
+    private namedRecord(state: State, name: string): OuterRecord {
+        const frame = state.frameOf(name);
+        const row = frame?.variables.get(name);
+        if (!frame || !frame.table || !frame.record || row !== frame.record) fail(`"${name}" is not a record of a table`);
+        return this.recordKey(frame.record, frame.table);
     }
 
     private outerRecord(state: State, frameIndex: number): OuterRecord {
         const frame = state.frame(frameIndex);
         if (!frame?.record) fail('no record in scope');
         if (!frame.table) fail('the host did not say which table the record under validation belongs to');
-        const primaryKey = this.schema.getTable(frame.table)?.primaryKey;
-        if (!primaryKey) fail(`the schema does not say which column identifies a row of "${frame.table}" (set primaryKey)`);
-        return {
-            table: frame.table,
-            key: this.readField(frame.record, primaryKey)
-        };
+        return this.recordKey(frame.record, frame.table);
+    }
+
+    private recordKey(record: Row, table: string): OuterRecord {
+        const primaryKey = this.schema.getTable(table)?.primaryKey;
+        if (!primaryKey) fail(`the schema does not say which column identifies a row of "${table}" (set primaryKey)`);
+        return { table, key: this.readField(record, primaryKey) };
     }
 
     /**

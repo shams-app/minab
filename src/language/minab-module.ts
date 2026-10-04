@@ -1,7 +1,7 @@
 import type { Module } from 'langium';
 import type { DefaultSharedModuleContext, LangiumServices, LangiumSharedServices, PartialLangiumServices } from 'langium/lsp';
 import { createDefaultModule, createDefaultSharedModule } from 'langium/lsp';
-import { inject } from 'langium';
+import { createLangiumParser, inject, type LangiumParser } from 'langium';
 import { MinabGeneratedModule, MinabGeneratedSharedModule, MinabLanguageMetaData } from './generated/module.js';
 import { MinabDefinitionProvider } from './lsp/minab-definition-provider.js';
 import { MinabHoverProvider } from './lsp/minab-hover-provider.js';
@@ -93,6 +93,37 @@ export interface MinabServiceOptions {
 }
 
 /**
+ * The production parser, built once and shared by every service set (Q4).
+ *
+ * The parser (Chevrotain tables and lexer) is about 2 MB. It depends on the grammar only: the token
+ * builder and the value converter have no schema, and the grammar has no cross-references, so the
+ * schema never reaches it. A parse is synchronous and the parser resets itself at the start of each
+ * parse, so one instance can serve all sets. `development` mode keeps one parser per set, because
+ * grammar work relies on that mode re-checking the grammar each time.
+ */
+let sharedProductionParser: LangiumParser | undefined;
+
+function productionParser(services: Parameters<typeof createLangiumParser>[0]): LangiumParser {
+    if (sharedProductionParser) return sharedProductionParser;
+    let inner = createLangiumParser(services);
+    // Langium uses only `parse` of this service. A parse that throws (for example when the stack runs out
+    // on a very deep program) leaves half-built nodes inside the parser, and the next parse would see them.
+    // So after a throw the parser is built again. This is rare, and a new set would pay the same cost.
+    const shared = {
+        parse(input: string, options?: Parameters<LangiumParser['parse']>[1]) {
+            try {
+                return inner.parse(input, options);
+            } catch (error) {
+                inner = createLangiumParser(services);
+                throw error;
+            }
+        }
+    } as unknown as LangiumParser;
+    sharedProductionParser = shared;
+    return shared;
+}
+
+/**
  * Dependency injection module that overrides Langium default services and
  * contributes the declared custom services. The Langium defaults can be
  * partially specified to override only distinct fields, while the
@@ -123,6 +154,7 @@ function createMinabModule(
         sqlCompiler: services => new MinabSqlCompiler(services.schema, services.typeChecker),
         interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler, services.typeChecker),
         parser: {
+            ...(options.mode === 'production' ? { LangiumParser: productionParser } : {}),
             TokenBuilder: () => new MinabTokenBuilder(),
             ValueConverter: () => new MinabValueConverter()
         },
