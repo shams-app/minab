@@ -8,6 +8,7 @@ import type { QueryExecutor, Row } from '../../src/language/minab-executor.js';
 import { createMinabServices } from '../../src/language/minab-module.js';
 import type { MinabSchema } from '../../src/language/schema.js';
 import { Decimal } from './database.js';
+import { evaluate } from './evaluate.js';
 
 /** The clock of one run: the instant (ISO 8601) and the time zone (an IANA name). */
 export interface TestClock {
@@ -53,7 +54,7 @@ export function loadSchema(spec: SchemaSpec, recordTable?: string): Loaded {
             return { model: document.parseResult.value, errors };
         },
         run: (model, executor, record, clock) =>
-            services.Minab.interpreter.evaluate(model, {
+            evaluate(services.Minab.interpreter, model, {
                 executor,
                 record: record?.row,
                 recordTable: record?.table,

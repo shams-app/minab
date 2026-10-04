@@ -154,9 +154,7 @@ to its driver. The timer is cleared when the run ends.
 
 ## Not done yet
 
-- A `QueryExecutor` (one argument) still fits the data port. R7 and R8 move the CLI and the
-  playground to `DataPort`.
+- A `QueryExecutor` (one argument) still fits the data port. The CLI (R7) and the playground (R8)
+  use `DataPort`.
 - The write port is an interface. No statement uses it until X5.
-- `MinabInterpreter.evaluate` is the old entry (CLI and playground). It is `@deprecated`, has no
-  limits, and throws a data port failure again. Remove it in R8, or in whichever of R7 and R8 merges last.
 - The HTTP endpoint (H2) and the browser client (H5) use the wire format. They are not built yet.

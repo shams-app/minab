@@ -32,6 +32,7 @@ import { EXIT_PROGRAM_ERROR, runCli, type CliIo } from '../src/cli/main.js';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { evaluate } from './support/evaluate.js';
 
 const schema: MinabSchema = {
     tables: [
@@ -296,7 +297,7 @@ describe('every code is reported by a program', () => {
             case 'evaluation': {
                 // The error carries its code and the English message.
                 const { document } = await validate.record(testCase.program);
-                const result = await services.record.interpreter.evaluate(document.parseResult.value, { executor: { execute: async () => [] } });
+                const result = await evaluate(services.record.interpreter, document.parseResult.value, { executor: { execute: async () => [] } });
                 const params = (!result.ok && result.params) || {};
                 expect(result).toMatchObject({ ok: false, code: expected, reason: DIAGNOSTICS[expected].message(params as never) });
                 break;

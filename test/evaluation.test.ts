@@ -6,6 +6,7 @@ import type { QueryExecutor, Row, SqlQuery } from '../src/language/minab-executo
 import type { EvalContext, MinabInterpreter } from '../src/language/minab-interpreter.js';
 import { createMinabServices } from '../src/language/minab-module.js';
 import { scalarType, type MinabSchema } from '../src/language/schema.js';
+import { evaluate } from './support/evaluate.js';
 
 /**
  * Phase 5's evaluator end to end (ADR 0001's hybrid): the interpreter walks
@@ -82,7 +83,7 @@ beforeAll(() => {
 async function run(source: string, context: Omit<EvalContext, 'executor'> & { executor: RecordingExecutor }) {
     const document = await parse(source);
     expect(document.parseResult.parserErrors.map(e => e.message)).toEqual([]);
-    return await interpreter.evaluate(document.parseResult.value, context);
+    return await evaluate(interpreter, document.parseResult.value, context);
 }
 
 async function value(source: string, context: Omit<EvalContext, 'executor'> & { executor: RecordingExecutor }) {
@@ -206,42 +207,43 @@ describe('a pipeline query as the document tail (spec §4)', () => {
     });
 });
 
-describe('onStatement names the source node behind each statement', () => {
+describe('the statement event names the source range behind each statement', () => {
+    type Statement = { sql: string; text: string };
+
+    /** Runs a program and gives, for each statement event, the SQL and the source text its range covers. */
+    async function statements(source: string, context: Omit<EvalContext, 'executor' | 'events'> & { executor: RecordingExecutor }): Promise<Statement[]> {
+        const lines = source.split('\n');
+        const at = (p: { line: number; character: number }) => lines.slice(0, p.line).reduce((n, l) => n + l.length + 1, 0) + p.character;
+        const seen: Statement[] = [];
+        await value(source, {
+            ...context,
+            events: {
+                emit: event => {
+                    if (event.kind === 'statement') seen.push({ sql: event.sql, text: source.slice(at(event.range!.start), at(event.range!.end)) });
+                }
+            }
+        });
+        return seen;
+    }
+
     test('a rule reports the pushed-down EXISTS, not the whole rule', async () => {
         const executor = new RecordingExecutor(() => [{ value: false }]);
-        const seen: Array<{ text: string; origin: string }> = [];
-        await value(OVERLAP_RULE, {
-            executor,
-            record: BOOKING,
-            recordTable: 'Booking',
-            onStatement: (query, origin) => seen.push({ text: query.text, origin: origin.$cstNode!.text })
-        });
+        const seen = await statements(OVERLAP_RULE, { executor, record: BOOKING, recordTable: 'Booking' });
         expect(seen).toHaveLength(1);
-        expect(seen[0].text).toBe(executor.only.text);
-        expect(seen[0].origin).toMatch(/^EXISTS\(\s*#Booking\[/);
-        expect(seen[0].origin).toMatch(/\]\s*\)$/);
+        expect(seen[0].sql).toBe(executor.only.text);
+        expect(seen[0].text).toMatch(/^EXISTS\(\s*#Booking\[/);
+        expect(seen[0].text).toMatch(/\]\s*\)$/);
     });
 
     test('a query program reports the query itself', async () => {
-        const executor = new RecordingExecutor(() => []);
-        const origins: string[] = [];
-        await value(`FROM Order WHERE .status == "shipped" SELECT .id`, {
-            executor,
-            onStatement: (_query, origin) => origins.push(origin.$type)
-        });
-        expect(origins).toEqual(['Query']);
+        const source = `FROM Order WHERE .status == "shipped" SELECT .id`;
+        const seen = await statements(source, { executor: new RecordingExecutor(() => []) });
+        expect(seen.map(s => s.text)).toEqual([source]);
     });
 
     test('a rule settled from the record alone reports nothing', async () => {
-        const executor = new RecordingExecutor();
-        const origins: string[] = [];
-        await value(`.end_date > .start_date`, {
-            executor,
-            record: BOOKING,
-            recordTable: 'Booking',
-            onStatement: (_query, origin) => origins.push(origin.$type)
-        });
-        expect(origins).toEqual([]);
+        const seen = await statements(`.end_date > .start_date`, { executor: new RecordingExecutor(), record: BOOKING, recordTable: 'Booking' });
+        expect(seen).toEqual([]);
     });
 });
 

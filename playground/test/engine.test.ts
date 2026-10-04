@@ -105,6 +105,48 @@ describe('running', () => {
         expect(set).toEqual({ ok: false, error: 'seed.Room: "nope" is not a column of Room' });
     });
 
+    test('a statement the fixtures cannot answer is a data source error that names the statement', async () => {
+        await engine.setHost({
+            config: { schema: demoDataset.schema, data: [{ match: 'NEVER_MATCHES', value: true }] },
+            dataSource: 'fixtures'
+        });
+        const report = await engine.run('COUNT(#Customer)', 6);
+        expect(report.stage).toBe('run');
+        expect(report.error).toMatchObject({ kind: 'datasource', sql: expect.stringContaining('Customer') });
+        expect(report.trace).toHaveLength(1);
+        expect(report.trace[0].error).toBe(report.error?.message);
+    });
+
+    test('a statement Postgres rejects keeps the database message and the failed statement', async () => {
+        await engine.setHost(demo());
+        const report = await engine.run('FROM Order SELECT .total / 0 AS x', 7);
+        expect(report.stage).toBe('run');
+        expect(report.error?.kind).toBe('datasource');
+        expect(report.error?.message).toMatch(/^Postgres rejected this statement: .*division by zero/i);
+        expect(report.error).toMatchObject({ sql: expect.stringContaining('SELECT') });
+        expect(report.trace[0].error).toBe(report.error?.message);
+    });
+
+    test('a construct the interpreter does not run yet is a refusal, not an error', async () => {
+        await engine.setHost(demo());
+        const report = await engine.run('let n: INTEGER = 0;\nloop i from 1 to 3 { n = n + i; }\nn', 8);
+        expect(report.stage).toBe('run');
+        expect(report.error).toBeUndefined();
+        expect(report.refusal).toMatchObject({ construct: 'LoopStatement' });
+    });
+
+    test('a program that needs no data runs while the database has not booted', async () => {
+        const fresh = new Engine();
+        try {
+            await fresh.setHost(demo());
+            const report = await fresh.run('1 + 1', 9);
+            expect(report.result).toMatchObject({ kind: 'value', value: 2 });
+            expect(fresh['database'].state).toBe('idle');
+        } finally {
+            await fresh.close();
+        }
+    });
+
     test('fixtures mode answers from data.responses, like the CLI', async () => {
         await engine.setHost({
             config: {

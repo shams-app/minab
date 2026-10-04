@@ -2,12 +2,15 @@
  * What a parsed program *is*, before it runs: a query, a rule, or a value;
  * whether it uses constructs the evaluator doesn't execute yet; what it
  * declares; and what type its answer has.
+ *
+ * The kind and the result type come from the runtime (`PreparedProgram`).
+ * The check-only constructs and the symbols still need the syntax tree and
+ * their ranges, which the runtime does not give.
  */
 
 import { AstUtils, type AstNode, type LangiumDocument } from 'langium';
 import { isFunctionDecl, isVariableDecl, type Model } from '../../../src/language/generated/ast.js';
-import { classifyProgram } from '../../../src/runtime/program-kind.js';
-import type { MinabServices } from '../../../src/language/minab-module.js';
+import type { PreparedProgram } from '../../../src/runtime/index.js';
 import type { CheckOnlyConstruct, ProgramInfo, Range } from './protocol.js';
 
 /**
@@ -54,9 +57,31 @@ function typeText(node: AstNode | undefined): string | undefined {
     return node?.$cstNode?.text.replace(/\s+/g, ' ');
 }
 
-export function describeProgram(document: LangiumDocument<Model>, services: MinabServices): ProgramInfo {
+/**
+ * The node a statement event points at: the innermost node with exactly this range (a `Model` can have
+ * the same range as its only expression).
+ * The runtime gives a range; the Execution tab also shows the node's type and text.
+ */
+export function nodeAt(document: LangiumDocument<Model>, range: Range): AstNode | undefined {
+    let found: AstNode | undefined;
+    for (const node of AstUtils.streamAst(document.parseResult.value)) {
+        const r = rangeOf(node);
+        if (
+            r &&
+            r.start.line === range.start.line &&
+            r.start.character === range.start.character &&
+            r.end.line === range.end.line &&
+            r.end.character === range.end.character
+        ) {
+            found = node;
+        }
+    }
+    return found;
+}
+
+export function describeProgram(document: LangiumDocument<Model>, prepared: Pick<PreparedProgram, 'kind' | 'resultType'>): ProgramInfo {
     const model = document.parseResult.value;
-    const { kind, resultType } = classifyProgram(model, services);
+    const { kind, resultType } = prepared;
 
     const symbols: ProgramInfo['symbols'] = [];
     for (const declaration of model.declarations) {

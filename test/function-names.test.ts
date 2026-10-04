@@ -5,6 +5,7 @@ import type { Model } from '../src/language/generated/ast.js';
 import type { QueryExecutor, Row } from '../src/language/minab-executor.js';
 import { createMinabServices } from '../src/language/minab-module.js';
 import { EMPTY_SCHEMA } from '../src/language/schema.js';
+import { evaluate } from './support/evaluate.js';
 
 /**
  * D10: built-in names are ALL UPPERCASE and a user `fn` name needs a
@@ -39,7 +40,7 @@ describe('a built-in does not break an existing fn of the same name in lower cas
 
     test('fn lower(...) still runs, and calls the user function', async () => {
         const document = await parse(program);
-        const result = await services.interpreter.evaluate(document.parseResult.value, { executor });
+        const result = await evaluate(services.interpreter, document.parseResult.value, { executor });
         expect(result).toEqual({ ok: true, value: 42 });
     });
 
