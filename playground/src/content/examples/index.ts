@@ -288,6 +288,20 @@ export const examples: Example[] = [
 
     // ---- written for the playground ---------------------------------------
     {
+        id: 'statements-in-function',
+        title: 'Statements in a function',
+        summary: '`let`, `+=` and `if!` inside a function body.',
+        notes: 'A body can hold statements before its last expression. `+=` changes a local name, `if!` runs a block for its effect, and the block has its own scope. Nothing here touches a table, so nothing reaches the database. Change `points` to `3` to take the `else` branch.',
+        source:
+            '// Bonus points: more for a big order, a little less for a small one.\nfn bonus(points: INTEGER): INTEGER {\n    let total: INTEGER = points;\n    if! points > 10 {\n        total += 5;\n    } else if points > 5 {\n        total += 2;\n    } else {\n        total -= 1;\n    }\n    total\n}\n\nbonus(12)\n',
+        tags: ['functions', 'control-flow'],
+        level: 'intermediate',
+        specRef: '§9.1.1',
+        host: { dataset: 'demo' },
+        focus: 'result',
+        expect: { kind: 'value', value: 17, statements: 0 }
+    },
+    {
         id: 'credit-limit',
         title: 'Within the credit limit',
         summary: 'A rule that walks from the record to a related row.',

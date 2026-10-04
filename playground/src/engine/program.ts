@@ -24,11 +24,8 @@ export const CHECK_ONLY: Record<string, { label: string; specRef: string }> = {
     InsertStatement: { label: 'INSERT', specRef: '§10.1' },
     DeleteStatement: { label: 'DELETE', specRef: '§10.2' },
     UpdateStatement: { label: 'UPDATE', specRef: '§10.3' },
-    AssignmentStatement: { label: 'assignment', specRef: '§9.3' },
-    IfStatement: { label: 'if! statements', specRef: '§9.1.1' },
     IndexRef: { label: '.$index', specRef: '§3.5' },
-    TupleLiteral: { label: 'tuples', specRef: '§7.6' },
-    Block: { label: 'statements inside a block', specRef: '§9.1' }
+    TupleLiteral: { label: 'tuples', specRef: '§7.6' }
 };
 
 export function rangeOf(node: AstNode | undefined): Range | undefined {
@@ -37,17 +34,11 @@ export function rangeOf(node: AstNode | undefined): Range | undefined {
 
 const EMPTY_RANGE: Range = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
 
-function isBlockWithStatements(node: AstNode): boolean {
-    const statements = (node as unknown as { statements?: unknown[] }).statements;
-    return node.$type === 'Block' && Array.isArray(statements) && statements.length > 0;
-}
-
 function checkOnlyConstructs(model: Model): CheckOnlyConstruct[] {
     const found: CheckOnlyConstruct[] = [];
     for (const node of AstUtils.streamAst(model)) {
         const known = CHECK_ONLY[node.$type];
         if (!known) continue;
-        if (node.$type === 'Block' && !isBlockWithStatements(node)) continue;
         found.push({ type: node.$type, ...known, range: rangeOf(node) ?? EMPTY_RANGE });
     }
     return found;
@@ -110,7 +101,6 @@ export function describeProgram(document: LangiumDocument<Model>, prepared: Pick
  */
 export function explainRefusal(reason: string): { construct: string; label: string; specRef: string } | undefined {
     if (!/is not (executed|evaluated) yet|are not executed yet/.test(reason)) return undefined;
-    if (reason.startsWith('statements inside a block')) return { construct: 'Block', ...CHECK_ONLY.Block };
     if (reason.startsWith('".$index"')) return { construct: 'IndexRef', ...CHECK_ONLY.IndexRef };
     const type = /^"(\w+)"/.exec(reason)?.[1];
     if (type && CHECK_ONLY[type]) return { construct: type, ...CHECK_ONLY[type] };

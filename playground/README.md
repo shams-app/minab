@@ -85,7 +85,7 @@ src/
 ## Known limits
 
 These come from the language implementation, not the playground, and the site labels them as they occur:
-- Loops, `INSERT`/`UPDATE`/`DELETE`, assignments, `if!`, tuples and `.$index` are **check-only**. They parse and type-check, and the evaluator explains that it doesn't run them yet.
+- Loops, `INSERT`/`UPDATE`/`DELETE`, tuples and `.$index` are **check-only**. They parse and type-check, and the evaluator explains that it doesn't run them yet. Blocks, function-body statements, assignment to local names and `if!` run since X3.
 - A top-level query that calls a user `fn` doesn't compile to SQL.
 - Two compiler gaps found while building the gallery:
   - `GROUPBY .customer.country` (grouping by a traversed column) produces SQL Postgres rejects.

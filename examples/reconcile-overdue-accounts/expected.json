@@ -1,4 +1,4 @@
 {
   "mode": "check-only",
-  "refusal": "\"LoopStatement\" inside a function body is not executed yet"
+  "refusal": "\"LoopStatement\" is not executed yet"
 }

@@ -26,13 +26,17 @@
  * Evaluation is async throughout: every user function is implicitly
  * asynchronous (spec §8) and every pushdown is a round trip.
  *
- * Deliberately not implemented in Phase 5 (each fails with an explicit
- * reason rather than a wrong answer): loops (§9.4), `INSERT`/`UPDATE`/
- * `DELETE` execution (§10), and `.$index` (§3.5). ADR 0001 covers how
- * writes execute; building them is the next increment, not this one.
+ * Statements (X3) run in one place, `runStatements`: `let`, assignment to a
+ * local name, and `if!`. A block gets its own scope. A write (a record path
+ * as an assignment target) fails with `eval.writesNotSupported`.
+ *
+ * Not implemented yet (each fails with an explicit reason rather than a
+ * wrong answer): loops (§9.4, X4), `INSERT`/`UPDATE`/`DELETE` execution
+ * (§10, X5, X6), and `.$index` (§3.5, X4). ADR 0001 covers how writes execute.
  */
 
 import {
+    isAssignmentStatement,
     isBinaryExpression,
     isBlock,
     isBooleanLiteral,
@@ -44,6 +48,7 @@ import {
     isFunctionDecl,
     isGroupKeyRef,
     isIfExpr,
+    isIfStatement,
     isIndexRef,
     isJsonObjectLiteral,
     isListLiteral,
@@ -63,9 +68,14 @@ import {
     isTypeTestExpression,
     isUnaryExpression,
     isVariableDecl,
+    type AssignmentStatement,
     type BinaryExpression,
+    type Block,
+    type BodyStatement,
     type Expression,
     type FunctionDecl,
+    type IfStatement,
+    type IfStatementElse,
     type MainStatement,
     type Model,
     type SwitchExpr,
@@ -173,6 +183,13 @@ interface Frame {
     record?: Row;
     table?: string;
     variables: Map<string, MinabValue>;
+    /** The declared type of each name in `variables`, so an assignment keeps the type (`DECIMAL` stays exact). */
+    types: Map<string, Type>;
+    /**
+     * A block's scope (X3): it holds names only. `.`, `^` and the compiler's frame counting skip it,
+     * so a block does not change what `^` means.
+     */
+    scopeOnly?: boolean;
 }
 
 /**
@@ -248,16 +265,13 @@ export class MinabInterpreter {
             state.frames.push({
                 record: this.normalizeRecord(context.record, context.recordTable),
                 table: context.recordTable,
-                variables: new Map()
+                variables: new Map(),
+                types: new Map()
             });
             budget.check();
+            // Top-level statements run in order. A function is known from the start (`collectFunctions`).
             for (const declaration of model.declarations) {
-                if (isVariableDecl(declaration)) {
-                    const value = declaration.value ? this.coerce(declaration.type, await this.expression(declaration.value, state)) : null;
-                    state.frames[0].variables.set(declaration.name, value);
-                } else if (!isFunctionDecl(declaration)) {
-                    fail(`"${declaration.$type}" is not executed yet (Phase 5 covers queries and validation rules)`);
-                }
+                if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
             }
             if (!model.tail) return { ok: true, value: null };
             return {
@@ -535,10 +549,7 @@ export class MinabInterpreter {
             return null;
         }
         if (isSwitchExpr(expr)) return await this.switchExpr(expr, state);
-        if (isBlock(expr)) {
-            if (expr.statements.length > 0) fail('statements inside a block are not executed yet (Phase 5 covers expressions)');
-            return expr.tail ? await this.mainStatement(expr.tail, state) : null;
-        }
+        if (isBlock(expr)) return await this.block(expr, state);
         if (isTypeTestExpression(expr)) {
             const value = await this.expression(expr.value, state);
             const matches = this.jsonKindMatches(value, expr.test);
@@ -579,7 +590,8 @@ export class MinabInterpreter {
             const frame: Frame = {
                 record: row as Row,
                 table: undefined,
-                variables: new Map()
+                variables: new Map(),
+                types: new Map()
             };
             if (this.truthy(await this.expression(filter, state.push(frame)))) kept.push(row);
         }
@@ -605,27 +617,114 @@ export class MinabInterpreter {
             fail(`${name} takes ${declaration.params.length} argument(s), got ${args.length}`);
         }
         const variables = new Map<string, MinabValue>();
+        const types = new Map<string, Type>();
         for (let i = 0; i < args.length; i++) {
-            variables.set(declaration.params[i].name, this.coerce(declaration.params[i].type, await this.expression(args[i], state)));
+            const param = declaration.params[i];
+            variables.set(param.name, this.coerce(param.type, await this.expression(args[i], state)));
+            types.set(param.name, param.type);
         }
         const leave = state.budget.enterCall();
         try {
             const inner = state.push({
                 record: state.currentRecord(),
                 table: state.currentTable(),
-                variables
+                variables,
+                types
             });
-            for (const statement of declaration.body) {
-                if (!isVariableDecl(statement)) {
-                    fail(`"${statement.$type}" inside a function body is not executed yet (Phase 5 scope)`);
-                }
-                variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, inner)) : null);
-            }
+            await this.runStatements(declaration.body, inner);
             if (!declaration.tail) fail(`${name} has no tail expression to return`);
             return this.coerce(declaration.returnType, await this.mainStatement(declaration.tail, inner));
         } finally {
             leave();
         }
+    }
+
+    // ---- statements (X3) ------------------------------------------------
+
+    /** A block: its own scope, its statements in order, then its tail (or `null`). */
+    private async block(block: Block, state: State): Promise<MinabValue> {
+        const inner = state.push({ variables: new Map(), types: new Map(), scopeOnly: true });
+        await this.runStatements(block.statements, inner);
+        return block.tail ? await this.mainStatement(block.tail, inner) : null;
+    }
+
+    /** Runs statements in order in the innermost scope of `state`. X4 adds loops here, X5 and X6 add writes. */
+    private async runStatements(statements: BodyStatement[], state: State): Promise<void> {
+        for (const statement of statements) {
+            state.budget.check();
+            try {
+                if (isVariableDecl(statement)) {
+                    const frame = state.frames[0];
+                    frame.variables.set(statement.name, statement.value ? this.coerce(statement.type, await this.expression(statement.value, state)) : null);
+                    frame.types.set(statement.name, statement.type);
+                } else if (isAssignmentStatement(statement)) {
+                    await this.assign(statement, state);
+                } else if (isIfStatement(statement)) {
+                    await this.ifStatement(statement, state);
+                } else {
+                    fail(`"${statement.$type}" is not executed yet`);
+                }
+            } catch (e) {
+                placeError(e, statement);
+                throw e;
+            }
+        }
+    }
+
+    /** `if!`: the first branch whose condition is true runs. A branch is a block; its tail value is dropped. */
+    private async ifStatement(statement: IfStatement | IfStatementElse, state: State): Promise<void> {
+        let branch: IfStatement | IfStatementElse | undefined = statement;
+        while (branch) {
+            if (this.truthy(await this.expression(branch.condition, state))) {
+                await this.block(branch.thenBranch as Block, state);
+                return;
+            }
+            if (branch.elseBranch) {
+                await this.block(branch.elseBranch as Block, state);
+                return;
+            }
+            branch = branch.elseIf;
+        }
+    }
+
+    /** Assignment to a local name. Any other target is a write, and writes come with X5 and X6. */
+    private async assign(statement: AssignmentStatement, state: State): Promise<void> {
+        const target = statement.target;
+        const frame = isNameRef(target) ? state.frameOf(target.name) : undefined;
+        if (!isNameRef(target) || !frame) {
+            fail(coded('eval.writesNotSupported').reason, 'eval.writesNotSupported');
+        }
+        const name = target.name;
+        const type = frame.types.get(name);
+        const current = frame.variables.get(name) ?? null;
+        const operator = statement.operator;
+        let next: MinabValue;
+        if (operator === '?=') {
+            if (current !== null) return;
+            next = await this.expression(statement.value, state);
+        } else {
+            const value = await this.expression(statement.value, state);
+            if (operator === '=') next = value;
+            else if (operator === '|=') next = this.merge(current, value);
+            else if (operator === '+=' && this.isTextAssign(current, value, type))
+                next = current === null || value === null ? null : String(current) + String(value);
+            else next = arithmetic(operator.slice(0, 1) as Arithmetic, this.number(current), this.number(value));
+        }
+        frame.variables.set(name, type ? this.coerce(type, next) : next);
+    }
+
+    /** `+=` joins texts (D13). With two `null`s, the declared type decides. */
+    private isTextAssign(current: MinabValue, value: MinabValue, type: Type | undefined): boolean {
+        if (typeof current === 'string' || typeof value === 'string') return true;
+        return current === null && value === null && type !== undefined && isTypeRef(type) && !type.array && (type.base === 'TEXT' || type.base === 'CITEXT');
+    }
+
+    /** `|=` on a `JSON` local: the keys of the object on the right replace or join the keys on the left. A `null` is an empty object. */
+    private merge(current: MinabValue, value: MinabValue): MinabValue {
+        const isObject = (v: MinabValue): v is Record<string, MinabValue> => typeof v === 'object' && v !== null && !Array.isArray(v);
+        if (current !== null && !isObject(current)) fail('"|=" needs a JSON object on the left');
+        if (!isObject(value)) fail('"|=" needs an object on the right');
+        return { ...current, ...value };
     }
 
     /** A host function runs in the host, with the values of its arguments. Never in SQL. */
@@ -966,29 +1065,39 @@ class State {
         private readonly readHostInput: (name: string) => MinabValue
     ) {}
 
+    /** The frames that stand for a record scope (spec §2.2). A block's scope is not one. */
+    private get recordFrames(): Frame[] {
+        return this.frames.filter(frame => !frame.scopeOnly);
+    }
+
     push(frame: Frame): State {
         return new State(this.context, this.budget, [frame, ...this.frames], this.functions, this.readHostInput);
     }
 
     /** Frame `n` levels out, innermost first. A negative index would name a level inside a compiled statement, which this interpreter doesn't hold. */
     frame(index: number): Frame | undefined {
-        return index < 0 ? undefined : this.frames[index];
+        return index < 0 ? undefined : this.recordFrames[index];
     }
 
     currentRecord(): Row | undefined {
-        return this.frames[0]?.record;
+        return this.recordFrames[0]?.record;
     }
 
     currentTable(): string | undefined {
-        return this.frames[0]?.table;
+        return this.recordFrames[0]?.table;
     }
 
     parentRecord(): Row | undefined {
-        return this.frames[1]?.record;
+        return this.recordFrames[1]?.record;
     }
 
     parentTable(): string | undefined {
-        return this.frames[1]?.table;
+        return this.recordFrames[1]?.table;
+    }
+
+    /** The innermost frame that holds this local name. */
+    frameOf(name: string): Frame | undefined {
+        return this.frames.find(frame => frame.variables.has(name));
     }
 
     lookup(name: string): MinabValue {
