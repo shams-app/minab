@@ -1,0 +1,13 @@
+{
+  "allowance": 1.5,
+  "rows": {
+    "prepareWarm": { "what": "prepare a typical one-line rule, warm service cache (Node), median", "budget": 5, "unit": "ms" },
+    "prepareCold": { "what": "first prepare in a fresh process: new schema, production parser mode", "budget": 150, "unit": "ms" },
+    "runLocal": { "what": "run a prepared rule that needs no data (Node), median", "budget": 0.05, "unit": "ms" },
+    "rerun100": { "what": "re-run 100 prepared local rules after one field changes (worker code in Node), total", "budget": 8, "unit": "ms" },
+    "runCorrelated": { "what": "run a correlated rule with one data call (PGlite), without database time, median", "budget": 2, "unit": "ms" },
+    "workerGzip": { "what": "browser worker bundle, gzip (H5 measured 184160 bytes, plus 10%)", "budget": 202576, "unit": "bytes", "allowance": 1 },
+    "completion": { "what": "completion on a 200-line file, median", "budget": 50, "unit": "ms" },
+    "memory50": { "what": "resident memory with 50 cached schemas", "budget": 200, "unit": "MB" }
+  }
+}

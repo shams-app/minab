@@ -138,6 +138,8 @@ to its driver. The timer is cleared when the run ends.
   the workspace.
 - Services are cached by `schema.version` (or a hash of the schema when it is
   missing). Two schemas with the same version must be the same schema.
+- In `production` mode every service set shares one Langium parser (it is about 2 MB and has nothing of the
+  schema in it). `development` builds one parser per set. Speed budgets are in `bench/` and `docs/performance.md`.
 - `mode` is `production` by default. `development` re-checks the grammar on every
   parser build and is slow (about 2.8 s per service set).
 - Do not import `node:*`, `langium/node`, `vscode-languageserver/node` or `pg` from here.
