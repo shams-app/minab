@@ -74,6 +74,11 @@ If `release.yml` fails after the npm step, do not push the tag again: npm does
 not allow the same version twice. Fix the problem, bump to the next patch
 version and release that.
 
+## The API reference
+
+`npm run docs:api` builds the API reference (TypeDoc) into `out/api/`. It is not
+committed. The website (W4) or the release (V2) publishes that folder.
+
 ## The `next` channel
 
 Every merge to `main` that changes the package runs `.github/workflows/next.yml`.

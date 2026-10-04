@@ -12,7 +12,9 @@ import { MinabService } from './service.js';
 
 const DEFAULT_PATH = 'minab/run';
 
+/** Options of `MinabModule.forRootAsync`. The factory makes the module options, for example from the config service or a data source. */
 export interface MinabModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
+    /** Makes the module options. Its arguments are the providers named in `inject`. */
     useFactory: (...args: never[]) => MinabModuleOptions | Promise<MinabModuleOptions>;
     inject?: InjectionToken[];
     /** Mounts the run endpoint at this route. Its other settings (`allowSource`, `ports`, ...) are the `endpoint` of the factory's options. */
@@ -21,6 +23,7 @@ export interface MinabModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'>
 
 @Module({})
 export class MinabModule {
+    /** Sets Minab up with options that are known now. */
     static forRoot(options: MinabModuleOptions): DynamicModule {
         return build(
             [{ provide: MINAB_OPTIONS, useValue: options }],
@@ -30,6 +33,7 @@ export class MinabModule {
         );
     }
 
+    /** Sets Minab up with options made by a factory. The run endpoint needs `endpointPath` here, because a route is fixed before the factory runs. */
     static forRootAsync(options: MinabModuleAsyncOptions): DynamicModule {
         const provider: Provider = { provide: MINAB_OPTIONS, useFactory: options.useFactory, inject: options.inject ?? [] };
         return build([provider], options.imports ?? [], options.endpointPath);

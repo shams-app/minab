@@ -39,9 +39,11 @@ export const TOKEN_SCOPES: Record<TokenType, string> = {
 /** The tokenizer state that Monaco carries between lines. Only an open block comment spans lines. */
 export class MinabLineState {
     constructor(readonly line: LineState = INITIAL_STATE) {}
+    /** A copy of the state. Monaco needs it for each line. */
     clone(): MinabLineState {
         return new MinabLineState({ ...this.line });
     }
+    /** Two states are equal when a block comment is open in both or in neither. */
     equals(other: unknown): boolean {
         return other instanceof MinabLineState && other.line.inBlockComment === this.line.inBlockComment;
     }
@@ -49,7 +51,9 @@ export class MinabLineState {
 
 /** A tokens provider for `monaco.languages.setTokensProvider`. It runs the same tokenizer as the playground. */
 export const tokensProvider = {
+    /** The state at the start of a document. */
     getInitialState: () => new MinabLineState(),
+    /** Colours one line. The state tells if a block comment is open. */
     tokenize(line: string, state: MinabLineState) {
         const result = tokenizeLine(line, state.line);
         return {

@@ -21,8 +21,10 @@ export interface SourceRange {
     end: { line: number; character: number };
 }
 
+/** How serious a diagnostic is. Only `error` makes a program invalid. */
 export type MinabSeverity = 'error' | 'warning' | 'info' | 'hint';
 
+/** A problem found when a program is prepared: a syntax error, a type error, a warning. Hosts map it to an editor marker by `code`. */
 export interface MinabDiagnostic {
     severity: MinabSeverity;
     /** A stable code, for example `type.implicitCoercion`. Hosts translate by code. */
@@ -37,6 +39,7 @@ export interface MinabDiagnostic {
 /** The type the host wants back. Shamsine uses the six words. */
 export type ExpectedType = 'text' | 'number' | 'boolean' | 'date' | 'dateTime' | 'list' | { minab: string };
 
+/** What a host gives to `createMinab`. Everything except `schema` is optional. */
 export interface MinabOptions {
     /** The whole read surface of every program (D29). Give `version` so services can be cached by it. */
     schema: MinabSchema;
@@ -65,6 +68,7 @@ export interface MinabOptions {
     mode?: 'development' | 'production';
 }
 
+/** Options for one `prepare` call. */
 export interface PrepareOptions {
     /** Where the program sits: which table `.` means, and whether `$` exists. */
     ruleContext?: MinabRuleContext;
@@ -96,6 +100,7 @@ export interface RunPorts {
     events?: EventSink;
 }
 
+/** Options for one `run` call. */
 export interface RunOptions {
     /**
      * Aborts the run. The interpreter checks it between steps, and every port call gets it.
@@ -126,6 +131,7 @@ export interface WriteStatement {
     rowCount?: number;
 }
 
+/** A run error or a compile error. A host maps it by `code`, never by `message`. */
 export interface MinabError {
     /** A stable code from the registry, for example `eval.divisionByZero` or `limit.timeout`. */
     code: string;
@@ -148,6 +154,7 @@ export interface RunStats {
     durationMs: number;
 }
 
+/** What `run` answers. It never throws for a failed program: look at `ok`. */
 export type RunResult =
     | {
           ok: true;
@@ -162,6 +169,7 @@ export type RunResult =
       }
     | { ok: false; error: MinabError };
 
+/** What `compile` answers: the program as one SQL statement, or the reason it is not one. */
 export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 
 /**
@@ -196,6 +204,7 @@ export interface ProgramAnalysis {
     tier: 'local' | 'data';
 }
 
+/** A program that was parsed and checked once. It can run many times, also at the same time. */
 export interface PreparedProgram {
     /** Syntax errors, type errors, warnings, and `expect` mismatches. Empty when the program is valid. */
     readonly diagnostics: readonly MinabDiagnostic[];
@@ -214,6 +223,7 @@ export interface PreparedProgram {
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
 }
 
+/** Numbers about the service cache. Useful in tests and in a health check. */
 export interface CacheStats {
     /** Service sets in the cache now. */
     size: number;
@@ -225,9 +235,11 @@ export interface CacheStats {
     openDocuments: number;
 }
 
+/** The runtime a host holds. Make it once with `createMinab`. */
 export interface Minab {
     /** Parses and checks. Resolves with diagnostics for a bad program. Rejects only for a bad call. */
     prepare(source: string, options?: PrepareOptions): Promise<PreparedProgram>;
+    /** How full the service cache is, and how often it was hit. */
     cacheStats(): CacheStats;
     /** Frees the caches. A disposed runtime throws on use. */
     dispose(): void;

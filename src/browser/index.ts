@@ -49,7 +49,8 @@ import {
     type ToWorker
 } from './protocol.js';
 
-export type { BridgeEndpoint } from './protocol.js';
+export type { BridgeEndpoint, InputTypes } from './protocol.js';
+export type { CompletionItem, CompletionKind, CompletionResult, EditorPosition, EditorRange, HoverResult, SignatureHelpResult } from '../editor/types.js';
 export { consoleEventSink, emitLogs } from './console.js';
 export type { ConsoleLike, ConsoleSinkOptions } from './console.js';
 export { createRemoteMinab } from './remote.js';
@@ -57,6 +58,7 @@ export type { FetchLike, FetchResponse, RemoteMinab, RemoteMinabOptions, RemoteP
 export { routeByTier } from './route.js';
 export type { LocalMinab, RoutedProgram, RouteOptions, StoredProgram, TierRouter } from './route.js';
 
+/** Options of `createWorkerMinab`: the runtime options, and a function that makes the worker. */
 export interface WorkerMinabOptions extends Pick<MinabOptions, 'schema' | 'functions' | 'inputs' | 'ruleContext' | 'limits' | 'serviceCacheSize' | 'mode'> {
     /**
      * Makes the worker. A web app writes:
@@ -75,6 +77,7 @@ export interface WorkerPreparedProgram {
     readonly analysis: ProgramAnalysis;
     /** Does a change of this record field change the result? It answers at once: the analysis is already here. */
     dependsOn(field: string): boolean;
+    /** The whole program as one SQL statement, or the reason it is not one. */
     compile(): Promise<CompileResult>;
     /** Never throws for a failed program: the answer says `ok: false`. The ports stay on this thread. */
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
@@ -82,7 +85,9 @@ export interface WorkerPreparedProgram {
     release(): void;
 }
 
+/** The runtime of a web app: `prepare` and the editor services, all answered by the worker. */
 export interface WorkerMinab {
+    /** Parses and checks a program in the worker. It resolves with diagnostics for a bad program. */
     prepare(source: string, options?: PrepareOptions): Promise<WorkerPreparedProgram>;
     /**
      * Editor services, computed in the worker (phase E5). `offset` is a UTF-16 offset into `source`,
@@ -90,7 +95,9 @@ export interface WorkerMinab {
      * answer the worker cannot give is an empty result (`hover` and `signatureHelp`: `undefined`).
      */
     complete(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<CompletionResult>;
+    /** Hover text for the symbol at `offset`, or `undefined` when there is none. */
     hover(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<HoverResult | undefined>;
+    /** Signature help for the call at `offset`, or `undefined` when there is none. */
     signatureHelp(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<SignatureHelpResult | undefined>;
     /**
      * Calls a handler that the host app put in `serveMinab` (`requests`) and gives its answer. The payload and the
@@ -121,6 +128,7 @@ class BridgeFailure extends Error {
     }
 }
 
+/** Starts the runtime in a Web Worker. Call it once and keep the result. The parser stays off the main thread; the ports stay on it. */
 export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
     const { worker: makeWorker, ...runtimeOptions } = options;
     const endpoint = makeWorker();

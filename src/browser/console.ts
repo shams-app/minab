@@ -12,10 +12,13 @@ import type { EventSink, MinabEvent } from '../runtime/ports.js';
 
 /** The part of `console` that the sink uses. */
 export interface ConsoleLike {
+    /** Writes a log line. */
     log(...args: unknown[]): void;
+    /** Writes a debug line. */
     debug(...args: unknown[]): void;
 }
 
+/** Options of `consoleEventSink`. */
 export interface ConsoleSinkOptions {
     /** Where to write. Default: the global `console`. */
     console?: ConsoleLike;

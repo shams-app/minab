@@ -12,8 +12,11 @@ import { wrapQuery, writeTransaction, type WriteQueryResult } from './query-func
 
 /** What the port needs from `pg`'s `Client`, and all it uses. The import is untyped, so this is explicit. */
 export interface PgClientLike {
+    /** Opens the connection. */
     connect(): Promise<void>;
+    /** Runs one statement with `$1`-style parameters. */
     query(text: string, params: unknown[]): Promise<{ rows: Row[] }>;
+    /** Closes the connection. */
     end(): Promise<void>;
 }
 
@@ -71,11 +74,13 @@ export function pgWritePort(clientOrPool: PgQueryable | PgPoolLike): WritePort {
     };
 }
 
+/** A data port over a connection that `connectPostgres` opened. The host closes it with `close`. */
 export interface PostgresConnection extends DataPort {
     /** Every statement sent through this connection. */
     readonly statements: SqlQuery[];
     /** A write port over the same connection (X5): `BEGIN` ... `COMMIT` for one run. */
     readonly write: WritePort;
+    /** Closes the connection. */
     close(): Promise<void>;
 }
 

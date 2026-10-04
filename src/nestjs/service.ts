@@ -26,12 +26,14 @@ export interface LoadedProgram {
     stored?: StoredProgram;
 }
 
+/** Options of `MinabService.run`: the run options, and tags for the log lines. */
 export interface MinabRunOptions extends RunOptions {
     /** Tags the log lines. */
     programId?: string;
     requestId?: string;
 }
 
+/** Options for loading a program: the request context (for the schema loader) and an abort signal. */
 export interface MinabLoadOptions {
     context?: MinabContext;
     signal?: AbortSignal;
@@ -87,6 +89,7 @@ function both(a: EventSink, b: EventSink): EventSink {
     };
 }
 
+/** Prepares and runs programs inside a NestJS app. It keeps one runtime for each schema version, and one prepared program for each stored program version. */
 @Injectable()
 export class MinabService implements OnModuleDestroy {
     private readonly runtimes: LruCache<RuntimeEntry>;
@@ -125,6 +128,7 @@ export class MinabService implements OnModuleDestroy {
         return this.options.limits ?? {};
     }
 
+    /** Prepares program text with the schema of this request. It does not throw for a bad program: read `prepared.diagnostics`. */
     async loadSource(source: string, options: PrepareOptions & MinabLoadOptions = {}): Promise<LoadedProgram> {
         const { context = {}, ...prepareOptions } = options;
         const runtime = await this.runtimeFor(context);
@@ -189,6 +193,7 @@ export class MinabService implements OnModuleDestroy {
         return this.run(loaded.prepared, inputs, ports, { programId, requestId: context?.requestId, ...runOptions });
     }
 
+    /** Frees the runtimes when the Nest app closes. */
     async onModuleDestroy(): Promise<void> {
         for (const entry of await this.runtimes.values()) entry.minab.dispose();
         this.runtimes.clear();

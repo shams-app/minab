@@ -32,9 +32,11 @@ export interface StoredProgram {
 
 /** The host's store of programs. Find one by id and version. `undefined` means it does not exist. */
 export interface ProgramStore {
+    /** Finds a stored program, or `undefined` when there is none. A program with an id and a version must never change its source. */
     get(id: string, version: string, context: { signal: AbortSignal }): Promise<StoredProgram | undefined>;
 }
 
+/** How the run logs are written. */
 export interface MinabLogOptions {
     /** Write `log` events. Default: on, except when `NODE_ENV` is `production` (D37). */
     enabled?: boolean;
@@ -44,6 +46,7 @@ export interface MinabLogOptions {
     maxEntries?: number;
 }
 
+/** Settings of the run endpoint. The server decides the ports, the host inputs and the guards. The client decides none of them. */
 export interface MinabEndpointOptions {
     /** The route of `POST`. Default `minab/run`. */
     path?: string;
@@ -60,6 +63,7 @@ export interface MinabEndpointOptions {
     guards?: (CanActivate | (new (...args: never[]) => CanActivate))[];
 }
 
+/** What a host gives to `MinabModule`. */
 export interface MinabModuleOptions {
     /** The schema for one request (per tenant or application). It is called for each request. Its result is cached by `version`. */
     schemaLoader(context: MinabContext): VersionedSchema | Promise<VersionedSchema>;

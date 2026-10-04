@@ -4,16 +4,19 @@
  * adapter (the playground, the language server, Monaco) converts them.
  */
 
+/** A place in a text. Both numbers are 0-based, like the language server protocol. */
 export interface EditorPosition {
     line: number;
     character: number;
 }
 
+/** A part of a text, from `start` up to `end`. */
 export interface EditorRange {
     start: EditorPosition;
     end: EditorPosition;
 }
 
+/** What to show when the pointer rests on a symbol. */
 export interface HoverResult {
     /** Markdown. Empty when only `keyword` is set. */
     contents: string;
@@ -22,8 +25,10 @@ export interface HoverResult {
     keyword?: string;
 }
 
+/** What a completion item is. */
 export type CompletionKind = 'keyword' | 'table' | 'column' | 'function' | 'builtin' | 'variable' | 'input' | 'hostFunction' | 'type';
 
+/** One suggestion of the completion list. */
 export interface CompletionItem {
     label: string;
     kind: CompletionKind;
@@ -37,6 +42,7 @@ export interface CompletionItem {
     rank: number;
 }
 
+/** The completion list at one place in a program. */
 export interface CompletionResult {
     /** The partial word the user is typing. An item replaces it. */
     replace: EditorRange;
@@ -50,6 +56,7 @@ export interface DefinitionResult {
     target: EditorRange;
 }
 
+/** The signature of the call at one place in a program, and which parameter is active. */
 export interface SignatureHelpResult {
     /** The whole signature, for example `ROUND(n: N, digits?: INTEGER) → N`. */
     label: string;

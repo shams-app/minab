@@ -11,6 +11,7 @@ import type { DataPort, Row, SqlQuery, WritePort, WriteTransaction } from '../ru
 /** What the function may return: the rows, or an object that has them (like `pg`). */
 export type QueryFunctionResult = Row[] | { rows: Row[] };
 
+/** Any function that runs SQL text with parameters: TypeORM's `query`, Prisma's raw query, a `pg` client. */
 export type QueryFunction = (text: string, params: unknown[]) => Promise<QueryFunctionResult>;
 
 /** Calls `run` for each statement and keeps the SQLSTATE `code` of a failure. */

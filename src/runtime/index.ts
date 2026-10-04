@@ -23,7 +23,8 @@ export type {
     WriteMode,
     WriteStatement
 } from './types.js';
-export type { MinabRuleContext, MinabSchema } from '../language/schema.js';
+export type { ColumnType, MinabColumnSchema, MinabRuleContext, MinabSchema, MinabTableSchema } from '../language/schema.js';
+export type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';
 export type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
 export { DEFAULT_LIMITS } from './limits.js';
 export type { Limits } from './limits.js';

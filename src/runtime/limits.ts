@@ -11,6 +11,7 @@
 import { coded, type DiagnosticCode, type ParamsArgs } from '../language/diagnostics/codes.js';
 import type { SourceRange, WriteStatement } from './types.js';
 
+/** The limits of source size and of one run (decision D36). They are always on. */
 export interface Limits {
     /** UTF-8 bytes of the source. Checked at `prepare`. */
     sourceLength: number;

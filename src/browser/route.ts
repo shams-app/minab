@@ -24,9 +24,11 @@ export interface StoredProgram {
 
 /** What the router needs from the local side: `createWorkerMinab` gives it. */
 export interface LocalMinab {
+    /** Parses and checks the program in the worker. */
     prepare(source: string, options?: PrepareOptions): Promise<WorkerPreparedProgram>;
 }
 
+/** Options of `routeByTier`. */
 export interface RouteOptions {
     local: LocalMinab;
     remote: RemoteMinab;
@@ -34,6 +36,7 @@ export interface RouteOptions {
     events?: EventSink;
 }
 
+/** A program that was prepared in the worker. `run` goes to the worker or to the server, as its tier says. */
 export interface RoutedProgram {
     readonly id: string;
     readonly version: string;
@@ -53,10 +56,13 @@ export interface RoutedProgram {
     release(): void;
 }
 
+/** Prepares programs and decides where each one runs. */
 export interface TierRouter {
+    /** Prepares the source in the worker and reads its analysis. Tier `local` runs in the worker; tier `data` runs on the server by id and version. */
     prepare(program: StoredProgram, options?: PrepareOptions): Promise<RoutedProgram>;
 }
 
+/** Makes a router. A program that needs no data runs in the worker. A program that needs data goes to the server by id and version. SQL and the schema are never sent. */
 export function routeByTier(options: RouteOptions): TierRouter {
     return {
         async prepare(program, prepareOptions) {

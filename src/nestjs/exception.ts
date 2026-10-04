@@ -19,6 +19,7 @@ import { runError } from '../runtime/errors.js';
 
 const UNPROCESSABLE = new Set(['syntax', 'scope', 'type', 'null', 'call', 'compile', 'eval', 'limit', 'query', 'rule']);
 
+/** The HTTP status for a Minab error code. An unknown code gives 500. */
 export function minabHttpStatus(code: string): number {
     if (code === 'cancelled') return 499;
     if (code === 'wire.programNotFound') return 404;
@@ -40,6 +41,7 @@ export class MinabException extends Error {
         this.name = 'MinabException';
     }
 
+    /** The HTTP status for this error. */
     get status(): number {
         return minabHttpStatus(this.error.code);
     }
@@ -49,6 +51,7 @@ export class MinabException extends Error {
         return new MinabException(runError('eval.programInvalid', undefined), diagnostics);
     }
 
+    /** An error for a program id and version that the store does not have (HTTP 404). */
     static programNotFound(id: string, version: string): MinabException {
         return new MinabException(runError('wire.programNotFound', undefined, { id, version }));
     }

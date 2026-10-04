@@ -8,6 +8,7 @@ import { isQuery } from '../language/generated/ast.js';
 import type { MinabServices } from '../language/minab-module.js';
 import { formatType, type MinabType } from '../language/minab-types.js';
 
+/** What a program is: `query` (a pipeline), `record-rule` or `field-rule` (a validation rule), `value` (an expression), or `empty`. */
 export type ProgramKind = 'query' | 'record-rule' | 'field-rule' | 'value' | 'empty';
 
 export interface ProgramClass {
