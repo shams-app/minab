@@ -59,3 +59,60 @@ export interface SignatureHelpResult {
     /** Index into `parameters`. Past the last one it stays on the last. */
     activeParameter: number;
 }
+
+export type SymbolKind = 'function' | 'parameter' | 'variable' | 'alias';
+
+export interface DocumentSymbolResult {
+    name: string;
+    kind: SymbolKind;
+    /** For a `fn`: its signature. For a `let` or a parameter: its type. */
+    detail?: string;
+    /** The whole declaration. */
+    range: EditorRange;
+    /** The name inside the declaration. */
+    selectionRange: EditorRange;
+    children: DocumentSymbolResult[];
+}
+
+export interface ReferenceResult {
+    /** The name only: for `#alias` the part after the `#`, for a quoted name the backticks too. */
+    range: EditorRange;
+    isDeclaration: boolean;
+}
+
+export interface TextEdit {
+    range: EditorRange;
+    newText: string;
+}
+
+export type PrepareRenameResult = { range: EditorRange; placeholder: string };
+
+export type RenameResult = { ok: true; edits: TextEdit[] } | { ok: false; message: string };
+
+/** The token types of the legend, in order. The adapter sends this list to the client. */
+export const SEMANTIC_TOKEN_TYPES = ['keyword', 'operator', 'type', 'function', 'parameter', 'variable', 'property', 'class', 'namespace'] as const;
+/** The token modifiers of the legend, in order. `host` is not a standard one: a host function or input. */
+export const SEMANTIC_TOKEN_MODIFIERS = ['declaration', 'defaultLibrary', 'host'] as const;
+
+export type SemanticTokenType = (typeof SEMANTIC_TOKEN_TYPES)[number];
+export type SemanticTokenModifier = (typeof SEMANTIC_TOKEN_MODIFIERS)[number];
+
+export interface SemanticToken {
+    line: number;
+    character: number;
+    length: number;
+    type: SemanticTokenType;
+    modifiers: SemanticTokenModifier[];
+}
+
+/** A diagnostic as a quick fix needs it: the stable code, where it is, and its parameters. */
+export interface FixableDiagnostic {
+    code: string;
+    range: EditorRange;
+    params: Record<string, string | number>;
+}
+
+export interface QuickFix {
+    title: string;
+    edits: TextEdit[];
+}

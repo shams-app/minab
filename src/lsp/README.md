@@ -7,12 +7,13 @@ of its own `minab.config.json`. The features come from `src/editor/`.
 
 - `index.ts`: the public exports.
 - `server.ts`: `startMinabLanguageServer({ connection? })`. Text sync, checks, completion
-  (triggers `.`, `#`, `(`), hover, go to definition, signature help (triggers `(`, `,`), and
-  the watch on `**/minab.config.json`.
+  (triggers `.`, `#`, `(`), hover, go to definition, signature help (triggers `(`, `,`),
+  document symbols, find references, rename (with prepare), semantic tokens, quick fixes (code actions),
+  and the watch on `**/minab.config.json`.
 - `config-registry.ts`: `ConfigRegistry`. Finds the nearest config for a document (like the CLI),
   loads it once, and gives the services for its schema. It uses the runtime's `ServiceCache`, so two
   configs with the same schema share one service set. `invalidate(path)` forgets a changed file.
-- `adapters.ts`: converts `src/editor/` results to LSP types. No logic of its own.
+- `adapters.ts`: converts `src/editor/` results to LSP types, and builds the semantic tokens legend. No logic of its own.
 
 ## Rules
 
@@ -26,4 +27,6 @@ of its own `minab.config.json`. The features come from `src/editor/`.
 - Editor features parse the current text on each request. They do not use the last check.
 - `src/language/main.ts` starts this server. The package entry `./lsp` is `src/language/server.ts`,
   which re-exports it.
+- A refused rename is a `RequestFailed` error with the message. The client shows it.
+- The server keeps the diagnostics it last sent for each document. A quick fix reads their parameters from there, so it works with a client that does not send `data` back.
 - Tests: `test/lsp-stdio.test.ts` talks to the built server over stdio.

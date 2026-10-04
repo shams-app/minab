@@ -7,21 +7,50 @@
 
 import { URI, type LangiumDocument } from 'langium';
 import {
+    CodeActionKind,
     createConnection,
     DidChangeWatchedFilesNotification,
     FileChangeType,
+    LSPErrorCodes,
     ProposedFeatures,
+    ResponseError,
     TextDocuments,
     TextDocumentSyncKind,
     type Connection,
+    type Diagnostic,
     type InitializeResult
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { fileURLToPath } from 'node:url';
-import { complete, definition, hover, parseDocument, signatureHelp, type EditorDocument } from '../editor/index.js';
+import {
+    complete,
+    definition,
+    documentSymbols,
+    findReferences,
+    hover,
+    parseDocument,
+    prepareRename,
+    quickFixes,
+    rename,
+    semanticTokens,
+    signatureHelp,
+    type EditorDocument,
+    type FixableDiagnostic
+} from '../editor/index.js';
 import type { Model } from '../language/generated/ast.js';
 import { ConfigRegistry } from './config-registry.js';
-import { toCompletionItems, toHover, toLocation, toSignatureHelp } from './adapters.js';
+import {
+    SEMANTIC_TOKENS_LEGEND,
+    toCodeActions,
+    toCompletionItems,
+    toDocumentSymbols,
+    toHover,
+    toLocation,
+    toLocations,
+    toSemanticTokens,
+    toSignatureHelp,
+    toWorkspaceEdit
+} from './adapters.js';
 
 export interface MinabLanguageServerOptions {
     /** The connection to use. By default: a new one on stdio (or the channel the client asks for). */
@@ -32,6 +61,11 @@ export interface MinabLanguageServer {
     connection: Connection;
 }
 
+function sameRange(a: Diagnostic, b: Diagnostic): boolean {
+    const [x, y] = [a.range, b.range];
+    return x.start.line === y.start.line && x.start.character === y.start.character && x.end.line === y.end.line && x.end.character === y.end.character;
+}
+
 export const CONFIG_GLOB = '**/minab.config.json';
 
 /** Starts the language server and listens on its connection. */
@@ -40,6 +74,8 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
     const documents = new TextDocuments(TextDocument);
     const registry = new ConfigRegistry();
     const reportedErrors = new Set<string>();
+    // The diagnostics last sent for each document. A quick fix reads the parameters from here, so it does not depend on the client sending `data` back.
+    const sent = new Map<string, Diagnostic[]>();
 
     // One check at a time for each document: a check adds the document to its workspace and removes it again.
     const queue = new Map<string, Promise<void>>();
@@ -75,6 +111,7 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
         }
         // A newer version came while this one was checked: its own check will send the diagnostics.
         if (documents.get(uri)?.version !== version) return;
+        sent.set(uri, document.diagnostics ?? []);
         await connection.sendDiagnostics({ uri, version, diagnostics: document.diagnostics ?? [] });
     }
 
@@ -90,6 +127,7 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
 
     documents.onDidChangeContent(event => void schedule(event.document));
     documents.onDidClose(event => {
+        sent.delete(event.document.uri);
         void connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
     });
 
@@ -102,7 +140,12 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
                 completionProvider: { triggerCharacters: ['.', '#', '('] },
                 hoverProvider: true,
                 definitionProvider: true,
-                signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] }
+                signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },
+                documentSymbolProvider: true,
+                referencesProvider: true,
+                renameProvider: { prepareProvider: true },
+                semanticTokensProvider: { legend: SEMANTIC_TOKENS_LEGEND, full: true },
+                codeActionProvider: { codeActionKinds: [CodeActionKind.QuickFix] }
             }
         };
     });
@@ -142,6 +185,42 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
     connection.onSignatureHelp(({ textDocument, position }) => {
         const doc = documents.get(textDocument.uri);
         return doc ? toSignatureHelp(signatureHelp(editorDocument(doc), doc.offsetAt(position))) : undefined;
+    });
+
+    connection.onDocumentSymbol(({ textDocument }) => {
+        const doc = documents.get(textDocument.uri);
+        return doc ? toDocumentSymbols(documentSymbols(editorDocument(doc))) : [];
+    });
+    connection.onReferences(({ textDocument, position, context }) => {
+        const doc = documents.get(textDocument.uri);
+        return doc ? toLocations(doc.uri, findReferences(editorDocument(doc), doc.offsetAt(position), context.includeDeclaration)) : [];
+    });
+    connection.onPrepareRename(({ textDocument, position }) => {
+        const doc = documents.get(textDocument.uri);
+        return doc ? (prepareRename(editorDocument(doc), doc.offsetAt(position)) ?? null) : null;
+    });
+    connection.onRenameRequest(({ textDocument, position, newName }) => {
+        const doc = documents.get(textDocument.uri);
+        if (!doc) return null;
+        const result = rename(editorDocument(doc), doc.offsetAt(position), newName);
+        // The client shows the message of this error to the user.
+        if (!result.ok) throw new ResponseError(LSPErrorCodes.RequestFailed, result.message);
+        return toWorkspaceEdit(doc.uri, result.edits);
+    });
+    connection.languages.semanticTokens.on(({ textDocument }) => {
+        const doc = documents.get(textDocument.uri);
+        return toSemanticTokens(doc ? semanticTokens(editorDocument(doc)) : []);
+    });
+    connection.onCodeAction(({ textDocument, context }) => {
+        const doc = documents.get(textDocument.uri);
+        if (!doc) return [];
+        const editor = editorDocument(doc);
+        return context.diagnostics.flatMap(diagnostic => {
+            const own = sent.get(doc.uri)?.find(d => d.code === diagnostic.code && sameRange(d, diagnostic)) ?? diagnostic;
+            const params = (own.data as { params?: FixableDiagnostic['params'] } | undefined)?.params;
+            if (typeof diagnostic.code !== 'string' || !params) return [];
+            return toCodeActions(doc.uri, diagnostic, quickFixes(editor, { code: diagnostic.code, range: diagnostic.range, params }));
+        });
     });
 
     documents.listen(connection);
