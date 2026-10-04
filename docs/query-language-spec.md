@@ -107,6 +107,8 @@ SUM(.orders.total)
 
 `.orders` → collection of `Order`. `.total` broadcasts over it → collection of numbers. `SUM` reduces it → scalar.
 
+A `ref` is **not compared with a key value directly**. A relation is compared through its key field, so `.customer.id == x` is valid and `.customer == x` is a type error (`type.relationComparedToKey`; its message names the long form, for example "compare `.customer.id`, not `.customer`"). This holds for `==`, `!=` and `IN`.
+
 ### 3.2 Inline filtering
 
 Collections can be filtered inline with postfix `[...]`, without a subquery:
@@ -189,7 +191,7 @@ The index expression doesn't have to be a literal — `.tags[i]` is fine for a v
 FROM <source> [AS alias]
   [JOIN|LEFTJOIN|CROSSJOIN <source> AS alias [ON <expr>]]*
   [WHERE <expr>]
-  [GROUPBY <expr> [, <expr>]*]
+  [GROUPBY <expr> [AS name] [, <expr> [AS name]]*]
   [HAVING <expr>]
   [SELECT [DISTINCT] <expr> [AS alias] [, ...]]
   [ORDERBY <expr> [ASC|DESC] [, ...]]
@@ -201,7 +203,7 @@ Semantics per clause, in evaluation order:
 1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`), optionally narrowed by an inline filter (`FROM .orders[.status == "paid"]`, same meaning as §3.2) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
 2. **JOIN** — adds another scope. `ON` is an ordinary boolean expression comparing fields from any active scope. `LEFTJOIN` preserves unmatched left-side rows with nulls on the right; `CROSSJOIN` takes no `ON` and produces the full cross-product.
 3. **WHERE** — filters the joined row stream.
-4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key.
+4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key. A key may be given a name with `AS` (`GROUPBY .status AS s`). With a single key, the name changes nothing: `KEY` is the key itself, with or without a name. Names must be unique (`query.duplicateGroupKeyName`). A name is the way to refer to one key when there are several keys; a `KEY` over several keys is not available yet.
 5. **HAVING** — filters the *grouped* stream, evaluated after aggregation, so aggregate calls are valid here.
 6. **SELECT** — projects final columns. Each item may be aliased with `AS`. `SELECT *` selects every column of the row instead of listing them; omitting `SELECT` entirely is also still valid (§4.1 shows it as optional) — the two are different things, not the same "no explicit projection" case. An optional `DISTINCT` immediately after `SELECT` deduplicates the projected rows — deduplication is by the full projected tuple (every selected column together), not any single column, matching standard SQL `SELECT DISTINCT` semantics.
 7. **ORDERBY** — sorts the result. `ASC` is the default. Each sort key is either a `SELECT` alias (`ORDERBY total DESC`) or any expression over the source row (`ORDERBY .created_at DESC`), even a column that `SELECT` does not list. An alias name wins over a source column with the same name.
@@ -282,7 +284,7 @@ AND
 NOT
 comparison   (== != < <= > >= IN LIKE is isnot)
 additive     (+ -)
-multiplicative (* / %)
+multiplicative (* / % \)
 unary        (- +)
 postfix      (.member  [filter]  (call))
 primary      (literals, sigils, ( ), [ ])
@@ -299,12 +301,13 @@ Notes:
   | `+` | a text and a number | a type error. Use `CAST`, for example `"Order " + CAST(.number AS TEXT)` |
   | `/` | two numbers | always a `DECIMAL`, with 16 digits after the point, rounded half away from zero. `7 / 2` is `3.5`, `1 / 3` is `0.3333333333333333`, `2 / 3` is `0.6666666666666667` |
   | `%` | two numbers | the remainder, with the sign of the left side: `-7 % 3` is `-1`, `7.5 % 2` is `1.5` |
+  | `\` | two numbers | integer division: always an `INTEGER`, even for `DECIMAL` operands, cut toward zero (not rounded): `7 \ 2` is `3`, `-7 \ 2` is `-3`, `7.9 \ 2` is `3`. `a == (a \ b) * b + a % b` for every sign. A result outside the safe integer range is `eval.integerOutOfRange` in the interpreter |
 
-  `/` and `%` by zero are the evaluation error `eval.divisionByZero` (Postgres `22012`).
+  `/`, `%` and `\` by zero are the evaluation error `eval.divisionByZero` (Postgres `22012`). `\` has the same precedence as `*`, `/` and `%`; it is only an operator outside a string and outside a backtick name, where `\` is still an escape (§2.3).
 - `NOT` binds tighter than `AND`/`OR` but looser than comparison, and is right-recursive into itself: `NOT NOT x` is valid; `NOT x == y` parses as `NOT (x == y)`.
 - `IN` and `LIKE` are **non-chaining** comparison operators — `a < b < c` is not valid, matching standard convention. `IN` expects a `ListLiteral` or collection expression on the right, and is defined as repeated `==` under the hood — which is why `null` is a fine element to include in that list (§7.7), even though `null` isn't a valid operand for `LIKE` itself.
 - `is`/`isnot` are also non-chaining, same tier — see §5.6.
-- List literals use `[...]` — e.g. `.status IN ["pending", "shipped"]`. This is grammatically distinct from the postfix filter `[...]` (one is a primary expression, the other suffixes a collection expression), but the two can look visually similar; see open question in §12.
+- List literals use `[...]` — e.g. `.status IN ["pending", "shipped"]`. This is grammatically distinct from the postfix filter `[...]` (one is a primary expression, the other suffixes a collection expression), but the two can look visually similar; §12 item 4 says how to read them.
 
 ### 5.2 Literals
 
@@ -394,9 +397,11 @@ FROM Customer
 WHERE .id IN (FROM Order WHERE .status == "flagged" SELECT .customer_id)
 ```
 
+**A query used as a scalar needs no `LIMIT 1`.** A query in parentheses that selects one column can stand where a single value goes (a `let` initializer, a comparison operand). It gives its one value. If it returns no row, the value is `null`. If it returns **several rows**, the database refuses it and the run fails (Postgres: "more than one row returned by a subquery used as an expression"). The first row is never taken silently. Add `LIMIT 1` (with an `ORDERBY`) to choose one row on purpose. `IN (subquery)` is the one place a query is read as a set. The checker types the query by its single `SELECT` column and cannot know how many rows it returns.
+
 ### 5.5 Casting
 
-Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`) requires an explicit `CAST`. Two families are not "different types" for this rule: `INTEGER` and `DECIMAL` are one numeric family, and `TEXT` and `CITEXT` are one text family (§7.2). They compare with no `CAST`:
+Minab does **not** perform implicit type coercion — comparing or combining values of different declared types (e.g. a `TEXT` column against a `UUID`) requires an explicit `CAST`. Two families are not "different types" for this rule: `INTEGER` and `DECIMAL` are one numeric family, and `TEXT` and `CITEXT` are one text family (§7.2). Numbers compare and combine, and texts compare, with no `CAST` (`.total > 100`, `.qty * .price`, `.email == .name`):
 
 ```
 CAST(<expr> AS <Type>)
@@ -553,6 +558,7 @@ Minab supports simple named variable bindings — a lightweight way to name a co
 - `Type` is one of the logical types listed in §7.2 — a domain-level vocabulary, not tied to any particular storage backend.
 - The initializer is optional at declaration time, but if present may be **any expression** — a literal ("hard-coded"), a sigil-based expression (`.field`, `#Table[...]`), an aggregate/function call, or a full subquery. There's no separate syntax for "hard-coded" vs. "computed" values — both are just `Expression`; the difference is only in what the expression happens to be.
 - Like every other statement (§6.3), a `let` ends in `;`.
+- A name may be declared by `let` only once in the same scope (the top level, one function body, one block or loop body). A second `let` with the same name there is the error `scope.duplicateLet`; to change the value, assign with `=` (§9.3). An **inner** block may declare the name again: it shadows the outer one inside that block, and the outer value is back after it.
 
 ```
 let min_amount: DECIMAL = 100.00;
@@ -659,7 +665,7 @@ COUNT(.orders[.status == "cancelled"]) < max_cancellations
 
 ### 7.5 Scope
 
-A variable is bound for the remainder of the script from its declaration onward (top-level, sequential — like the statements in §6.3). It is **not** part of the scope stack described in §2.2: it doesn't push onto or interact with `.` / `^` / `#alias` resolution, and it can't be shadowed by a table alias or vice versa. Referencing a variable before its declaration, or declaring the same name twice, is a semantic error rather than a parse error — the grammar alone doesn't enforce this (see open question in §12).
+A variable is bound for the remainder of the script from its declaration onward (top-level, sequential — like the statements in §6.3). It is **not** part of the scope stack described in §2.2: it doesn't push onto or interact with `.` / `^` / `#alias` resolution, and it can't be shadowed by a table alias or vice versa. Referencing a variable before its declaration, or declaring the same name twice in the same scope, is a semantic error rather than a parse error — the grammar alone doesn't enforce this (§7.1; an inner block may shadow).
 
 ### 7.6 Tuples
 
@@ -1017,7 +1023,7 @@ Not every expression is a legal target, only a bare name or a chain of `.field`/
 .a!.b.c!.d.e! = { name: 'x' };  // vivify at a, c, and e; b and d propagate null if they're missing
 ```
 
-If a step marked `!` genuinely can't be created (some other required field has no value, no default, whatever the real schema demands) — that's a **runtime error**. Nothing about this is visible to the grammar or even the type-checker; it depends on constraints only the real schema knows about. `!` on a `collection` step is meaningless, since a `collection` is never itself `null` (§7.7) — assumed to be a semantic error rather than silently ignored, though this hasn't been separately confirmed (§12 item 17).
+If a step marked `!` genuinely can't be created (some other required field has no value, no default, whatever the real schema demands) — that's a **runtime error**. Nothing about this is visible to the grammar or even the type-checker; it depends on constraints only the real schema knows about. `!` on a `collection` step is meaningless, since a `collection` is never itself `null` (§7.7). It is a check error, `type.vivifyOnCollection`, not silently ignored (§12 item 17).
 
 **Filtering which elements a path assignment touches.** When a step in the path is a `collection`, an inline `[filter]` narrows which elements the rest of the path (and the final assignment) applies to — the same `[...]` already used for reading (§3.2), now also usable mid-path in a write:
 
@@ -1301,7 +1307,10 @@ WhereClause:
     'WHERE' condition=Expression;
 
 GroupByClause:
-    'GROUPBY' keys+=Expression (',' keys+=Expression)*;
+    'GROUPBY' keys+=GroupKey (',' keys+=GroupKey)*;
+
+GroupKey:
+    expression=Expression ('AS' alias=Name)?;
 
 HavingClause:
     'HAVING' condition=Expression;
@@ -1435,7 +1444,7 @@ Additive infers Expression:
     Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-') right=Multiplicative)*;
 
 Multiplicative infers Expression:
-    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%') right=Unary)*;
+    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION) right=Unary)*;
 
 Unary infers Expression:
     {infer UnaryExpression} operator=('-' | '+') operand=Unary
@@ -1578,6 +1587,10 @@ terminal ID: /[\p{L}_][\p{L}\p{N}_\u200C\u200D]*/u;
 // Backtick names: any text between backticks. "\`" is a backtick, "\\" a backslash.
 terminal QUOTED_NAME: /`([^`\\]|\\[\s\S])*`/;
 terminal NUMBER returns number: /[0-9]+(\.[0-9]+)?/;
+// `\` outside a string or a backtick name is integer division. It is a terminal, not a keyword,
+// because Langium writes a keyword that is a lone backslash into `ast.ts` without escaping it.
+terminal INTEGER_DIVISION: /\\/;
+
 terminal STRING: /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/;
 
 hidden terminal WS: /\s+/;
@@ -1589,27 +1602,27 @@ hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
 
 ## 12. Open Design Questions
 
-The language as specified in §§1–11 is stable: everything the grammar accepts has defined behavior, and the checker and evaluator implement it. The items below are questions and extensions that were deliberately deferred — each still open one is marked as such, and none changes what an existing, valid program means. Resolving one goes through the usual proposal → example → approval cycle and, when it does change the language, updates this spec and `docs/showcase.md` together.
+The language as specified in §§1–11 is stable: everything the grammar accepts has defined behavior, and the checker and evaluator implement it. Every item below is **resolved**, **retired** or **post-1.0** — there is no open question left for 1.0. A post-1.0 item is a possible extension that does not change what an existing, valid program means. Resolving one goes through the usual proposal → example → approval cycle and, when it does change the language, updates this spec and `docs/showcase.md` together.
 
-1. **`CurrentRecord` AST shape for `.field` chains.** `.orders.total` currently collapses into `CurrentRecord(field: orders)` followed by a `MemberAccess(member: total)`. Confirm this shape matches evaluator expectations, versus a more uniform nested-member-access tree.
-2. **`NOT` precedence relative to comparison.** As specified, `NOT x == y` parses as `NOT (x == y)`. Confirm this matches intent versus `(NOT x) == y`.
-3. **`IN` / `LIKE` chaining.** Currently non-chaining, single-shot comparisons. Confirm this is sufficient (no need for `a < b < c`-style chains).
-4. **Visual ambiguity between `[...]` list literals and `[...]` postfix filters.** Structurally distinct in the grammar (`Primary` vs. `Postfix` suffix) but may read ambiguously to humans, e.g. in `.status IN [1, 2, 3]` vs. `.orders[.status == "x"]`. Consider a different delimiter for one of the two if this proves confusing in practice.
+1. ~~**`CurrentRecord` AST shape for `.field` chains.**~~ **Resolved (D24):** `.orders.total` is `CurrentRecord(field: orders)` followed by `MemberAccess(member: total)`. The evaluator, the checker and the compiler use this shape as it is. A test pins it.
+2. ~~**`NOT` precedence relative to comparison.**~~ **Resolved (D24):** `NOT x == y` is `NOT (x == y)`. A test pins it.
+3. ~~**`IN` / `LIKE` chaining.**~~ **Resolved (D24):** comparisons do not chain; `a < b < c` is an error. Write `a < b AND b < c`. A test pins it.
+4. ~~**Visual ambiguity between `[...]` list literals and `[...]` postfix filters.**~~ **Resolved (D24):** both forms stay. How to read them: `[...]` where a **value** is expected (after `IN`, `=`, `(`, `,`, at the start of an expression) is a list; `[...]` **right after** an expression is a filter (a collection) or, with one whole number, a tuple position (§3.5). So `.status IN [1, 2, 3]` is a list and `.orders[.status == "x"]` is a filter. The grammar keeps the known Chevrotain warning for `Postfix` (a `[` after an expression can start a position or a filter); it does not change what any program means.
 5. ~~**Multi-token keyword handling.**~~ Resolved: `GROUPBY`, `ORDERBY`, `LEFTJOIN`, and `CROSSJOIN` are now single compound keywords (no space), so there's no risk of `GROUP`, `BY`, `LEFT`, or `CROSS` being misparsed as identifiers elsewhere.
 6. ~~**Bare `alias.field` vs. required `#alias.field` for joined scopes.**~~ Resolved: bare `alias.field` is always allowed for any active scope; `#alias` is reserved for the case where an alias's name would otherwise collide with a real field name reachable in the same expression (§4.2).
 7. ~~**Depth of implicit relation traversal before requiring an explicit subquery.**~~ Resolved: `ref` chains stay fully implicit at any depth. Crossing a `collection` field produces a collection-valued expression, which cannot be used directly as a scalar/boolean — it must be reduced via an aggregate (`SUM`, `COUNT`, ...) or a predicate over an inline filter (`EXISTS`, `ALL`, `ANY`) before use (§3.4). This is a semantic rule enforced by a type-checking pass, not by the grammar itself.
 8. **Variable type checking.**
    - ~~Checking mechanism~~ Resolved: **literal initializers are checked immediately**, without needing cross-reference resolution — e.g. `let x: INTEGER = "hello"` is rejected outright, since a `StringLiteral` node can never satisfy an `INTEGER`-typed `TypeRef`; this is a local, structural check on the initializer node itself. The same immediate check now also covers `NullLiteral` against a type's nullability (§7.2) — `let x: INTEGER = null` is rejected the same way, unless `x` is declared `INTEGER?`. **Non-literal initializers** — `.total`, a subquery, a function call, another variable — can't be type-checked this way, because their type depends on something the parser hasn't resolved yet (a schema field's declared type, a function's return type, another `let`'s declared type). In Langium's pipeline (parse → link → validate), that information only becomes available after **linking**, so these checks run as ordinary Langium **validation-phase** checks, not at parse time.
-   - **Still open:** should a second `let` for the same name be a redeclaration error, or an allowed rebinding?
+   - ~~**Still open:** should a second `let` for the same name be a redeclaration error, or an allowed rebinding?~~ **Resolved (D24, §7.1):** a second `let` with the same name in the same scope is the error `scope.duplicateLet`. An inner block may declare the name again (shadowing).
 9. **Function scoping and recursion.**
    - ~~Recursion, closures, and body shape~~ Resolved: recursion (including mutual recursion between two functions, regardless of declaration order) is allowed. There's no `return` keyword — a function body is any number of `let`/`BodyStatement` forms followed by exactly one trailing tail `Expression`/`Query` (no `;`), the same convention used at the top level (§6.3); the grammar's rule shape (`BodyStatement*` then an optional trailing tail) already rules out anything coming after the tail. What it doesn't enforce is that the tail is actually present — it's grammatically optional even though the declared return type is mandatory — so requiring a tail whenever a return type is declared is a semantic check, not a parse-time one. A function body can read `let`s from any enclosing scope (top-level, or an outer function), i.e. it closes over outer bindings; a same-named parameter or local `let` shadows the outer one.
    - **Retired, not resolved:** an earlier iteration of this item asked what a call `name(...)` should produce when a function both `yield`s and has a tail. That question is moot now — `yield`/`YieldStatement` have been removed from the grammar entirely (§8.2), rather than answered, since Minab has no iterator/generator protocol for a caller to consume a yielded sequence against in the first place. If something like `yield` returns, it needs its own design pass once iterators exist, not a reinstatement of this same keyword with the same open question attached.
 10. ~~**`&` enforcement is semantic, not grammatical.**~~ **Resolved, then revised 2026-09-24 (§5.3, §5.3.1):** the first answer kept a grammar split between bare calls `Name(...)` (built-ins only) and `&name(...)` calls (user functions only), and reserved the eight built-in names. That is revised: `&` is removed from the language before any release. A user function is called `name(...)`, like a built-in (decisions D10, D11). The type checker looks the name up as a built-in first, then as a declared `fn`. Built-in names are ALL UPPERCASE and a `fn` name needs a lowercase letter, so a future built-in cannot collide with existing code; a `let` or parameter may not reuse a function's name, and a `fn` may not reuse a table name.
 11. ~~**What does a scalar return type mean for a `Query`-tailed function?**~~ **Resolved (§8.6):** a `Query`-tailed function's result is `JSON` — a JSON array of whatever its `SELECT` produces (an array of objects for `SELECT *`, an array of that column's value type for a single-column `SELECT`). Its declared return type must therefore be `JSON`, checked once at the `FunctionDecl`, not per call site. A plain-`Expression`-tailed function is unaffected, scalar-valued exactly as declared.
 12. ~~Should `if`/`else` branches accept a block, the way `switch` arms do?~~ **Resolved (§9.1):** `if`/`else` branches are now both `Block` (statements plus a tail), matching `switch` arms. No remaining asymmetry between the two.
-13. **No constants.** `let` is mutable by default (§9.3) — Minab currently has no way to declare a binding that can't be reassigned. Worth deciding later whether a `const`-style immutable declaration is wanted, and if so, whether it's a modifier on `let` or a separate keyword.
+13. **No constants (post-1.0).** `let` is mutable by default (§9.3) — Minab currently has no way to declare a binding that can't be reassigned. Not in 1.0. Later, a `const`-style immutable declaration may be added, as a modifier on `let` or a separate keyword.
 14. ~~`if` as a statement.~~ **Resolved (§9.1.1):** added as `if!`/`IfStatement` — a distinct keyword from `if`/`IfExpr`, resolved at the lexer level (same longest-match mechanism as `isnot` vs. `is`), so there's no ambiguity between "one more `BodyStatement`" and "the tail." `else`/`else if` inside an `if!` reuse plain `if` (`IfStatementElse`), safe since that position is only reached after already committing to the statement form.
 15. ~~`ref`/`collection` nullability marker.~~ **Resolved (§7.7):** not a syntax question — Minab has no schema-declaration syntax of its own, so there's nowhere to write a marker. Static nullability for a `ref` field is instead fetched from the real schema via the scope provider (the same channel that already resolves table/column metadata), and only that real `NOT NULL` fact determines whether traversal through a given `ref` is typed nullable — not a uniform "every `ref` is maybe-null" assumption. Runtime behavior doesn't change based on this either way: a `ref` propagates `null` defensively on traversal regardless of what the schema promised, per rule 1 above.
 16. ~~Ordering comparisons and `IN` against `null`.~~ **Resolved (§7.7):** `null` is a valid operand only for `is`/`isnot`/`==`/`!=` — ordering comparisons (`<`/`>`/`<=`/`>=`) and `LIKE` against `null` are a semantic error, not `false` and not three-valued. `IN` against a list containing `null` is fine, precisely because `IN` is defined as repeated `==` under the hood.
-17. **Vivify (`!`) on a `collection` path step.** §9.3's path-based assignment lets `!` auto-create a missing `ref` mid-path. Since a `collection` is never itself `null` (§7.7), `!` on a `collection` step has nothing to do — assumed to be a semantic error rather than silently ignored, but this hasn't been separately confirmed.
+17. ~~**Vivify (`!`) on a `collection` path step.**~~ **Resolved (D24, §9.3):** `!` on a `collection` step is the check error `type.vivifyOnCollection`, because a `collection` is never `null` (§7.7). The check is in; the writes themselves come with the execution phases.
 18. ~~Path-assignment target parsing — needs empirical verification.~~ **Resolved (2026-09-13):** run through Langium for real (`langium generate` + `tsc -b`, both clean, no ambiguity reported for this) and covered by dedicated parse tests (`AssignmentStatement` targets ranging from a bare name to `.a!.b.c!.d.e!` and a mid-path `[filter]`, including one sitting inside an `if`-expression branch right before that branch's own tail). The reasoning holds: `Postfix`'s deterministic, self-terminating parse followed by a single-token operator check is a fundamentally different shape from the original §6.3 bug. (Empirical verification during this same pass did turn up three *other* real defects — a clause-order regression, a missing `vivify` flag, and an `isnot` misuse — see `docs/roadmap.md` Phase 1 for detail; none of them were this specific risk.)

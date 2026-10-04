@@ -246,6 +246,11 @@ export const DIAGNOSTICS = {
         doc: 'An ordering comparison (<, <=, >, >=) with null has no answer. Test for null explicitly instead.'
     }),
 
+    'query.duplicateGroupKeyName': entry<{ name: string }>({
+        severity: error,
+        message: p => `the GROUPBY key name "${p.name}" is used twice`,
+        doc: 'Each GROUPBY key that has a name (AS name) needs its own name. Rename one of them.'
+    }),
     'query.functionReturnNotJson': entry({
         severity: error,
         message: () => 'a function whose body ends in a query must declare its return type as JSON (spec §8.6)',
@@ -292,6 +297,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: () => '"." has no statically known table here',
         doc: 'The current record has no known table. Use "." inside a query, or give the host a record table.'
+    }),
+    'scope.duplicateLet': entry<{ name: string }>({
+        severity: error,
+        message: p => `"${p.name}" is already declared in this scope`,
+        doc: 'A second let with the same name in the same block is an error. An inner block may declare the name again (it shadows the outer one). Rename it, or assign with "=" instead.'
     }),
     'scope.functionNameIsTable': entry<{ name: string }>({
         severity: error,
@@ -551,6 +561,11 @@ export const DIAGNOSTICS = {
         message: () => "a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5)",
         doc: 'A relation has no fixed row order. Use a query with ORDERBY, or filter with a condition.'
     }),
+    'type.relationComparedToKey': entry<{ operator: string; operand: string; key: string }>({
+        severity: error,
+        message: p => `"${p.operator}" can't compare a relation with a key — compare ${p.key}, not ${p.operand}`,
+        doc: 'A relation (ref) is not compared with a key value. Compare through the key field of the related table, for example .customer.id == x.'
+    }),
     'type.switchArmsDiffer': entry<{ first: string; second: string }>({
         severity: error,
         message: p => `switch arms must agree on type (no implicit coercion) — got ${p.first} and ${p.second}`,
@@ -575,6 +590,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `unsupported operator "${p.operator}"`,
         doc: 'The checker does not know this operator. Report it as a Minab bug.'
+    }),
+    'type.vivifyOnCollection': entry<{ member: string }>({
+        severity: error,
+        message: p => `"!" has no use on "${p.member}": a collection is never null, so there is nothing to create`,
+        doc: 'The "!" in an assignment path creates a missing ref. A collection is never null (spec §7.7), so "!" on a collection step is an error. Remove the "!".'
     })
 } as const;
 

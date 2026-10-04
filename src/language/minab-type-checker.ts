@@ -261,10 +261,10 @@ export class MinabTypeChecker {
         if (!res.found) return failWith(res);
         const groupBy = res.scope.owner;
         if (!isGroupByClause(groupBy)) return err('scope.keyWithoutGroupBy');
-        if (groupBy.keys.length === 1) return this.inferType(groupBy.keys[0]);
+        if (groupBy.keys.length === 1) return this.inferType(groupBy.keys[0].expression);
         const elements: MinabType[] = [];
         for (const key of groupBy.keys) {
-            const keyType = this.inferType(key);
+            const keyType = this.inferType(key.expression);
             if (!keyType.ok) return keyType;
             elements.push(keyType.type);
         }
@@ -554,6 +554,7 @@ export class MinabTypeChecker {
             case '*':
             case '/':
             case '%':
+            case '\\':
                 return this.inferArithmetic(node);
             case '==':
             case '!=':
@@ -600,9 +601,10 @@ export class MinabTypeChecker {
         if (!isNumeric(left.type) || !isNumeric(right.type)) {
             return err('type.arithmeticNeedsNumeric', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
-        // `/` always gives a DECIMAL, even for two INTEGERs (D14).
-        const base = node.operator === '/' ? 'DECIMAL' : widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
+        // `/` always gives a DECIMAL, even for two INTEGERs. `\` always gives an INTEGER, even for DECIMALs (D14).
         const nullable = (left.type as ScalarType).nullable || (right.type as ScalarType).nullable;
+        if (node.operator === '\\') return ok(scalarType('INTEGER', { nullable }));
+        const base = node.operator === '/' ? 'DECIMAL' : widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
         return ok(scalarType(base, { nullable }));
     }
 
@@ -612,10 +614,30 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') return ok(scalarType('BOOLEAN'));
+        const relation = this.relationAgainstKey(node, left.type, right.type);
+        if (relation) return relation;
         if (!comparableTypes(left.type, right.type)) {
             return err('type.implicitCoercion', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
         }
         return ok(scalarType('BOOLEAN'));
+    }
+
+    /**
+     * A relation is not compared with a key (D25, long form only). `ref` against a scalar is an
+     * error that names the long form: compare `.customer.id`, not `.customer`. A relation against
+     * another relation of the same table (an identity test) stays allowed.
+     */
+    private relationAgainstKey(node: BinaryExpression, left: MinabType, right: MinabType): TypeResult | undefined {
+        const [relation, operandNode] =
+            left.kind === 'record' && right.kind === 'scalar'
+                ? [left, node.left]
+                : right.kind === 'record' && left.kind === 'scalar'
+                  ? [right, node.right]
+                  : [];
+        if (!relation || !operandNode) return undefined;
+        const operand = operandNode.$cstNode?.text.trim() ?? 'the relation';
+        const key = this.schema.getTable(relation.table)?.primaryKey ?? 'id';
+        return err('type.relationComparedToKey', { operator: node.operator, operand: `\`${operand}\``, key: `\`${operand}.${key}\`` });
     }
 
     private inferOrdering(node: BinaryExpression): TypeResult {
@@ -670,6 +692,8 @@ export class MinabTypeChecker {
         if (!rightElement) {
             return err('type.inNeedsCollection', { actual: formatType(right.type) });
         }
+        const relation = this.relationAgainstKey(node, left.type, rightElement);
+        if (relation) return relation;
         if (left.type.kind !== 'null' && rightElement.kind !== 'null' && !comparableTypes(left.type, rightElement)) {
             return err('type.inCollectionMismatch', { left: formatType(left.type), right: formatType(rightElement) });
         }
