@@ -4,7 +4,7 @@
  * Both sides import this file and nothing else of each other. Every message
  * is plain data that `postMessage` can clone, and every message has `v`.
  *
- * - The main thread sends requests with an `id` (`create`, `prepare`, `compile`, `run`, `dispose`),
+ * - The main thread sends requests with an `id` (`create`, `prepare`, `compile`, `run`, `editor`, `dispose`),
  *   `cancel`, `release` and the answers to port calls (`port-result`).
  * - The worker answers each request with `result` and the same `id`. While a run is going, it can
  *   call back to a port on the main thread (`port-call`) and wait for the `port-result`.
@@ -17,6 +17,7 @@
  */
 
 import { parseTypeWord, type HostFunctionDeclaration, type HostInputType } from '../language/host-declarations.js';
+import type { CompletionResult, HoverResult, SignatureHelpResult } from '../editor/types.js';
 import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 import { Big, decimalText } from '../language/values.js';
 import { runError } from '../runtime/errors.js';
@@ -48,6 +49,16 @@ export interface WireInputs {
     hostInputs?: Record<string, Json>;
 }
 
+/** The editor questions a worker answers. Each is computed by `src/editor/`. */
+export type EditorMethod = 'complete' | 'hover' | 'signatureHelp';
+
+/** The answer type of each editor method. `undefined` crosses as `null`. */
+export interface EditorAnswers {
+    complete: CompletionResult;
+    hover: HoverResult | null;
+    signatureHelp: SignatureHelpResult | null;
+}
+
 // ---- main thread to worker -----------------------------------------------
 
 export type ToWorker =
@@ -57,6 +68,8 @@ export type ToWorker =
     /** `ports` names the ports the main thread can answer. */
     | { v: 1; type: 'run'; id: string; programId: string; inputs: WireInputs; ports: PortName[]; limits?: Partial<Limits> }
     | { v: 1; type: 'dispose'; id: string }
+    /** Editor services (phase E5). They read the text: no program is kept. `offset` is a UTF-16 offset into `source`. */
+    | { v: 1; type: 'editor'; id: string; method: EditorMethod; source: string; offset: number; ruleContext?: MinabRuleContext }
     /** Aborts the run with this id and its pending port calls. */
     | { v: 1; type: 'cancel'; id: string }
     /** Frees a prepared program in the worker. */

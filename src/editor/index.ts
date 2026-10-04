@@ -16,3 +16,5 @@ export type {
     HoverResult,
     SignatureHelpResult
 } from './types.js';
+export { ALL_WORD_KEYWORDS, INITIAL_STATE, tokenize, tokenizeLine } from './tokens.js';
+export type { LineState, Token, TokenType } from './tokens.js';

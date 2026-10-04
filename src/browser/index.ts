@@ -8,6 +8,7 @@
  * Nothing here may touch Node or the DOM.
  */
 
+import type { CompletionResult, HoverResult, SignatureHelpResult } from '../editor/types.js';
 import { coded } from '../language/diagnostics/codes.js';
 import type { HostFunctionDeclaration } from '../language/host-declarations.js';
 import { parseTypeWord } from '../language/host-declarations.js';
@@ -39,6 +40,7 @@ import {
     resultWireType,
     toMinabError,
     type BridgeEndpoint,
+    type EditorMethod,
     type FromWorker,
     type InputTypes,
     type PortName,
@@ -82,6 +84,14 @@ export interface WorkerPreparedProgram {
 
 export interface WorkerMinab {
     prepare(source: string, options?: PrepareOptions): Promise<WorkerPreparedProgram>;
+    /**
+     * Editor services, computed in the worker (phase E5). `offset` is a UTF-16 offset into `source`,
+     * lines and columns in the results are 0-based. They need no `prepare`, and they fail soft: an
+     * answer the worker cannot give is an empty result (`hover` and `signatureHelp`: `undefined`).
+     */
+    complete(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<CompletionResult>;
+    hover(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<HoverResult | undefined>;
+    signatureHelp(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<SignatureHelpResult | undefined>;
     /** Stops the worker. A disposed runtime throws on use. */
     dispose(): void;
 }
@@ -307,7 +317,22 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
         };
     }
 
+    async function editor(method: EditorMethod, source: string, offset: number, ruleContext: PrepareOptions['ruleContext']): Promise<unknown> {
+        if (disposed) throw new Error('this Minab runtime was disposed');
+        if (typeof source !== 'string') throw new TypeError(`${method} needs the program source as a string`);
+        await created;
+        try {
+            return await request({ v: BRIDGE_VERSION, type: 'editor', id: nextId('r'), method, source, offset, ...(ruleContext ? { ruleContext } : {}) });
+        } catch (failure) {
+            throw new Error(failure instanceof BridgeFailure ? failure.error.message : toMinabError(failure).message);
+        }
+    }
+
     return {
+        complete: async (source, offset, o) => (await editor('complete', source, offset, o?.ruleContext)) as CompletionResult,
+        hover: async (source, offset, o) => ((await editor('hover', source, offset, o?.ruleContext)) as HoverResult | null) ?? undefined,
+        signatureHelp: async (source, offset, o) =>
+            ((await editor('signatureHelp', source, offset, o?.ruleContext)) as SignatureHelpResult | null) ?? undefined,
         async prepare(source, prepareOptions = {}) {
             if (disposed) throw new Error('this Minab runtime was disposed');
             if (typeof source !== 'string') throw new TypeError('prepare needs the program source as a string');

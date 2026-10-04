@@ -1,6 +1,8 @@
 /**
- * Stub for the entry `@shamsine/minab/monaco`.
- * Phase E5 fills it with the Monaco language registration.
- * R2 only creates the file, so the package `exports` map is complete from the start.
+ * `@shamsine/minab/monaco`: Minab in a Monaco editor (production plan E5).
+ * `registerMinab(monaco, { client })` is the one call. Monaco is passed in, never imported.
  */
-export const notReady = 'phase E5';
+
+export { registerMinab, toMonacoRange, DEFAULT_LANGUAGE_ID } from './register.js';
+export { languageConfiguration, tokensProvider, TOKEN_SCOPES } from './language.js';
+export type { MinabEditorClient, MinabRegistration, RegisterMinabOptions } from './types.js';

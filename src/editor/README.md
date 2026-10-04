@@ -17,6 +17,7 @@ No Node, no DOM, no LSP types and no Monaco types. Lines and columns are
 - `complete.ts`: `complete(doc, offset)`. Async, because the keywords come from Langium's follow-set completion.
 - `signature-help.ts`: `signatureHelp(doc, offset)`. It reads the text, so it works on a call that is not closed yet.
 - `builtin-docs.ts`: the signature and one sentence of every built-in, and `parseSignature`.
+- `tokens.ts`: the one tokenizer (`tokenizeLine`, `tokenize`) and the keyword lists. Pure. The Monaco integration, the playground editor and the static snippets use it. `playground/test/tokens.test.ts` fails when the grammar gains a keyword it does not know.
 - `describe.ts`: shared text: types, columns, tables, host function signatures, and `nameText` (backticks for names that are not plain words).
 
 ## Rules

@@ -180,6 +180,7 @@
     "concurrently": "^9.0.0",
     "esbuild": "^0.28.2",
     "langium-cli": "~4.4.0",
+    "monaco-editor": "^0.56.0",
     "oxfmt": "^0.71.0",
     "oxlint": "^1.86.0",
     "oxlint-tsgolint": "^7.0.2003",

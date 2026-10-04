@@ -28,11 +28,13 @@ export const APP_ENTRY = `
 import * as browser from ${JSON.stringify(join(root, 'src/browser/index.ts'))};
 import * as pglite from ${JSON.stringify(join(root, 'src/browser/pglite.ts'))};
 import * as worker from ${JSON.stringify(join(root, 'src/browser/worker.ts'))};
-export { browser, pglite, worker };
+import * as monaco from ${JSON.stringify(join(root, 'src/monaco/index.ts'))};
+export { browser, monaco, pglite, worker };
 `;
 
 export const ENTRIES = {
     browser: 'src/browser/index.ts',
+    monaco: 'src/monaco/index.ts',
     worker: 'src/browser/worker.ts',
     pglite: 'src/browser/pglite.ts'
 };

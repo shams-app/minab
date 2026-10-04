@@ -3,20 +3,24 @@
   "minified": true,
   "entries": {
     "app": {
-      "bytes": 795572,
-      "gzip": 189215
+      "bytes": 819448,
+      "gzip": 197127
     },
     "browser": {
-      "bytes": 82079,
-      "gzip": 24918
+      "bytes": 84119,
+      "gzip": 25520
+    },
+    "monaco": {
+      "bytes": 8582,
+      "gzip": 3524
     },
     "pglite": {
       "bytes": 4260,
       "gzip": 1879
     },
     "worker": {
-      "bytes": 780139,
-      "gzip": 184160
+      "bytes": 795928,
+      "gzip": 188799
     }
   }
 }
