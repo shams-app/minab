@@ -577,6 +577,11 @@ export const DIAGNOSTICS = {
         doc: 'The checker does not know this operator. Report it as a Minab bug.'
     }),
 
+    'wire.badMessage': entry<{ reason: string }>({
+        severity: error,
+        message: p => `the worker bridge got a message it cannot use: ${p.reason}`,
+        doc: 'A message between the page and the worker has the wrong shape, the wrong bridge version, or names a port or method that does not exist. The page and the worker should come from the same version of Minab.'
+    }),
     'wire.invalidRequest': entry<{ path: string; reason: string }>({
         severity: error,
         message: p => `the request is not valid at ${p.path}: ${p.reason}`,
@@ -592,6 +597,11 @@ export const DIAGNOSTICS = {
         message: p => `the value at ${p.path} is not a valid ${p.expected}`,
         doc: 'A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error.'
     }),
+    'wire.programExpired': entry({
+        severity: error,
+        message: () => 'the worker no longer holds this prepared program',
+        doc: 'The worker keeps a limited number of prepared programs and dropped the oldest one. Prepare the program again.'
+    }),
     'wire.tooManyRuns': entry<{ limit: number; used: number }>({
         severity: error,
         message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,
@@ -601,6 +611,16 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `wire format version ${p.version} is not supported (supported: ${p.supported})`,
         doc: 'The "v" field of the request names a wire format this server does not know. Use one of the supported versions.'
+    }),
+    'wire.workerFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => `the worker failed: ${p.reason}`,
+        doc: 'The worker hit an unexpected failure while it handled a request. params.reason has the text. This is a bug in Minab or in a worker-side port.'
+    }),
+    'wire.workerStopped': entry({
+        severity: error,
+        message: () => 'the worker stopped, so the request cannot finish',
+        doc: 'The worker was disposed, was terminated or crashed. Create a new worker runtime.'
     })
 } as const;
 

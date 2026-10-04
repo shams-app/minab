@@ -109,3 +109,21 @@ describe('src/runtime does not depend on the environment', () => {
         ]);
     });
 });
+
+describe('the browser entries do not depend on Node either (H4)', () => {
+    for (const file of ['src/browser/index.ts', 'src/browser/worker.ts']) {
+        test(`${file} has no Node module, no database driver, no window or document`, () => {
+            const { files, problems } = walk(resolve(root, file), readFromDisk);
+            expect(files).toContain(file);
+            expect(problems).toEqual([]);
+        });
+    }
+
+    test('the guard fails when the worker entry imports node:worker_threads', () => {
+        const poisoned = (file: string) => {
+            const source = readFromDisk(file);
+            return file === resolve(root, 'src/browser/worker.ts') ? `import 'node:worker_threads';\n${source}` : source;
+        };
+        expect(walk(resolve(root, 'src/browser/worker.ts'), poisoned).problems).toEqual([`src/browser/worker.ts: imports "node:worker_threads"`]);
+    });
+});

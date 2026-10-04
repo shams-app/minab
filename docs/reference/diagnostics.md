@@ -198,8 +198,12 @@ A wire request, response or value does not follow wire format v1 (R6).
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `wire.badMessage` | error | the worker bridge got a message it cannot use: {reason} | `reason` | A message between the page and the worker has the wrong shape, the wrong bridge version, or names a port or method that does not exist. The page and the worker should come from the same version of Minab. |
 | `wire.invalidRequest` | error | the request is not valid at {path}: {reason} | `path`, `reason` | The wire request does not have the shape of wire format v1. params.path says where. Fix the request; the value itself is never copied into the error. |
 | `wire.invalidResponse` | error | the response is not valid at {path}: {reason} | `path`, `reason` | The wire response does not have the shape of wire format v1. params.path says where. A client should treat the server as broken. |
 | `wire.invalidValue` | error | the value at {path} is not a valid {expected} | `path`, `expected` | A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error. |
+| `wire.programExpired` | error | the worker no longer holds this prepared program | none | The worker keeps a limited number of prepared programs and dropped the oldest one. Prepare the program again. |
 | `wire.tooManyRuns` | error | the request has {used} runs, and the limit is {limit} | `used`, `limit` | One wire request may hold at most batchRuns runs (100 by default). Send the runs in several requests. |
 | `wire.unsupportedVersion` | error | wire format version {version} is not supported (supported: {supported}) | `version`, `supported` | The "v" field of the request names a wire format this server does not know. Use one of the supported versions. |
+| `wire.workerFailed` | error | the worker failed: {reason} | `reason` | The worker hit an unexpected failure while it handled a request. params.reason has the text. This is a bug in Minab or in a worker-side port. |
+| `wire.workerStopped` | error | the worker stopped, so the request cannot finish | none | The worker was disposed, was terminated or crashed. Create a new worker runtime. |
