@@ -25,6 +25,10 @@ Small Node scripts for the repository itself (not for users of Minab).
   `.github/workflows/release.yml` and `next.yml`. Steps for people:
   [`docs/releasing.md`](../docs/releasing.md). Tests: `test/release-scripts.test.ts`.
 
+- `build-cjs.mjs` — bundles the CommonJS entries (`.`, `./node`, `./nestjs`) into
+  `out/cjs/*.cjs` with esbuild (D32). `npm run build:cjs`; `build` and `build:release` run it.
+  The consumer tests are in `test/consumers/`.
+
 ## Rules
 
 - Plain Node (18+), ES modules (`.mjs`), no dependencies.

@@ -8,6 +8,7 @@
 
 import { DataSourceError } from '../host/fixture-executor.js';
 import type { DataPort, Row, SqlQuery } from '../runtime/index.js';
+import { wrapQuery } from './query-function.js';
 
 /** What the port needs from `pg`'s `Client`, and all it uses. The import is untyped, so this is explicit. */
 export interface PgClientLike {
@@ -16,26 +17,9 @@ export interface PgClientLike {
     end(): Promise<void>;
 }
 
-/** A data port over a connected client. It does not close the client: the host owns it. */
+/** A data port over a connected client or pool. It does not close it: the host owns it. */
 export function pgDataPort(client: Pick<PgClientLike, 'query'>): DataPort {
-    return {
-        async execute(query: SqlQuery): Promise<Row[]> {
-            try {
-                const result = await client.query(query.text, query.params);
-                return result.rows;
-            } catch (e) {
-                // The database rejecting generated SQL is a compiler bug, not a user typo,
-                // so the statement itself is part of the report. The SQLSTATE stays on the
-                // error, so the runtime can still map it to a code.
-                const error = new DataSourceError(
-                    `the database rejected this statement:\n  ${query.text}\n` + `  parameters: ${JSON.stringify(query.params)}\n` + `${(e as Error).message}`
-                );
-                const code = (e as { code?: unknown }).code;
-                if (typeof code === 'string') Object.assign(error, { code });
-                throw error;
-            }
-        }
-    };
+    return wrapQuery((text, params) => client.query(text, params));
 }
 
 export interface PostgresConnection extends DataPort {
