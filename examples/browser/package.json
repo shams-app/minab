@@ -1,0 +1,23 @@
+{
+  "name": "minab-example-browser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A minimal Vite app: a form checked in the browser, a rule delegated to the NestJS example, and a Monaco editor for Minab",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.56.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "~1.56.1",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.0",
+    "vite": "^7.0.0"
+  }
+}

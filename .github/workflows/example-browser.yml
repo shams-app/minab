@@ -1,0 +1,67 @@
+# Builds and packs Minab, installs the tarball into examples/browser and examples/nestjs, starts the
+# NestJS server on a real Postgres, then runs the Playwright tests in Chromium (H6).
+name: Example Browser
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: minab
+          POSTGRES_PASSWORD: minab
+          POSTGRES_DB: minab_example
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U minab -d minab_example"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://minab:minab@localhost:5432/minab_example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install the NestJS example (the packed tarball of this repository)
+        working-directory: examples/nestjs
+        run: |
+          npm ci
+          npm run setup
+          npm run migrate
+      - name: Start the NestJS server
+        working-directory: examples/nestjs
+        run: |
+          npm start > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:3000/reports/top-customers > /dev/null && exit 0
+            sleep 2
+          done
+          cat server.log
+          exit 1
+      - name: Install the browser example (the packed tarball of this repository)
+        working-directory: examples/browser
+        run: |
+          npm ci
+          npm run setup
+          npx playwright install --with-deps chromium
+      - name: Playwright tests
+        working-directory: examples/browser
+        run: npm test
+      - name: Upload the report when a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: examples/browser/playwright-report
+          retention-days: 7

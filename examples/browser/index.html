@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minab browser example</title>
+  </head>
+  <body>
+    <header>
+      <h1>Minab in the browser</h1>
+      <nav>
+        <a href="#form" id="nav-form">Form</a>
+        <a href="#editor" id="nav-editor">Editor</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="page-form" hidden>
+        <h2>Order form</h2>
+        <form id="order" novalidate>
+          <label>Customer id <input name="customer" value="00000000-0000-4000-8000-000000000001" /></label>
+          <label>Start date <input name="start_date" type="date" /></label>
+          <label>End date <input name="end_date" type="date" /></label>
+          <label>Total <input name="total" inputmode="decimal" value="10.00" /></label>
+          <button type="submit">Submit</button>
+        </form>
+        <p>Local rule <code>.end_date &gt; .start_date</code> (runs in the browser): <strong id="local-verdict" data-testid="local-verdict">waiting</strong> <span id="local-error" data-testid="local-error"></span></p>
+        <p>Stored rule <code>order-limit</code> (runs on the server): <strong id="remote-verdict" data-testid="remote-verdict">not sent</strong> <span id="remote-error" data-testid="remote-error"></span></p>
+      </section>
+
+      <section id="page-editor" hidden>
+        <h2>Editor</h2>
+        <div dir="ltr"><div id="editor" data-testid="editor"></div></div>
+        <h3>Problems</h3>
+        <ul id="problems" data-testid="problems"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
