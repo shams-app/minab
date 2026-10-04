@@ -132,9 +132,15 @@ const CASES: Record<DiagnosticCode, Case> = {
     'null.orderingWithNull': { via: 'validator', program: '.total > null' },
 
     'query.duplicateGroupKeyName': { via: 'validator', program: 'FROM Order GROUPBY .status AS s, .total AS s SELECT COUNT(.) AS n' },
+    'query.functionNotInlinable': {
+        via: 'validator',
+        program: 'fn f(a: INTEGER): INTEGER { let b: INTEGER = a; b }\nFROM Order WHERE f(.total) > 1 SELECT .id'
+    },
     'query.functionReturnNotJson': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { FROM Order SELECT .id }' },
     'query.inSingleColumnRequired': { via: 'validator', program: '.id IN (FROM Order SELECT .id, .total)' },
+    'query.keyNeedsName': { via: 'validator', program: 'FROM Order GROUPBY .status, .total SELECT KEY AS k' },
     'query.singleColumnRequired': { via: 'checker', program: '(FROM Order SELECT .id, .total) == 1', target: ofType('Subquery') },
+    'query.unnamedGroupKey': { via: 'validator', program: 'FROM Order GROUPBY .status, .total + 1 SELECT COUNT(.) AS n' },
 
     'rule.fieldTypeMissing': { via: 'checker', program: '$', target: ofType('FieldValue'), setting: 'fieldWithoutType' },
     'rule.fieldValueOutsideFieldRule': { via: 'validator', program: '$ == 1' },

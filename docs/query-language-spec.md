@@ -51,6 +51,8 @@ Sigils resolve against a **scope stack**, pushed by:
 
 `^` always refers to the scope immediately below the current one on the stack. `#alias` refers to a named scope regardless of stack depth.
 
+`KEY` is the group key of the nearest `GROUPBY` (§4.1). With several keys it is a record, and `KEY.<name>` reads one key.
+
 ---
 
 ### 2.3 Names
@@ -203,7 +205,7 @@ Semantics per clause, in evaluation order:
 1. **FROM** — establishes the primary scope. Its source can be a bare schema table name (`FROM Order`), an ad-hoc `#Table` reference (`FROM #Customers`, same sigil as everywhere else — no prior declaration needed), or a `.field` off an enclosing record (`FROM .orders`), optionally narrowed by an inline filter (`FROM .orders[.status == "paid"]`, same meaning as §3.2) — meaningful when that field is a relational `collection(Table)` or a `JSON`-array value (§7.3), and only valid when a `.`-scope is actually active (inside a function/loop/DML statement operating on a record, not at bare top level with no enclosing record). Its alias is implicit either way: fields on it are reachable as bare `.field` (or `alias.field`) without needing `#`.
 2. **JOIN** — adds another scope. `ON` is an ordinary boolean expression comparing fields from any active scope. `LEFTJOIN` preserves unmatched left-side rows with nulls on the right; `CROSSJOIN` takes no `ON` and produces the full cross-product.
 3. **WHERE** — filters the joined row stream.
-4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key. A key may be given a name with `AS` (`GROUPBY .status AS s`). With a single key, the name changes nothing: `KEY` is the key itself, with or without a name. Names must be unique (`query.duplicateGroupKeyName`). A name is the way to refer to one key when there are several keys; a `KEY` over several keys is not available yet.
+4. **GROUPBY** — partitions the stream by one or more key expressions. Inside and after this clause, `.` refers to *a row within the current group* (so aggregate functions like `SUM(.total)` still work), and `KEY` refers to the group key. A key may be given a name with `AS` (`GROUPBY .status AS s`). With a single key, the name changes nothing: `KEY` is the key itself, with or without a name. Names must be unique (`query.duplicateGroupKeyName`). With **several keys**, `KEY` is a record of the keys, and `KEY.<name>` reads one of them (in `HAVING`, `SELECT` and `ORDERBY`). A key is named by its `AS` name; a key that is a plain field path is also named by its last field (`.customer.country` is `country`). A computed key with no name is the error `query.unnamedGroupKey` ("give this group key a name with `AS`"). A bare `KEY`, or a `KEY.<name>` that no key has, is the error `query.keyNeedsName`. Names, including those taken from a field path, must be unique.
 5. **HAVING** — filters the *grouped* stream, evaluated after aggregation, so aggregate calls are valid here.
 6. **SELECT** — projects final columns. Each item may be aliased with `AS`. `SELECT *` selects every column of the row instead of listing them; omitting `SELECT` entirely is also still valid (§4.1 shows it as optional) — the two are different things, not the same "no explicit projection" case. An optional `DISTINCT` immediately after `SELECT` deduplicates the projected rows — deduplication is by the full projected tuple (every selected column together), not any single column, matching standard SQL `SELECT DISTINCT` semantics.
 7. **ORDERBY** — sorts the result. `ASC` is the default. Each sort key is either a `SELECT` alias (`ORDERBY total DESC`) or any expression over the source row (`ORDERBY .created_at DESC`), even a column that `SELECT` does not list. An alias name wins over a source column with the same name.
@@ -801,6 +803,8 @@ discountedTotal(.id, .discount_rate) <= .total
 ```
 
 `name(...)` is a `CallExpression` (§11), so it chains with the ordinary postfix operators like anything else — `getPrimaryContact(.id).email`, `recentOrders(.id)[.status == "shipped"]`, and so on.
+
+**Inside a query.** A query is one SQL statement, so a user function called in a query clause (`WHERE`, `SELECT`, `GROUPBY`, `HAVING`, `ORDERBY`, `ON`) is copied into the SQL: its body is compiled in place, and each parameter is replaced by the argument. This works for a **simple function**: a body that is one expression, with no statements (no `let`), no recursion (direct or through other functions), no host function (§8.7) and no query. For example, `fn net(t: DECIMAL): DECIMAL { t * 0.9 }` in `WHERE net(.total) > 100` becomes `WHERE ("Order"."total" * 0.9) > 100`. Any other user function in a query clause is the check error `query.functionNotInlinable`, which names the reason. Call such a function outside the query, or simplify its body. A call outside a query is not affected: the interpreter runs the function.
 
 A function may also call itself or another function in the same way, including **recursively**, and regardless of where the other function is declared in the file (so mutual recursion between two functions is allowed too).
 
