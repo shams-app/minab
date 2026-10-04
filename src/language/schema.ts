@@ -148,6 +148,21 @@ export class SchemaProvider {
         return this.host.functions.get(name);
     }
 
+    /** Every declared host input, with its type. The editor lists them. */
+    hostInputs(): ReadonlyMap<string, MinabType> {
+        return this.host.inputs;
+    }
+
+    /** Every declared host function. The editor lists them. */
+    hostFunctions(): ReadonlyMap<string, ResolvedHostFunction> {
+        return this.host.functions;
+    }
+
+    /** Every table of the schema. */
+    tables(): readonly MinabTableSchema[] {
+        return this.schema.tables;
+    }
+
     /** True when the name belongs to the host: an input or a function (D11). */
     isHostName(name: string): boolean {
         return this.host.inputs.has(name) || this.host.functions.has(name);
