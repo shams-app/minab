@@ -32,7 +32,9 @@
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
     isBlock,
+    isCurrentRecord,
     isFilterAccess,
+    isInsertStatement,
     isFunctionDecl,
     isJsonObjectLiteral,
     isListLiteral,
@@ -78,6 +80,7 @@ import {
 } from './generated/ast.js';
 import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
+import { splitSelectors } from './minab-json-writes.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
@@ -336,8 +339,18 @@ export class MinabValidator {
         if (this.inRule && !this.assignmentRoot(node.target)) report(accept, coded('rule.writeInRule'), { node, property: 'target' });
     }
 
-    /** The table an INSERT, UPDATE or DELETE writes to, or a diagnostic when the target is no table. */
+    /**
+     * The table an INSERT, UPDATE or DELETE writes to, or a diagnostic when the target is no table.
+     * A `JSON` array column (`.tags`, `.tags[2]`) is a target too (X6): it has no table, so the answer is `undefined` and the columns are free.
+     */
     checkWriteTarget(node: InsertStatement | UpdateStatement | DeleteStatement, accept: ValidationAcceptor): string | undefined {
+        const { base, selectors } = splitSelectors(node.target);
+        const column = this.services.typeChecker.inferType(base);
+        if (column.ok && column.type.kind === 'scalar' && column.type.base === 'JSON' && (isMemberAccess(base) || (isCurrentRecord(base) && base.field))) {
+            // An INSERT adds an element to the array. A position or a filter on it says nothing.
+            if (isInsertStatement(node) && selectors.length > 0) report(accept, coded('compile.writeTarget'), { node, property: 'target' });
+            return undefined;
+        }
         const target = this.services.typeChecker.inferType(node.target);
         // A failed inference has its own diagnostic at the node that failed.
         if (!target.ok) return undefined;
@@ -411,8 +424,30 @@ export class MinabValidator {
         const targetResult = this.services.typeChecker.inferType(node.target);
         const valueResult = this.services.typeChecker.inferType(node.value);
         if (!targetResult.ok || !valueResult.ok) return;
-        const target = targetResult.type;
+        let target = targetResult.type;
         const value = valueResult.type;
+        // A column of the rows of a to-many step (`.doctor.patients[...].active`) is a list of values; one value goes to each row.
+        if (target.kind === 'scalar' && target.array && this.crossesCollection(node.target)) {
+            target = { ...target, array: false, arrayNullable: false };
+        }
+        // A relation takes an object (spec §9.3): `.doctor |= { name: "x" }`, `.doctor!.id = ...`, `.a! = { name: "x" }`.
+        if (
+            (target.kind === 'record' || target.kind === 'collection') &&
+            isJsonObjectLiteral(node.value) &&
+            (node.operator === '=' || node.operator === '|=')
+        ) {
+            for (const property of node.value.properties) {
+                this.checkColumnValue(
+                    target.table,
+                    property.key,
+                    ':',
+                    property.value ?? ({ $type: 'NameRef', name: property.key } as NameRef),
+                    property,
+                    accept
+                );
+            }
+            return;
+        }
         const isNumericTarget = target.kind === 'scalar' && !target.array && (target.base === 'INTEGER' || target.base === 'DECIMAL');
         const isTextTarget = target.kind === 'scalar' && !target.array && (target.base === 'TEXT' || target.base === 'CITEXT');
 
@@ -440,7 +475,7 @@ export class MinabValidator {
                 }
                 break;
             case '|=':
-                if (!(target.kind === 'record' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
+                if (!(target.kind === 'record' || target.kind === 'collection' || (target.kind === 'scalar' && !target.array && target.base === 'JSON'))) {
                     report(accept, coded('type.mergeAssignTarget', { actual: formatType(target) }), { node, property: 'operator' });
                 }
                 return;
@@ -450,6 +485,17 @@ export class MinabValidator {
         if (!isAssignableTo(value, target)) {
             report(accept, coded('type.assignMismatch', { actual: formatType(value), expected: formatType(target) }), { node, property: 'value' });
         }
+    }
+
+    /** Does the path go through a to-many step (a `collection`) before its last column? */
+    private crossesCollection(target: Expression): boolean {
+        let current: Expression = target;
+        while (isMemberAccess(current) || isFilterAccess(current) || isTupleAccess(current)) {
+            current = current.receiver;
+            const result = this.services.typeChecker.inferType(current);
+            if (result.ok && result.type.kind === 'collection') return true;
+        }
+        return false;
     }
 
     /** The bare name an assignment target starts from: `currentUser` in `currentUser.id = 1;`. */

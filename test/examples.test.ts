@@ -10,10 +10,9 @@ import { EXIT_OK, EXIT_PROGRAM_ERROR, runCli, type CliIo } from '../src/cli/main
  * README says to run it: `check` must be clean, and a `run` example must
  * produce its documented answer from the fixture in its own config.
  *
- * `check-only` examples are the constructs the evaluator doesn't execute yet
- * (loops, `INSERT`/`UPDATE`/`DELETE`). The suite pins that `run` refuses them
- * with an explicit reason — so when execution lands, this fails and the label
- * (and the README's "not executed yet" note) gets updated instead of rotting.
+ * `check-only` examples are the constructs the evaluator doesn't execute yet. Since X6 every
+ * construct runs, so no example is check-only; the suite still knows the label, so a new
+ * construct that arrives before its execution can be pinned the same way.
  */
 
 const EXAMPLES_DIR = fileURLToPath(new URL('../examples/', import.meta.url));

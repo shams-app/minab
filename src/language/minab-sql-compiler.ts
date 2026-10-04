@@ -58,9 +58,11 @@ import {
     isTupleAccess,
     isTypeTestExpression,
     isUnaryExpression,
+    type AssignmentStatement,
     type BinaryExpression,
     type CallExpression,
     type CastExpr,
+    type CurrentRecord,
     type FunctionDecl,
     type GroupKey,
     type DeleteStatement,
@@ -83,10 +85,11 @@ import { coded, type DiagnosticCode, type DiagnosticParams, type ParamsArgs } fr
 import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, type SqlArg, type SqlClock } from './minab-builtins.js';
 import type { SqlQuery } from './minab-executor.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
-import { sqlParameter } from './values.js';
+import { jsonNumber, sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
+import Big from 'big.js';
 
 export type WriteStatementNode = InsertStatement | UpdateStatement | DeleteStatement;
 
@@ -128,6 +131,8 @@ export interface OuterResolver {
     resolve(expr: Expression, depth: number): { found: true; value: unknown } | { found: false; reason: string };
     /** The record `frameIndex` levels outside the compiled statement, innermost first. */
     resolveRecord(frameIndex: number): { found: true; record: OuterRecord } | { found: false; reason: string };
+    /** The row a local name holds (a loop variable over a table). Only a path assignment asks (X6). */
+    resolveNamedRecord?(name: string): { found: true; record: OuterRecord } | { found: false; reason: string };
 }
 
 const NO_OUTER_REASON = 'reaches outside the query being compiled, with no enclosing runtime scope to supply it';
@@ -191,6 +196,83 @@ interface CollectionSource {
     predicates: string[];
     /** A to-many relation (`.orders`) also says which column links a row back to its owner, and the owner's key. An `INSERT` sets it. */
     link?: { column: string; value: string };
+}
+
+/** How a path assignment operator maps to the operator of `SET` (spec §9.3, §10.3). `?=` has no `SET` form: it is a `COALESCE`. */
+const PATH_OPERATORS: Record<string, string> = { '=': ':', '+=': '+:', '-=': '-:', '*=': '*:', '/=': '/:', '|=': ':|', '?=': '?:' };
+
+/** One step of a record path: a field, with its `!` and how many `[filter]` follow it. */
+interface PathNode {
+    node: CurrentRecord | MemberAccessNode;
+    field: string;
+    vivify: boolean;
+    filters: number;
+}
+type MemberAccessNode = Extract<Expression, { $type: 'MemberAccess' }>;
+
+/** A relation step of a path, with the tables it joins. */
+interface PathStep {
+    node: PathNode;
+    owner: string;
+    field: string;
+    kind: 'ref' | 'collection';
+    target: string;
+    vivify: boolean;
+}
+
+interface PathShape {
+    nodes: PathNode[];
+    leaf: PathNode;
+    steps: PathStep[];
+    leafColumn: MinabColumnSchema;
+    /** The table that owns the final column, or the table of the final relation. */
+    leafTable: string;
+    /** A to-many step is on the path: the final rows are many. */
+    toMany: boolean;
+    rootExpr: Expression;
+}
+
+/** One relation step before the last column. A step with `vivify` has two statements. */
+export type PathStage = { vivify: false } | { vivify: true; table: string; check: SqlQuery; create: SqlQuery };
+
+export interface PathWritePlan {
+    stages: PathStage[];
+    final: SqlQuery;
+}
+
+export type PathWriteResult = { ok: true; plan: PathWritePlan } | { ok: false; reason: string; code: DiagnosticCode; params: DiagnosticParams };
+
+/** The steps of a path from its root, without the root. `[filter]` marks the step before it. */
+function pathNodes(expr: Expression, refuse: (reason: string) => never): PathNode[] {
+    if (isFilterAccess(expr)) {
+        const nodes = pathNodes(expr.receiver, refuse);
+        if (nodes.length === 0) refuse('a filter needs a to-many relation before it');
+        nodes[nodes.length - 1].filters++;
+        return nodes;
+    }
+    if (isTupleAccess(expr)) return refuse('a record path cannot use a position; a position is for a JSON array (spec §3.5)');
+    if (isMemberAccess(expr)) return [...pathNodes(expr.receiver, refuse), { node: expr, field: expr.member, vivify: !!expr.vivify, filters: 0 }];
+    if (isCurrentRecord(expr) && expr.field) return [{ node: expr, field: expr.field, vivify: !!expr.vivify, filters: 0 }];
+    return [];
+}
+
+/** The expression a path starts at: `.`, `^` or a name. */
+function pathRoot(expr: Expression): Expression {
+    let current = expr;
+    for (;;) {
+        if (isFilterAccess(current) || isTupleAccess(current)) current = current.receiver;
+        else if (isMemberAccess(current)) current = current.receiver;
+        else if (isCurrentRecord(current) && current.field) return { $type: 'CurrentRecord' } as CurrentRecord;
+        else return current;
+    }
+}
+
+/** A value for a `jsonb` parameter. A `Big` becomes a JSON number (D17). */
+function jsonText(value: unknown): string {
+    return JSON.stringify(value, function (this: Record<string, unknown>, key: string, item: unknown) {
+        const raw = this[key];
+        return raw instanceof Big ? jsonNumber(raw) : item;
+    });
 }
 
 const SQL_TYPES: Record<LogicalTypeBase, string> = {
@@ -331,8 +413,8 @@ export class MinabSqlCompiler {
         return this.run(ctx => this.write(statement, ctx), outer, clock);
     }
 
-    private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
-        const ctx = new Ctx(outer, clock);
+    private run(build: (ctx: Ctx) => string, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock, pathRoots = false): SqlResult {
+        const ctx = new Ctx(outer, clock, pathRoots);
         try {
             const text = build(ctx);
             return { ok: true, query: { text, params: ctx.params } };
@@ -507,16 +589,21 @@ export class MinabSqlCompiler {
 
     /** One `SET` item. `+:` joins text or adds numbers by the type of the column (spec §10.3). */
     private assignment(assignment: SetAssignment, table: string, alias: string, scope: SqlScope, ctx: Ctx): string {
-        const column = this.writableColumn(table, assignment.key);
-        if (column.type.kind !== 'scalar') failCoded('compile.writeColumn', { table, column: assignment.key });
+        this.writableColumn(table, assignment.key);
+        return this.setItem(table, assignment.key, assignment.operator, this.expression(assignment.value, ctx, [scope]), alias);
+    }
+
+    /** `column = value` for one operator of `SET` (or of a path assignment). `value` is SQL. */
+    private setItem(table: string, key: string, operator: string, value: string, alias: string): string {
+        const column = this.writableColumn(table, key);
+        if (column.type.kind !== 'scalar') failCoded('compile.writeColumn', { table, column: key });
         const name = quoteIdent(column.sqlName ?? column.name);
         const current = `${quoteIdent(alias)}.${name}`;
         const base = column.type.type.base;
         const array = column.type.type.array;
-        const value = this.expression(assignment.value, ctx, [scope]);
         const numeric = !array && (base === 'INTEGER' || base === 'DECIMAL');
         const text = !array && (base === 'TEXT' || base === 'CITEXT');
-        switch (assignment.operator) {
+        switch (operator) {
             case ':':
                 return `${name} = ${value}`;
             case '+:':
@@ -535,8 +622,236 @@ export class MinabSqlCompiler {
             case ':|':
                 if (!array && base === 'JSON') return `${name} = COALESCE(${current}, '{}'::jsonb) || ${value}`;
                 break;
+            case '?:':
+                return `${name} = COALESCE(${current}, ${value})`;
         }
-        fail(`"${assignment.operator}" cannot be used on the ${array ? `${base}[]` : base} column "${assignment.key}"`);
+        fail(`"${operator}" cannot be used on the ${array ? `${base}[]` : base} column "${key}"`);
+    }
+
+    // ---- path assignment and JSON arrays (X6) --------------------------
+
+    /**
+     * Compile `target op value;` where the target is a record path (spec §9.3). `value` is already
+     * evaluated by the interpreter and is bound as a parameter. The answer is a list of stages (one for
+     * each relation step before the last column, so a dry run can follow a created row) and the
+     * statement that sets the value. A `!` step gets two statements: one that asks if the link is
+     * empty, and one that creates the row and links it.
+     */
+    compilePathAssign(statement: AssignmentStatement, value: unknown, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): PathWriteResult {
+        try {
+            const shape = this.pathShape(statement, new Ctx(outer, clock, true));
+            const build = (make: (ctx: Ctx) => string): SqlQuery => {
+                const result = this.run(make, outer, clock, true);
+                if (!result.ok) throw new CompileError(result.reason, result.code, result.params);
+                return result.query;
+            };
+            const stages = shape.steps.map((step): PathStage => {
+                if (!step.vivify) return { vivify: false };
+                const check = build(ctx => this.vivifyCheck(shape, step, ctx));
+                const create = build(ctx => this.vivifyCreate(shape, step, ctx));
+                return { vivify: true, table: step.target, check, create };
+            });
+            const final = build(ctx => this.pathFinal(statement, shape, value, ctx));
+            return { ok: true, plan: { stages, final } };
+        } catch (e) {
+            if (e instanceof CompileError) {
+                return e.code
+                    ? { ok: false, reason: e.message, code: e.code, params: e.params ?? {} }
+                    : { ok: false, reason: e.message, code: 'compile.notSql', params: { reason: e.message } };
+            }
+            throw e;
+        }
+    }
+
+    /** The relation steps and the final column of a path, from the schema. */
+    private pathShape(statement: AssignmentStatement, ctx: Ctx): PathShape {
+        const writePath = (reason: string): never => failCoded('compile.writePath', { reason });
+        const nodes = pathNodes(statement.target, writePath);
+        if (nodes.length === 0) writePath('the target must start with "." or a record variable');
+        const leaf = nodes[nodes.length - 1];
+        const rootExpr = pathRoot(statement.target);
+        const root = this.rowRef(rootExpr, ctx, []);
+        if (!root) writePath('the path must start at a record: ".", "^" or a loop variable over a table');
+        let table = this.tableOf(root!);
+        const steps: PathStep[] = [];
+        let toMany = false;
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            const column = this.columnSchema(table, node.field);
+            const isLeaf = i === nodes.length - 1;
+            if (column.type.kind === 'scalar') {
+                if (!isLeaf) writePath(`"${node.field}" is a column, not a relation`);
+                if (node.filters > 0) writePath(`"${node.field}" is a column and cannot have a filter`);
+                return { nodes, leaf, steps, leafColumn: column, leafTable: table, toMany, rootExpr };
+            }
+            if (toMany) writePath(`"${node.field}" comes after a to-many step`);
+            const isMany = column.type.kind === 'collection';
+            if (!isMany && node.filters > 0) writePath(`"${node.field}" is not a collection and cannot have a filter`);
+            // `|=` on a relation creates the missing record by itself (spec §9.3).
+            const implied = isLeaf && statement.operator === '|=' && !isMany;
+            if (node.vivify && isMany) failCoded('type.vivifyOnCollection', { member: node.field });
+            steps.push({
+                node,
+                owner: table,
+                field: node.field,
+                kind: column.type.kind,
+                target: column.type.table,
+                vivify: !isMany && (node.vivify || implied)
+            });
+            toMany = isMany;
+            table = column.type.table;
+            if (isLeaf) return { nodes, leaf, steps, leafColumn: column, leafTable: table, toMany, rootExpr };
+        }
+        return writePath('the path is empty');
+    }
+
+    /** The expression of the owner of a step: the receiver, or the current record for `.field`. */
+    private stepOwner(node: PathNode): Expression {
+        return node.node.$type === 'MemberAccess' ? (node.node as { receiver: Expression }).receiver : ({ $type: 'CurrentRecord' } as CurrentRecord);
+    }
+
+    private vivifyOwner(step: PathStep, ctx: Ctx): { key: string; alias: string; fk: string } {
+        const owner = this.rowRef(this.stepOwner(step.node), ctx, []);
+        if (!owner) failCoded('compile.writePath', { reason: `"${step.field}" has no owning record here` });
+        const column = this.columnSchema(step.owner, step.field);
+        return { key: this.identity(owner!), alias: ctx.freshAlias(), fk: this.refForeignKey(step.owner, column) };
+    }
+
+    private vivifyCheck(_shape: PathShape, step: PathStep, ctx: Ctx): string {
+        const { key, alias, fk } = this.vivifyOwner(step, ctx);
+        const a = quoteIdent(alias);
+        return `SELECT (${a}.${quoteIdent(fk)} IS NULL) AS "missing" FROM ${quoteIdent(this.sqlTable(step.owner))} AS ${a} WHERE ${a}.${quoteIdent(this.primaryKey(step.owner))} = ${key}`;
+    }
+
+    private vivifyCreate(_shape: PathShape, step: PathStep, ctx: Ctx): string {
+        const { key, alias, fk } = this.vivifyOwner(step, ctx);
+        const a = quoteIdent(alias);
+        const created = quoteIdent(this.primaryKey(step.target));
+        return (
+            `WITH "_created" AS (INSERT INTO ${quoteIdent(this.sqlTable(step.target))} DEFAULT VALUES RETURNING ${created}) ` +
+            `UPDATE ${quoteIdent(this.sqlTable(step.owner))} AS ${a} SET ${quoteIdent(fk)} = (SELECT ${created} FROM "_created") ` +
+            `WHERE ${a}.${quoteIdent(this.primaryKey(step.owner))} = ${key} AND ${a}.${quoteIdent(fk)} IS NULL`
+        );
+    }
+
+    /** The statement that sets the value: one `UPDATE` of the rows the path ends at. */
+    private pathFinal(statement: AssignmentStatement, shape: PathShape, value: unknown, ctx: Ctx): string {
+        const { leaf, leafColumn } = shape;
+        const operator = statement.operator;
+        const writePath = (reason: string): never => failCoded('compile.writePath', { reason });
+        let table: string;
+        let alias: string;
+        let where: string;
+        if (leafColumn.type.kind === 'scalar') {
+            // The rows that own the column: one row, or the rows of a to-many step with its filters.
+            const ownerExpr = this.stepOwner(leaf);
+            if (shape.toMany) {
+                const source = this.collectionSource(ownerExpr, ctx, []);
+                table = source.table;
+                alias = source.alias;
+                where = source.predicates.join(' AND ');
+            } else {
+                const owner = this.rowRef(ownerExpr, ctx, []);
+                if (!owner) writePath(`"${leaf.field}" has no owning record here`);
+                table = shape.leafTable;
+                alias = ctx.freshAlias();
+                where = `${quoteIdent(alias)}.${quoteIdent(this.primaryKey(table))} = ${this.identity(owner!)}`;
+            }
+            const op = PATH_OPERATORS[operator];
+            if (!op) writePath(`"${operator}" cannot be used here`);
+            const set = this.setItem(table, leaf.field, op, this.bindColumnValue(ctx, leafColumn, value), alias);
+            return `UPDATE ${quoteIdent(this.sqlTable(table))} AS ${quoteIdent(alias)} SET ${set} WHERE ${where}`;
+        }
+        // A relation at the end: an object sets (merges) fields of the related record, or of each record of a to-many step.
+        if (operator !== '=' && operator !== '|=') writePath(`"${operator}" cannot be used on a relation`);
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) writePath('a relation takes an object: { field: value }');
+        const target = statement.target;
+        table = shape.leafTable;
+        if (leafColumn.type.kind === 'collection') {
+            const source = this.collectionSource(target, ctx, []);
+            alias = source.alias;
+            where = source.predicates.join(' AND ');
+        } else {
+            const row = this.rowRef(target, ctx, []);
+            if (!row) writePath(`"${leaf.field}" has no record here`);
+            alias = ctx.freshAlias();
+            where = `${quoteIdent(alias)}.${quoteIdent(this.primaryKey(table))} = ${this.identity(row!)}`;
+        }
+        const entries = Object.entries(value as Record<string, unknown>);
+        if (entries.length === 0) failCoded('compile.writeEmptySet');
+        const sets = entries.map(([key, item]) => this.setItem(table, key, ':', this.bindColumnValue(ctx, this.writableColumn(table, key), item), alias));
+        return `UPDATE ${quoteIdent(this.sqlTable(table))} AS ${quoteIdent(alias)} SET ${sets.join(', ')} WHERE ${where}`;
+    }
+
+    /** A value in a statement, bound as a parameter. A `JSON` column takes JSON text. */
+    private bindColumnValue(ctx: Ctx, column: MinabColumnSchema, value: unknown): string {
+        if (column.type.kind === 'scalar' && column.type.type.base === 'JSON' && !column.type.type.array && value !== null && value !== undefined) {
+            return `${ctx.bind(jsonText(value))}::jsonb`;
+        }
+        return ctx.bind(value ?? null);
+    }
+
+    /**
+     * The row and the `JSON` column that a `JSON`-array target names (`.tags`, `.doctor.tags`, `customer.tags`).
+     * Answers `undefined` when the expression is not a scalar column (it is a table or a relation).
+     */
+    private jsonColumn(base: Expression, ctx: Ctx): { table: string; column: MinabColumnSchema; key: string } | undefined {
+        if (!(isCurrentRecord(base) && base.field) && !isMemberAccess(base)) return undefined;
+        const field = isCurrentRecord(base) ? base.field! : (base as { member: string }).member;
+        const ownerExpr = isMemberAccess(base) ? base.receiver : ({ $type: 'CurrentRecord' } as CurrentRecord);
+        if (this.looksLikeCollection(ownerExpr, ctx, []) || isFilterAccess(ownerExpr) || isTupleAccess(ownerExpr)) return undefined;
+        const owner = this.rowRef(ownerExpr, ctx, []);
+        if (!owner) return undefined;
+        const table = this.tableOf(owner);
+        const column = this.schema.getColumn(table, field);
+        if (!column || column.type.kind !== 'scalar' || column.type.type.base !== 'JSON') return undefined;
+        return { table, column, key: this.identity(owner) };
+    }
+
+    /** Is this expression a `JSON` column of one record? The interpreter asks before it picks the table path or the array path of a write. */
+    isJsonColumn(base: Expression, outer: OuterResolver = NO_OUTER_SCOPE): boolean {
+        try {
+            return this.jsonColumn(base, new Ctx(outer, undefined, true)) !== undefined;
+        } catch (e) {
+            if (e instanceof CompileError) return false;
+            throw e;
+        }
+    }
+
+    /** `SELECT <column> AS "value" FROM <table> WHERE <key>`: the stored value of a `JSON` column, read before it is changed. */
+    compileJsonRead(base: Expression, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        return this.run(
+            ctx => {
+                const target = this.jsonColumnOrFail(base, ctx);
+                const alias = quoteIdent(ctx.freshAlias());
+                const name = quoteIdent(target.column.sqlName ?? target.column.name);
+                return `SELECT ${alias}.${name} AS "value" FROM ${quoteIdent(this.sqlTable(target.table))} AS ${alias} WHERE ${alias}.${quoteIdent(this.primaryKey(target.table))} = ${target.key}`;
+            },
+            outer,
+            clock,
+            true
+        );
+    }
+
+    /** `UPDATE <table> SET <column> = <array> WHERE <key>`: writes the whole new `JSON` value back (ADR 0001). */
+    compileJsonWrite(base: Expression, value: unknown, outer: OuterResolver = NO_OUTER_SCOPE, clock?: BuiltinClock): SqlResult {
+        return this.run(
+            ctx => {
+                const target = this.jsonColumnOrFail(base, ctx);
+                const alias = quoteIdent(ctx.freshAlias());
+                const name = quoteIdent(target.column.sqlName ?? target.column.name);
+                return `UPDATE ${quoteIdent(this.sqlTable(target.table))} AS ${alias} SET ${name} = ${this.bindColumnValue(ctx, target.column, value)} WHERE ${alias}.${quoteIdent(this.primaryKey(target.table))} = ${target.key}`;
+            },
+            outer,
+            clock,
+            true
+        );
+    }
+
+    private jsonColumnOrFail(base: Expression, ctx: Ctx) {
+        const target = this.jsonColumn(base, ctx);
+        if (!target) failCoded('compile.writeTarget');
+        return target!;
     }
 
     // ---- query ---------------------------------------------------------
@@ -935,6 +1250,11 @@ export class MinabSqlCompiler {
                 // `#Table` with no alias of that name in scope: spec §3.3's
                 // "opens the whole table," which is a collection, not a row.
                 fail(`"#${expr.name}" opens a whole table — use it inside an aggregate, EXISTS, or a filter`);
+            }
+            // A path assignment may start at a loop variable that holds a row (`customer.doctor.id = 1;`).
+            if (ctx.pathRoots && ctx.outer.resolveNamedRecord) {
+                const named = ctx.outer.resolveNamedRecord(expr.name);
+                if (named.found) return { kind: 'outer', table: named.record.table, keyExpr: ctx.bind(named.record.key) };
             }
             return undefined;
         }
@@ -1476,7 +1796,9 @@ class Ctx {
 
     constructor(
         readonly outer: OuterResolver,
-        clock?: BuiltinClock
+        clock?: BuiltinClock,
+        /** A path assignment (X6): a loop variable that holds a row may start a path. */
+        readonly pathRoots = false
     ) {
         // Without a clock (compiling to show the SQL), the system clock in UTC is bound: `NOW()` is never the database's `now()` (D21).
         this.clock = clock ?? { now: new Date(), timeZone: 'UTC' };

@@ -38,7 +38,7 @@ export interface DataPort {
 
 // ---- write ---------------------------------------------------------------
 
-/** The host's way to run writes in one transaction. The interface is fixed; writes are not executed yet. */
+/** The host's way to run writes in one transaction. The interface is fixed (R3). */
 export interface WritePort {
     /**
      * Run `work` in one transaction. Commit when it resolves, roll back when it throws or the signal aborts.

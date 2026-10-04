@@ -93,7 +93,7 @@ record. It does not look at other tables: a rule that reads data may change when
 
 | Area | Codes | Meaning |
 |---|---|---|
-| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `programInvalid`, `failed` | The program failed while it ran |
+| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `cannotCreateRecord`, `programInvalid`, `failed` | The program failed while it ran |
 | `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
 | `limit.*` | see below | A limit stopped the program |
 | `data.*` | `error`, `noPort` | The data port failed or is missing |

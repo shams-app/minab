@@ -481,7 +481,7 @@ export const cheatsheet: CheatSection[] = [
     {
         id: 'writes',
         title: 'Writes',
-        intro: 'Declarative data manipulation. Fully type-checked; not executed yet.',
+        intro: 'Declarative data manipulation. Fully type-checked. Here it runs as a dry run: the Execution tab lists the statements and the tables stay as they are.',
         entries: [
             {
                 id: 'update',
@@ -509,6 +509,23 @@ export const cheatsheet: CheatSection[] = [
                 specRef: '§10.2',
                 keywords: ['DELETE'],
                 exampleId: 'order-dml'
+            },
+            {
+                id: 'json-array-writes',
+                title: 'Writes on a JSON array',
+                syntax: 'INSERT .tags VALUES { k: "x" };\nDELETE .tags[2];\nUPDATE .tags WHERE .$index > 0 SET { done: true };',
+                description:
+                    'A `JSON` array column is read, changed in memory and written back with one `UPDATE`. Positions (`[2]`, `.$index`) work here, not on a table. A list in `VALUES` adds each element.',
+                specRef: '§10'
+            },
+            {
+                id: 'path-assignment',
+                title: 'Assign through a path',
+                syntax: '.doctor.id = 21;          // no-op if .doctor is null\n.doctor!.name = "Dr A";   // create .doctor first\n.doctor |= { name: "Dr A" };\n.patients[.age > 60].active = true;',
+                description:
+                    'Walk relations from a record and set a field. `!` creates a missing related record (an `INSERT` with defaults, then the link). `|=` merges fields and creates the record if it is missing. A filtered to-many step is one `UPDATE … WHERE`.',
+                specRef: '§9.3',
+                exampleId: 'path-assignment'
             }
         ]
     }

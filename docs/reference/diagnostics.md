@@ -133,7 +133,8 @@ A program cannot become SQL.
 | `compile.writeColumn` | error | "{column}" is not a column of "{table}" that a write can set | `column`, `table` | INSERT and UPDATE set plain columns of the target table. Use a column name from the schema. A relation is set through its foreign key column. |
 | `compile.writeEmptySet` | error | SET needs at least one assignment | none | An UPDATE with an empty SET changes nothing. Add an assignment, or remove the statement. |
 | `compile.writeNeedsName` | error | give this column a name with AS, so INSERT can match it to a column of the target | none | INSERT ... VALUES query matches the columns of the query to the columns of the target by name. Name each computed column with AS. |
-| `compile.writeTarget` | error | the target of a write must be a table (#Table) or a to-many relation of a record (.orders) | none | INSERT, UPDATE and DELETE write to a table. An INSERT target cannot have a filter. Writing into a JSON array comes in a later release. |
+| `compile.writePath` | error | this record path cannot be assigned: {reason} | `reason` | A path assignment walks relations from a record, one step at a time. Every step before the last must be a relation, and a step after a filtered or to-many step cannot create records. Assign through a loop variable or a shorter path. |
+| `compile.writeTarget` | error | the target of a write must be a table (#Table), a to-many relation of a record (.orders) or a JSON array column (.tags) | none | INSERT, UPDATE and DELETE write to a table or to a JSON array column. An INSERT target cannot have a filter or a position. |
 
 ## eval
 
@@ -141,6 +142,7 @@ A program fails while it runs.
 
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
+| `eval.cannotCreateRecord` | error | cannot create the missing "{table}" record: the column "{column}" needs a value and has no default | `table`, `column` | A "!" in a path assignment creates the missing related record with default values. The table needs a value that has no default. Create the record with INSERT and give the value, then assign. |
 | `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
 | `eval.divisionByZero` | error | division by zero | none | "/" and "%" fail when the right side is zero. Check the divisor first, for example with "if". |
 | `eval.failed` | error | {reason} | `reason` | The program failed while it ran. params.reason has the English reason. Specific failures have their own code. |
