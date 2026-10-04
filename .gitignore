@@ -4,3 +4,4 @@ dist/
 src/language/generated/
 *.tsbuildinfo
 .DS_Store
+bench/results.json

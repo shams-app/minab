@@ -122,6 +122,8 @@
     "cli": "node out/src/cli/bin.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "node bench/run.mjs",
+    "bench:check": "node bench/check.mjs",
     "test:consumers": "node test/consumers/run.mjs",
     "build:release": "langium generate && rm -rf out && tsc -b tsconfig.build.json && tsc -p tsconfig.nestjs.build.json && node scripts/build-cjs.mjs",
     "build:cjs": "node scripts/build-cjs.mjs",
