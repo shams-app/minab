@@ -107,7 +107,7 @@ Limits are always on (D01). `createMinab({ limits })` sets them. A run can only 
 | Limit | Default | Checked | Code |
 |---|---|---|---|
 | `sourceLength` | 64 KB (UTF-8 bytes) | `prepare`, before parsing | `limit.sourceTooLong` (a diagnostic) |
-| `nestingDepth` | 200 | `prepare`: a bracket scan before parsing, then the depth of the expressions | `limit.tooDeep` (a diagnostic) |
+| `nestingDepth` | 200 | `prepare`: a scan before parsing that counts brackets and runs of `-`, `+` and `NOT`, then the depth of the expressions | `limit.tooDeep` (a diagnostic) |
 | `wallTimeMs` | 1,000 | `run`: between steps, and around every port call | `limit.timeout` |
 | `statements` | 100 | before each data call | `limit.tooManyStatements` |
 | `rowsPerStatement` | 10,000 | after each data call | `limit.tooManyRows` |

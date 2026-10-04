@@ -211,55 +211,47 @@ interface Frame {
 }
 
 /**
- * The Postgres `LIKE` matcher (`MatchText`), on arrays of characters. It is
- * a copy of the algorithm and not a regular expression, so a pattern that
- * ends with `\` fails at the same moments: only when the matcher reaches the
- * `\` (Postgres: `'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
+ * The Postgres `LIKE` matcher, on arrays of characters. It has no recursion and no regular
+ * expression: it keeps the place of the last `%` and, when a character does not match, tries
+ * again one text character later. It never overflows the stack, and its time is at most the
+ * text length times the pattern length (security, phase Q3). A pattern that ends with `\`
+ * fails at the same moments as in Postgres: only when the matcher reaches the `\`
+ * (`'Hello' LIKE 'Hello\'` is `false`, `'Hello!' LIKE 'Hello\'` fails).
  */
-function likeMatch(t: string[], ti: number, p: string[], pi: number): 'true' | 'false' | 'abort' {
-    const trailing = (): never => fail('LIKE pattern must not end with escape character');
-    while (ti < t.length && pi < p.length) {
-        if (p[pi] === '\\') {
-            pi++;
-            if (pi >= p.length) trailing();
-            if (p[pi] !== t[ti]) return 'false';
-        } else if (p[pi] === '%') {
-            pi++;
-            while (pi < p.length) {
-                if (p[pi] === '%') pi++;
-                else if (p[pi] === '_') {
-                    if (ti >= t.length) return 'abort';
+function likeMatch(t: string[], p: string[]): boolean {
+    let ti = 0;
+    let pi = 0;
+    let starPi = -1;
+    let starTi = 0;
+    while (ti < t.length) {
+        if (pi < p.length) {
+            const c = p[pi];
+            if (c === '%') {
+                while (p[pi] === '%') pi++;
+                starPi = pi;
+                starTi = ti;
+                continue;
+            }
+            if (c === '\\') {
+                if (pi + 1 >= p.length) fail('LIKE pattern must not end with escape character');
+                if (p[pi + 1] === t[ti]) {
+                    pi += 2;
                     ti++;
-                    pi++;
-                } else break;
-            }
-            if (pi >= p.length) return 'true';
-            let first = p[pi];
-            if (first === '\\') {
-                if (pi + 1 >= p.length) trailing();
-                first = p[pi + 1];
-            }
-            while (ti < t.length) {
-                if (t[ti] === first) {
-                    const matched = likeMatch(t, ti, p, pi);
-                    if (matched !== 'false') return matched;
+                    continue;
                 }
+            } else if (c === '_' || c === t[ti]) {
+                pi++;
                 ti++;
+                continue;
             }
-            return 'abort';
-        } else if (p[pi] === '_') {
-            ti++;
-            pi++;
-            continue;
-        } else if (p[pi] !== t[ti]) {
-            return 'false';
         }
-        pi++;
-        ti++;
+        if (starPi < 0) return false;
+        starTi++;
+        ti = starTi;
+        pi = starPi;
     }
-    if (ti < t.length) return 'false';
-    while (pi < p.length && p[pi] === '%') pi++;
-    return pi >= p.length ? 'true' : 'abort';
+    while (p[pi] === '%') pi++;
+    return pi >= p.length;
 }
 
 export class MinabInterpreter {
@@ -1057,7 +1049,7 @@ export class MinabInterpreter {
     private like(value: string, pattern: string, ignoreCase: boolean): boolean {
         const text = Array.from(ignoreCase ? value.toLowerCase() : value);
         const pat = Array.from(ignoreCase ? pattern.toLowerCase() : pattern);
-        return likeMatch(text, 0, pat, 0) === 'true';
+        return likeMatch(text, pat);
     }
 
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */
