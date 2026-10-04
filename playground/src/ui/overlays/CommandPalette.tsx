@@ -1,7 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Command } from '../../hooks/useCommands.js';
-import { Icon } from '../primitives/Icon.js';
+import { Icon, type IconName } from '../primitives/Icon.js';
 import { Kbd } from '../primitives/primitives.js';
+
+const GROUP_ICONS: Record<string, IconName> = { Actions: 'bolt', Examples: 'grid', Lessons: 'flag', Pages: 'book' };
+
+/** The label with the letters of the query in bold. */
+function Matched({ text, query }: { text: string; query: string }) {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return <>{text}</>;
+    const lower = text.toLowerCase();
+    const marks = new Array<boolean>(text.length).fill(false);
+    for (const word of words) {
+        const at = lower.indexOf(word);
+        if (at >= 0) marks.fill(true, at, at + word.length);
+    }
+    const parts: { text: string; bold: boolean }[] = [];
+    for (let i = 0; i < text.length; i++) {
+        const last = parts[parts.length - 1];
+        if (last && last.bold === marks[i]) last.text += text[i];
+        else parts.push({ text: text[i], bold: marks[i] });
+    }
+    return <>{parts.map((part, i) => (part.bold ? <b key={i}>{part.text}</b> : part.text))}</>;
+}
 
 export interface CommandPaletteProps {
     open: boolean;
@@ -83,13 +104,27 @@ export function CommandPalette({ open, commands, onClose }: CommandPaletteProps)
                                     onMouseEnter={() => setIndex(i)}
                                     onClick={() => c.run()}
                                 >
-                                    <span>{c.title}</span>
+                                    <Icon name={GROUP_ICONS[c.group] ?? 'search'} size={18} className="mb-palette-icon" />
+                                    <span className="mb-palette-label">
+                                        <Matched text={c.title} query={query} />
+                                    </span>
                                     {c.shortcut && <Kbd keys={c.shortcut} />}
                                 </div>
                             </li>
                         );
                     })}
                 </ul>
+                <div className="mb-palette-footer" aria-hidden="true">
+                    <span>
+                        <Kbd keys={['↑', '↓']} /> move
+                    </span>
+                    <span>
+                        <Kbd keys={['↵']} /> open
+                    </span>
+                    <span>
+                        <Kbd keys={['esc']} /> close
+                    </span>
+                </div>
             </div>
         </div>
     );

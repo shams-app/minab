@@ -43,26 +43,41 @@ export function CodeBlock({ code, language = 'minab', copyable, wrap, caption, c
         return language === 'sql' ? highlightSql(trimmed) : highlightMinab(trimmed);
     }, [code, language]);
     const [copied, setCopied] = useState(false);
+    const [wrapped, setWrapped] = useState(false);
+    const copyButton = copyable && (
+        <IconButton
+            className="mb-code-copy"
+            size="sm"
+            icon={copied ? 'check' : 'copy'}
+            label={copied ? 'Copied' : 'Copy'}
+            onClick={() => {
+                void navigator.clipboard?.writeText(code).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                });
+            }}
+        />
+    );
     return (
-        <figure className={`mb-code${className ? ` ${className}` : ''}`} data-language={language} data-wrap={wrap ? 'true' : undefined}>
-            {caption && <figcaption className="mb-code-caption">{caption}</figcaption>}
+        <figure
+            className={`mb-code${className ? ` ${className}` : ''}`}
+            data-language={language}
+            data-wrap={wrap ? 'true' : undefined}
+            data-wrapped={wrapped ? 'true' : undefined}
+        >
+            {caption ? (
+                <div className="mb-code-bar">
+                    <figcaption className="mb-code-caption">{caption}</figcaption>
+                    <span className="mb-code-tools">
+                        {copyable && !wrap && <IconButton size="sm" icon="panel" label="Wrap lines" pressed={wrapped} onClick={() => setWrapped(w => !w)} />}
+                        {copyButton}
+                    </span>
+                </div>
+            ) : null}
             <pre>
                 <code>{renderLines(lines)}</code>
             </pre>
-            {copyable && (
-                <IconButton
-                    className="mb-code-copy"
-                    size="sm"
-                    icon={copied ? 'check' : 'copy'}
-                    label={copied ? 'Copied' : 'Copy'}
-                    onClick={() => {
-                        void navigator.clipboard?.writeText(code).then(() => {
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 1500);
-                        });
-                    }}
-                />
-            )}
+            {!caption && copyButton}
         </figure>
     );
 }

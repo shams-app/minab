@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Geist'; src: url('../../public/fonts/Geist-Variable.woff2'); font-weight: 100 900; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('../../public/fonts/JetBrainsMono-Variable.woff2'); font-weight: 100 800; }
+  html, body { margin: 0; }
+  .og { position: relative; width: 1200px; height: 630px; overflow: hidden; background: #0B0D10; color: #E6E9EF; font-family: 'Geist', sans-serif;
+        background-image: linear-gradient(rgba(73,194,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(73,194,255,.05) 1px, transparent 1px); background-size: 32px 32px; }
+  .left { position: absolute; left: 72px; top: 96px; width: 460px; }
+  .mark { filter: drop-shadow(0 0 24px rgba(73,194,255,.45)); }
+  .word { margin-top: 20px; font: 700 76px/1 'JetBrains Mono', monospace; letter-spacing: -0.03em; }
+  .word i { font-style: normal; color: #49C2FF; text-shadow: 0 0 24px rgba(73,194,255,.45); }
+  .line { margin-top: 24px; font-size: 26px; line-height: 1.35; color: #A9B1BE; }
+  .right { position: absolute; left: 600px; top: 120px; width: 528px; }
+  pre { margin: 0; padding: 28px 30px; border: 1px solid #2A313B; border-radius: 14px; background: #0D1015; font: 400 24px/38px 'JetBrains Mono', monospace; font-variant-ligatures: none; box-shadow: 0 14px 36px rgba(0,0,0,.55); }
+  .sigil { color: #49C2FF; } .kw { color: #A7B3C8; font-weight: 700; } .m { color: #D7DEEA; } .par { color: #FF6E8E; font-weight: 700; }
+  .push { text-decoration: underline; text-decoration-color: #C6F36B; text-decoration-thickness: 3px; text-underline-offset: 7px; }
+  .verdict { margin-top: 28px; display: flex; align-items: center; gap: 18px; padding: 20px 26px; border: 1px solid #5BD38A; border-radius: 14px; background: #10291B; }
+  .disc { width: 52px; height: 52px; border-radius: 50%; background: #5BD38A; display: grid; place-items: center; }
+  .v1 { font-size: 36px; font-weight: 600; letter-spacing: -0.03em; color: #5BD38A; line-height: 1; }
+  .v2 { margin-top: 6px; font: 400 20px/1 'JetBrains Mono', monospace; color: #C6F36B; }
+</style>
+<div class="og" id="og">
+  <div class="left">
+    <svg class="mark" width="104" height="139" viewBox="0 0 120 160" fill="none" stroke="#49C2FF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M24 20C16 44 16 72 24 92C34 112 46 122 60 130"/>
+      <path d="M24 20C36 34 50 46 60 58C70 46 84 34 96 20"/>
+      <path d="M47 45C52 38 56 32 60 26C64 32 68 38 73 45"/>
+      <path d="M96 20C104 42 102 62 90 76L62 104L46 88"/>
+      <path d="M102 86C99 106 84 120 60 130"/>
+      <path d="M60 130L60 150"/>
+      <path d="M60 144C49 143 41 137 38 127"/>
+    </svg>
+    <div class="word"><i>.</i>minab</div>
+    <div class="line">One small language to query data and validate records.</div>
+  </div>
+  <div class="right">
+<pre><span class="sigil">.</span><span class="m">end_date</span> &gt; <span class="sigil">.</span><span class="m">start_date</span>
+<span class="kw">AND NOT</span> <span class="push"><span class="kw" style="font-weight:700;color:#7BD8B0">EXISTS</span>(<span class="sigil">#</span>Booking[<span class="sigil">.</span> != <span class="par">^</span>
+  <span class="kw">AND</span> <span class="sigil">.</span><span class="m">room_id</span> == <span class="par">^</span><span class="sigil">.</span><span class="m">room_id</span>])</span></pre>
+    <div class="verdict">
+      <div class="disc"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#04131D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></div>
+      <div><div class="v1">Passes</div><div class="v2">⇣ 1 statement to Postgres</div></div>
+    </div>
+  </div>
+</div>

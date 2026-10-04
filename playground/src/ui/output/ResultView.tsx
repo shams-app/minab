@@ -81,6 +81,7 @@ export interface VerdictCardProps {
 }
 
 export function VerdictCard({ value, kind, subject, statements, onShowExecution }: VerdictCardProps) {
+    const word = value ? 'Passes' : kind === 'field-rule' ? 'Rejected' : 'Fails';
     const what =
         kind === 'field-rule' ? (
             <>
@@ -104,7 +105,7 @@ export function VerdictCard({ value, kind, subject, statements, onShowExecution 
                 <Icon name={value ? 'check' : 'x'} size={28} />
             </div>
             <div className="mb-verdict-text">
-                <p className="mb-verdict-title">{value ? 'Passes' : 'Fails'}</p>
+                <p className="mb-verdict-title">{word}</p>
                 <p className="mb-verdict-body">{what}</p>
                 <button type="button" className="mb-link-button" onClick={onShowExecution}>
                     {statements === 0
@@ -121,9 +122,18 @@ export function ValueView({ value, type }: { value: unknown; type?: string }) {
         <div className="mb-value">
             <div className="mb-value-head">
                 <span>Value</span>
-                {type && <Badge tone="accent">{type}</Badge>}
+                {type && <Badge tone="accent">{type === 'DECIMAL' ? 'DECIMAL · exact' : type}</Badge>}
             </div>
-            <CodeBlock code={JSON.stringify(value, null, 2) ?? 'null'} language="plain" copyable />
+            {typeof value === 'object' && value !== null ? (
+                <CodeBlock code={JSON.stringify(value, null, 2) ?? 'null'} language="plain" copyable />
+            ) : (
+                <p
+                    className="mb-value-big"
+                    data-kind={typeof value === 'number' || /^(DECIMAL|INTEGER|INT|NUMBER|FLOAT)/i.test(type ?? '') ? 'number' : 'text'}
+                >
+                    {value === null || value === undefined ? 'null' : String(value)}
+                </p>
+            )}
         </div>
     );
 }
@@ -136,7 +146,7 @@ export function ResultView({ report, running, stale, subject, onRun, onShowProbl
             </EmptyState>
         ) : (
             <EmptyState
-                icon="play"
+                glyph="."
                 title="Nothing run yet"
                 action={
                     <Button variant="primary" icon="play" onClick={onRun}>

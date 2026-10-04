@@ -11,7 +11,6 @@ import type { Range, RunReport, TraceEntry } from '../../engine/protocol.js';
 import { prettySql } from '../../syntax/highlight.js';
 import { CodeBlock } from '../primitives/Code.js';
 import { Badge, EmptyState } from '../primitives/primitives.js';
-import { Icon } from '../primitives/Icon.js';
 import { ParamsTable } from './SqlView.js';
 import { formatCell } from './ResultView.js';
 
@@ -46,9 +45,7 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
             tabIndex={0}
         >
             <div className="mb-trace-head">
-                <Badge tone="pushdown">
-                    <Icon name="database" size={12} /> Statement {entry.index}
-                </Badge>
+                <Badge tone="pushdown">Statement {entry.index}</Badge>
                 <span className="mb-muted">
                     {entry.rowCount} row{entry.rowCount === 1 ? '' : 's'} · {entry.durationMs.toFixed(1)} ms
                 </span>
@@ -106,7 +103,7 @@ export function ExecutionView({ report, onHighlight, onReveal }: ExecutionViewPr
                     ))}
                 </ol>
             ) : (
-                <EmptyState icon="bolt" title="0 statements">
+                <EmptyState glyph="0" title="0 statements">
                     {report.program.kind === 'record-rule' || report.program.kind === 'field-rule'
                         ? 'The rule was settled from the record alone. Try a preset that needs the database, or add a check against another table (#Table[…]).'
                         : 'This program doesn’t read any table.'}

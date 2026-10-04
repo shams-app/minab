@@ -64,7 +64,8 @@ function token(style: CSSStyleDeclaration, name: string): string | undefined {
 export function effectiveTheme(): 'light' | 'dark' {
     const explicit = document.documentElement.dataset.theme;
     if (explicit === 'light' || explicit === 'dark') return explicit;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // Dark is the default (tokens.css): light only when the OS asks for it.
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
 export const THEME_NAME = 'minab';
@@ -99,12 +100,13 @@ export function applyEditorTheme(): void {
     set('editorWhitespace.foreground', '--editor-indent-guide');
     set('editorBracketMatch.background', '--editor-bracket-match');
     set('editorBracketMatch.border', '--editor-bracket-match-border');
-    set('editorWidget.background', '--surface-overlay');
-    set('editorWidget.border', '--border-default');
-    set('editorHoverWidget.background', '--surface-overlay');
-    set('editorHoverWidget.border', '--border-default');
-    set('editorSuggestWidget.background', '--surface-overlay');
-    set('editorSuggestWidget.border', '--border-default');
+    // Widgets use the opaque raised surface: Monaco cannot blur what is behind them, so the glass overlay token would show the code through.
+    set('editorWidget.background', '--surface-raised');
+    set('editorWidget.border', '--border-strong');
+    set('editorHoverWidget.background', '--surface-raised');
+    set('editorHoverWidget.border', '--border-strong');
+    set('editorSuggestWidget.background', '--surface-raised');
+    set('editorSuggestWidget.border', '--border-strong');
     set('editorSuggestWidget.selectedBackground', '--surface-selected');
     set('editorSuggestWidget.highlightForeground', '--accent');
     set('editorError.foreground', '--danger');
@@ -133,7 +135,7 @@ export function watchTheme(): void {
         attributes: true,
         attributeFilter: ['data-theme', 'class', 'style']
     });
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyEditorTheme());
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyEditorTheme());
 }
 
 /** The monospace font stack from the design tokens, for Monaco's `fontFamily`. */
