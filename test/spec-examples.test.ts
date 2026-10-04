@@ -5,6 +5,7 @@ import { parseHelper } from 'langium/test';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { describe, expect, test } from 'vitest';
 import { parseConfig } from '../src/host/config.js';
+import { createMinab } from '../src/runtime/index.js';
 import type { Model } from '../src/language/generated/ast.js';
 import { createMinabServices } from '../src/language/minab-module.js';
 import { scalarType, type MinabRuleContext } from '../src/language/schema.js';
@@ -337,6 +338,20 @@ describe('spec and showcase examples', () => {
                 // A piece that declares its own `let` does not get the prelude: a second `let` with the same name is an error (spec §7.1).
                 const errors = await checkDiagnostics((part.startsWith('let ') ? '' : prelude(block)) + part, context);
                 expect(errors.map(messageOf), `${part}\n(context: ${context})`).toEqual([]);
+            }
+        });
+
+        // X3: blocks, function-body statements, local assignment and `if!` run. A program may still
+        // fail (no data, no record, a loop), but never with one of their old refusals.
+        test(`${name}: is not refused as a statement that does not run`, async () => {
+            const context = setup.context ?? DEFAULT_CONTEXT;
+            const minab = createMinab({ schema, ruleContext: CONTEXTS[context] });
+            for (const part of pieces(block)) {
+                const program = await minab.prepare((part.startsWith('let ') ? '' : prelude(block)) + part);
+                if (!program.ok) continue;
+                const result = await program.run({ record: {} });
+                const message = result.ok ? '' : result.error.message;
+                expect(message, part).not.toMatch(/"(AssignmentStatement|IfStatement)"|inside a block|inside a function body/);
             }
         });
     }
