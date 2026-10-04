@@ -1,39 +1,13 @@
 /**
- * The Minab language server (roadmap Phase 7), as a function. Wires `createMinabServices`
- * (now built on `langium/lsp`) to a real LSP connection over stdio, so a
- * client like the `vscode-extension/` package gets live diagnostics
- * (`MinabValidator`) and hover/go-to-definition on `#alias`
- * (`./lsp/minab-hover-provider.ts`, `./lsp/minab-definition-provider.ts`)
- * for every open `.minab` file, without running the Phase 6 CLI.
- *
- * Schema/rule-context sourcing is deliberately the simplest thing that
- * satisfies this phase's stated output (syntax highlighting + live
- * diagnostics): one `minab.config.json`, discovered once at startup from
- * the server process's working directory (which a client normally sets to
- * the workspace root), shared by every document. A host that wants a
- * different `MinabSchema` per document — or one that changes without a
- * server restart — is out of scope here; `src/cli/config.ts`'s
- * `discoverConfig`/`loadConfigFile` already do the file-finding and
- * parsing, so this just reuses them instead of a config file per document.
- *
- * `startMinabServer()` is also the package entry `@shamsine/minab/lsp`.
- * `main.ts` calls it, so the VS Code extension's bundle keeps working.
+ * The language server entry of the package (`@shamsine/minab/lsp`). The server
+ * itself is in `src/lsp/`. `startMinabServer` is the old name and stays.
  */
 
-import { createConnection, ProposedFeatures } from 'vscode-languageserver/node';
-import { NodeFileSystem } from 'langium/node';
-import { startLanguageServer } from 'langium/lsp';
-import { discoverConfig, emptyConfig, loadConfigFile } from '../cli/config.js';
-import { createMinabServices } from './minab-module.js';
+import { startMinabLanguageServer } from '../lsp/index.js';
 
-/** Starts the language server on stdio. Reads `minab.config.json` from the working directory. */
+export { startMinabLanguageServer, type MinabLanguageServer, type MinabLanguageServerOptions } from '../lsp/index.js';
+
+/** Starts the language server on stdio. */
 export function startMinabServer(): void {
-    const connection = createConnection(ProposedFeatures.all);
-
-    const configPath = discoverConfig(process.cwd());
-    const config = configPath ? loadConfigFile(configPath) : emptyConfig();
-
-    const { shared } = createMinabServices({ connection, ...NodeFileSystem }, config.schema, config.ruleContext);
-
-    startLanguageServer(shared);
+    startMinabLanguageServer();
 }

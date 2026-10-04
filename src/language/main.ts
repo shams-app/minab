@@ -1,24 +1,9 @@
 /**
- * The Minab language server (roadmap Phase 7). Wires `createMinabServices`
- * (now built on `langium/lsp`) to a real LSP connection over stdio, so a
- * client like the `vscode-extension/` package gets live diagnostics
- * (`MinabValidator`) and hover/go-to-definition on `#alias`
- * (`./lsp/minab-hover-provider.ts`, `./lsp/minab-definition-provider.ts`)
- * for every open `.minab` file, without running the Phase 6 CLI.
- *
- * Schema/rule-context sourcing is deliberately the simplest thing that
- * satisfies this phase's stated output (syntax highlighting + live
- * diagnostics): one `minab.config.json`, discovered once at startup from
- * the server process's working directory (which a client normally sets to
- * the workspace root), shared by every document. A host that wants a
- * different `MinabSchema` per document — or one that changes without a
- * server restart — is out of scope here; `src/cli/config.ts`'s
- * `discoverConfig`/`loadConfigFile` already do the file-finding and
- * parsing, so this just reuses them instead of a config file per document.
- *
- * The code is in `server.ts` so the package can export it (`./lsp`).
+ * The Minab language server process. The VS Code extension bundles this file.
+ * The server is in `src/lsp/`: each document uses the `minab.config.json`
+ * nearest to it, and a changed config is read again without a restart.
  */
 
-import { startMinabServer } from './server.js';
+import { startMinabLanguageServer } from '../lsp/index.js';
 
-startMinabServer();
+startMinabLanguageServer();
