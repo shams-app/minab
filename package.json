@@ -104,7 +104,8 @@
     "!docs/production/**",
     "!docs/release-future/**",
     "examples",
-    "!examples/nestjs"
+    "!examples/nestjs",
+    "!examples/browser"
   ],
   "publishConfig": {
     "access": "public"
