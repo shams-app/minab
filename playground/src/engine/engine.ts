@@ -339,8 +339,8 @@ export class Engine implements EngineApi {
 
     // ---- running --------------------------------------------------------
 
-    run(source: string, runId: number): Promise<RunReport> {
-        return this.runOn(() => this.host, source, runId);
+    run(source: string, runId: number, signal?: AbortSignal): Promise<RunReport> {
+        return this.runOn(() => this.host, source, runId, signal);
     }
 
     /**
@@ -352,7 +352,7 @@ export class Engine implements EngineApi {
         return this.runOn(() => this.buildHost(settings).host, source, 0);
     }
 
-    private async runOn(pickHost: () => ActiveHost, source: string, runId: number): Promise<RunReport> {
+    private async runOn(pickHost: () => ActiveHost, source: string, runId: number, signal?: AbortSignal): Promise<RunReport> {
         const started = now();
         const prepared = await this.languageQueue.run(() => this.analyzeWith(pickHost(), source, 'run'));
         const { host, analysis } = prepared;
@@ -380,10 +380,14 @@ export class Engine implements EngineApi {
         if (!prepared.program.ok) {
             return finish({ ...base, stage: 'check' });
         }
-        return this.databaseQueue.run(async () => finish(await this.execute(prepared, base)));
+        return this.databaseQueue.run(async () => {
+            // A run that was cancelled while it waited for the database never starts.
+            if (signal?.aborted) return finish({ ...base, stage: 'run', error: { kind: 'evaluation', message: 'the run was cancelled' } });
+            return finish(await this.execute(prepared, base, signal));
+        });
     }
 
-    private async execute({ host, analysis, program, document }: Prepared, base: RunReport): Promise<RunReport> {
+    private async execute({ host, analysis, program, document }: Prepared, base: RunReport, signal?: AbortSignal): Promise<RunReport> {
         const config = host.config!;
         const fixtures = host.settings.dataSource === 'fixtures' ? new FixtureExecutor(config.responses) : undefined;
         const tracer = new Tracer(document, async query => {
@@ -408,7 +412,11 @@ export class Engine implements EngineApi {
 
         const started = now();
         try {
-            const outcome = await program.run({ record: config.record, fieldValue: config.fieldValue }, { data: tracer.port, events: tracer.events });
+            const outcome = await program.run(
+                { record: config.record, fieldValue: config.fieldValue },
+                { data: tracer.port, events: tracer.events },
+                signal ? { signal } : {}
+            );
             base.runMs = now() - started;
             base.trace = tracer.entries;
             base.logs = tracer.logs;

@@ -653,6 +653,11 @@ export const DIAGNOSTICS = {
         message: p => `the remote run failed: ${p.reason}`,
         doc: 'The browser could not get an answer from the server: the network failed, the server answered with an HTTP error that is not a Minab error, or its answer was missing a result. Try again. params.reason says which.'
     }),
+    'wire.requestFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => p.reason,
+        doc: 'A request that the host app made to its own browser worker (`WorkerMinab.request`) failed: the handler threw, or no handler has this name. The message is the one of the handler.'
+    }),
     'wire.tooManyRuns': entry<{ limit: number; used: number }>({
         severity: error,
         message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,
