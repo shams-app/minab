@@ -11,16 +11,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+    CodeActionRequest,
     CompletionRequest,
     DidChangeWatchedFilesNotification,
     DidCloseTextDocumentNotification,
     DidOpenTextDocumentNotification,
+    DocumentSymbolRequest,
     ExitNotification,
     HoverRequest,
     InitializeRequest,
     InitializedNotification,
+    PrepareRenameRequest,
     PublishDiagnosticsNotification,
+    ReferencesRequest,
     RegistrationRequest,
+    RenameRequest,
+    SemanticTokensRequest,
     ShutdownRequest,
     SignatureHelpRequest,
     StreamMessageReader,
@@ -28,7 +34,9 @@ import {
     createMessageConnection,
     type CompletionItem,
     type Diagnostic,
-    type MessageConnection
+    type InitializeResult,
+    type MessageConnection,
+    type TextEdit
 } from 'vscode-languageserver-protocol/node';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -40,6 +48,7 @@ const orderConfig = { schema: { tables: [{ name: 'Order', primaryKey: 'id', colu
 let root: string;
 let server: ChildProcess;
 let connection: MessageConnection;
+let initialized: InitializeResult;
 const diagnostics = new Map<string, Diagnostic[]>();
 const waiting: Array<{ uri: string; predicate: (d: Diagnostic[]) => boolean; resolve: (d: Diagnostic[]) => void }> = [];
 const registrations: unknown[] = [];
@@ -108,7 +117,7 @@ beforeAll(async () => {
         registered();
     });
     connection.listen();
-    await connection.sendRequest(InitializeRequest.type, {
+    initialized = await connection.sendRequest(InitializeRequest.type, {
         processId: process.pid,
         rootUri: pathToFileURL(root).toString(),
         capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
@@ -228,5 +237,150 @@ describe('the language server over stdio (E2)', () => {
         const result = nextDiagnostics(moved);
         await open(moved, PROGRAM);
         expect(codes(await result)).toEqual([]);
+    });
+});
+
+/** `text` with edits applied (all on one line, or at least not overlapping). */
+function applyEdits(text: string, edits: TextEdit[]): string {
+    const lines = text.split('\n');
+    const offsetOf = (p: { line: number; character: number }) => lines.slice(0, p.line).reduce((n, l) => n + l.length + 1, 0) + p.character;
+    return [...edits]
+        .sort((a, b) => offsetOf(b.range.start) - offsetOf(a.range.start))
+        .reduce((result, e) => result.slice(0, offsetOf(e.range.start)) + e.newText + result.slice(offsetOf(e.range.end)), text);
+}
+
+describe('the language server extras over stdio (E3)', () => {
+    // `Customer` has `id` and `name` (folder `a`).
+    const PROGRAM =
+        'fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL { total - total * rate / 100 }\nlet limit: DECIMAL = 5;\ndiscounted(limit, 2) + discounted(3, 4)';
+
+    async function openProgram(file: string, text = PROGRAM): Promise<string> {
+        const uri = uriOf('a', file);
+        const first = nextDiagnostics(uri);
+        await open(uri, text);
+        await first;
+        return uri;
+    }
+
+    test('announces the features', () => {
+        const caps = initialized.capabilities;
+        expect(caps.documentSymbolProvider).toBe(true);
+        expect(caps.referencesProvider).toBe(true);
+        expect(caps.renameProvider).toEqual({ prepareProvider: true });
+        expect(caps.codeActionProvider).toMatchObject({ codeActionKinds: ['quickfix'] });
+        expect(caps.semanticTokensProvider?.legend.tokenTypes).toContain('function');
+        expect(caps.semanticTokensProvider?.legend.tokenModifiers).toContain('defaultLibrary');
+    });
+
+    test('document symbols: the `fn` with its parameters, and the `let`', async () => {
+        const uri = await openProgram('symbols.minab');
+        const symbols = (await connection.sendRequest(DocumentSymbolRequest.type, { textDocument: { uri } })) as Array<{
+            name: string;
+            children?: Array<{ name: string }>;
+        }>;
+        expect(symbols.map(s => s.name)).toEqual(['discounted', 'limit']);
+        expect(symbols[0].children?.map(c => c.name)).toEqual(['total', 'rate']);
+    });
+
+    test('find references lists the calls of a `fn`', async () => {
+        const uri = await openProgram('refs.minab');
+        const refs = await connection.sendRequest(ReferencesRequest.type, {
+            textDocument: { uri },
+            position: { line: 0, character: 5 },
+            context: { includeDeclaration: true }
+        });
+        expect(refs?.map(r => [r.range.start.line, r.range.start.character])).toEqual([
+            [0, 3],
+            [2, 0],
+            [2, 23]
+        ]);
+        const calls = await connection.sendRequest(ReferencesRequest.type, {
+            textDocument: { uri },
+            position: { line: 0, character: 5 },
+            context: { includeDeclaration: false }
+        });
+        expect(calls).toHaveLength(2);
+    });
+
+    test('rename changes every use, and prepare rename gives the name', async () => {
+        const uri = await openProgram('rename.minab');
+        const prepared = await connection.sendRequest(PrepareRenameRequest.type, { textDocument: { uri }, position: { line: 1, character: 5 } });
+        expect(prepared).toMatchObject({ placeholder: 'limit', range: { start: { line: 1, character: 4 }, end: { line: 1, character: 9 } } });
+        const edit = await connection.sendRequest(RenameRequest.type, { textDocument: { uri }, position: { line: 1, character: 5 }, newName: 'cap' });
+        expect(applyEdits(PROGRAM, edit!.changes![uri])).toBe(PROGRAM.replace('limit', 'cap').replace('discounted(limit', 'discounted(cap'));
+    });
+
+    test('rename refuses a name that breaks a rule, with a message', async () => {
+        const uri = await openProgram('refuse.minab');
+        await expect(
+            connection.sendRequest(RenameRequest.type, { textDocument: { uri }, position: { line: 0, character: 5 }, newName: 'TAX' })
+        ).rejects.toThrow(/lowercase letter/);
+        // A column is not a program name: nothing to prepare.
+        const none = await connection.sendRequest(PrepareRenameRequest.type, { textDocument: { uri }, position: { line: 0, character: 1 } });
+        expect(none).toBeNull();
+    });
+
+    test('semantic tokens mark a built-in and a user function', async () => {
+        const text = 'fn tax(x: INTEGER): INTEGER { x }\nFROM Customer SELECT COUNT(.name), tax(1)';
+        const uri = await openProgram('tokens.minab', text);
+        const tokens = await connection.sendRequest(SemanticTokensRequest.type, { textDocument: { uri } });
+        const { tokenTypes, tokenModifiers } = initialized.capabilities.semanticTokensProvider!.legend;
+        // Decode the relative data: five numbers per token.
+        const decoded: string[] = [];
+        let line = 0;
+        let character = 0;
+        for (let i = 0; i < tokens!.data.length; i += 5) {
+            const [dl, dc, length, type, modifiers] = tokens!.data.slice(i, i + 5);
+            line += dl;
+            character = dl === 0 ? character + dc : dc;
+            const word = text.split('\n')[line].slice(character, character + length);
+            const mods = tokenModifiers.filter((_, bit) => modifiers & (1 << bit));
+            decoded.push(`${word}:${tokenTypes[type]}${mods.map(m => '+' + m).join('')}`);
+        }
+        expect(decoded).toEqual(
+            expect.arrayContaining(['COUNT:function+defaultLibrary', 'name:property', 'tax:function+declaration', 'tax:function', 'Customer:class'])
+        );
+    });
+
+    test('a quick fix for a misspelled function, built from the diagnostic the server sent', async () => {
+        const text = 'fn discounted(t: DECIMAL): DECIMAL { t }\ndiscountd(1)';
+        const uri = uriOf('a', 'fix1.minab');
+        const sent = nextDiagnostics(uri, d => d.length > 0);
+        await open(uri, text);
+        const [diagnostic] = await sent;
+        // A client that does not send `data` back still gets the fix: the server keeps the parameters.
+        const { data: _data, ...stripped } = diagnostic;
+        const actions = await connection.sendRequest(CodeActionRequest.type, {
+            textDocument: { uri },
+            range: diagnostic.range,
+            context: { diagnostics: [stripped], only: ['quickfix'] }
+        });
+        expect(actions).toHaveLength(1);
+        const action = actions![0] as { title: string; kind: string; edit: { changes: Record<string, TextEdit[]> } };
+        expect(action).toMatchObject({ title: 'Did you mean discounted?', kind: 'quickfix' });
+        expect(applyEdits(text, action.edit.changes[uri])).toBe('fn discounted(t: DECIMAL): DECIMAL { t }\ndiscounted(1)');
+    });
+
+    test('the quick fix for `.status == 5` makes the diagnostic go away', async () => {
+        const uri = uriOf('a', 'fix2.minab');
+        const text = 'FROM Customer WHERE .name == 5 SELECT .id';
+        const sent = nextDiagnostics(uri, d => d.length > 0);
+        await open(uri, text);
+        const [diagnostic] = await sent;
+        expect(diagnostic.code).toBe('type.implicitCoercion');
+        const actions = (await connection.sendRequest(CodeActionRequest.type, {
+            textDocument: { uri },
+            range: diagnostic.range,
+            context: { diagnostics: [diagnostic] }
+        })) as Array<{ title: string; edit: { changes: Record<string, TextEdit[]> } }>;
+        expect(actions.map(a => a.title)).toEqual(['Add CAST(… AS INTEGER) around the left side', 'Add CAST(… AS TEXT) around the right side']);
+        const fixed = applyEdits(text, actions[1].edit.changes[uri]);
+        expect(fixed).toBe('FROM Customer WHERE .name == CAST(5 AS TEXT) SELECT .id');
+        const clean = nextDiagnostics(uri, d => d.length === 0);
+        await connection.sendNotification('textDocument/didChange', {
+            textDocument: { uri, version: 2 },
+            contentChanges: [{ text: fixed }]
+        });
+        expect(codes(await clean)).toEqual([]);
     });
 });

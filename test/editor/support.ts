@@ -1,5 +1,5 @@
-import { EmptyFileSystem } from 'langium';
-import { parseDocument, type EditorDocument } from '../../src/editor/index.js';
+import { EmptyFileSystem, URI } from 'langium';
+import { parseDocument, type EditorDocument, type EditorRange } from '../../src/editor/index.js';
 import { resolveHostDeclarations } from '../../src/language/host-declarations.js';
 import { createMinabServices } from '../../src/language/minab-module.js';
 import { scalarType, type MinabRuleContext, type MinabSchema } from '../../src/language/schema.js';
@@ -98,4 +98,29 @@ export function cursor(marked: string): { source: string; offset: number } {
 
 export function open(services: ReturnType<typeof setup>, source: string): EditorDocument {
     return parseDocument(services, source);
+}
+
+let checked = 0;
+
+/** The diagnostics of `source`, built like the language server builds them (a syntax error stops the check). */
+export async function diagnose(services: ReturnType<typeof setup>, source: string) {
+    const { workspace } = services.shared;
+    const uri = URI.parse(`inmemory:///diagnose-${checked++}.minab`);
+    const document = workspace.LangiumDocumentFactory.fromString(source, uri);
+    workspace.LangiumDocuments.addDocument(document);
+    try {
+        await workspace.DocumentBuilder.build([document], { validation: { stopAfterLexingErrors: true, stopAfterParsingErrors: true } });
+        return document.diagnostics ?? [];
+    } finally {
+        workspace.LangiumDocuments.deleteDocument(uri);
+    }
+}
+
+/** `source` with the edits applied. */
+export function applyEdits(source: string, edits: { range: EditorRange; newText: string }[]): string {
+    const lines = source.split('\n');
+    const offsetOf = (p: { line: number; character: number }) => lines.slice(0, p.line).reduce((n, l) => n + l.length + 1, 0) + p.character;
+    return [...edits]
+        .sort((a, b) => offsetOf(b.range.start) - offsetOf(a.range.start))
+        .reduce((text, e) => text.slice(0, offsetOf(e.range.start)) + e.newText + text.slice(offsetOf(e.range.end)), source);
 }
