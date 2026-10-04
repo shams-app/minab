@@ -134,6 +134,10 @@ export const BUILTIN_DOCS: Record<string, { signature: string; doc: string }> = 
     DATE_DIFF: {
         signature: 'DATE_DIFF(a: DATE | DATETIME, b: DATE | DATETIME, unit: "year" | "month" | "week" | "day" | "hour" | "minute" | "second") → INTEGER',
         doc: 'Whole units from `b` to `a`, truncated toward zero. Both are `DATE` or both are `DATETIME`. The unit is a text literal.'
+    },
+    LOG: {
+        signature: 'LOG(value: V, label?: TEXT) → V',
+        doc: 'Records the value as a log line and gives it back unchanged. In a part that runs as SQL it prints nothing.'
     }
 };
 

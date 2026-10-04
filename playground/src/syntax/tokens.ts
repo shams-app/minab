@@ -116,7 +116,8 @@ export const BUILTINS = [
     'HOUR',
     'MINUTE',
     'DATE_ADD',
-    'DATE_DIFF'
+    'DATE_DIFF',
+    'LOG'
 ] as const;
 
 const WORD_TYPES = new Map<string, TokenType>();

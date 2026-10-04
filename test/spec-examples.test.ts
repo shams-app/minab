@@ -121,7 +121,8 @@ const PIECES: Record<string, 'lines' | 'paragraphs'> = {
     'showcase §17 #2': 'lines',
     'showcase §17 #3': 'lines',
     'showcase §18 #1': 'lines',
-    'showcase §18 #2': 'lines'
+    'showcase §18 #2': 'lines',
+    'showcase §19 #1': 'lines'
 };
 
 // ---- how to check ------------------------------------------------------------
@@ -177,6 +178,7 @@ const CHECK: Record<string, CheckSetup> = {
     'showcase §18 #2': { context: 'booking' },
     'showcase §18 #3': { context: 'booking' },
     'spec §3.1 #1': { context: 'customer' },
+    'spec §5.3.2 #1': { context: 'customer' },
     'spec §3.2 #1': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §3.2 #2': { parseOnly: COLLECTION_FILTER_BUG },
     'spec §3.3 #1': { context: 'orderIdField' },

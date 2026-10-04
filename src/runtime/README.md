@@ -15,6 +15,7 @@ database driver. A test checks the imports.
   (interface only), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
   which counts what one run uses and stops it at a limit or an abort.
+- `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
 - `errors.ts`: builds run errors from the registry, and maps a data port failure to a code.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
   `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `run()`. Also the `expect` check.
@@ -68,7 +69,7 @@ record. It does not look at other tables: a rule that reads data may change when
 
 ```ts
 // run
-{ ok: true, value, logs: string[], stats: { statements, rows, durationMs } }
+{ ok: true, value, logs: string[], logsTruncated?: true, stats: { statements, rows, durationMs } }
 { ok: false, error: { code, message, range?, params } }
 
 // compile
@@ -81,7 +82,7 @@ record. It does not look at other tables: a rule that reads data may change when
 - `range` is the part of the source that failed (0-based, like the language server). The innermost
   failing expression sets it: for `1 + CAST("12a" AS INTEGER)` it is the `CAST`.
 - `params` are JSON-safe values: `{ limit: 100 }`, `{ name: 'currentUser' }`, `{ sqlstate: '22012' }`.
-- `logs` is empty until L7.
+- `logs` holds the lines of `LOG(value, label?)` (L7), one line each (`label: value`, newlines escaped, D37), in order. A run keeps at most the `logEntries` limit (100 by default). When more were made, the extra ones are dropped and `logsTruncated` is `true`. This is not an error. Each kept line also goes to `ports.events` as a `log` event with `message`, `value`, `label`, `range` and `time`. `logsTruncated` is not in the wire format yet.
 - **The SQL text is never in an error.** A host that wants it reads the `statement` event.
 - A failure of the data port is `data.error`. `params.sqlstate` is set when the driver error has a
   five-character `code`. The driver's own message is not copied. SQLSTATE `22012` is

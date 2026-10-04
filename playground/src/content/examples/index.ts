@@ -301,6 +301,19 @@ export const examples: Example[] = [
         expect: { kind: 'value', value: 17, statements: 0 }
     },
     {
+        id: 'debug-with-log',
+        title: 'Debug with LOG',
+        summary: '`LOG(value, label)` prints a value and gives it back.',
+        notes: 'Open the **Console** tab. `LOG` records the value with its label and returns the value unchanged, so you can wrap any part of a rule. Click a line to select the call in the editor. A `LOG` inside a query runs in the database and prints nothing (you get a warning).',
+        source: '// Bonus points, with the steps in the Console tab.\nfn bonus(points: INTEGER): INTEGER {\n    let total: INTEGER = LOG(points, "points");\n    if! points > 10 {\n        total += 5;\n    }\n    LOG(total, "total");\n    total\n}\n\nLOG(bonus(12), "bonus(12)")\n',
+        tags: ['functions'],
+        level: 'beginner',
+        specRef: '§5.3.1',
+        host: { dataset: 'demo' },
+        focus: 'console',
+        expect: { kind: 'value', value: 17, statements: 0, logs: ['points: 12', 'total: 17', 'bonus(12): 17'] }
+    },
+    {
         id: 'credit-limit',
         title: 'Within the credit limit',
         summary: 'A rule that walks from the record to a related row.',

@@ -47,6 +47,7 @@ import {
     type AssignmentStatement,
     type BinaryExpression,
     type CallExpression,
+    type CallStatement,
     type CurrentRecord,
     type Expression,
     type FieldValue,
@@ -97,7 +98,8 @@ export function registerValidationChecks(services: MinabServices): void {
         MemberAccess: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         TupleAccess: validator.checkExpressionTypeChecks,
         FilterAccess: validator.checkExpressionTypeChecks,
-        CallExpression: [validator.checkExpressionTypeChecks, validator.checkFunctionInlinable],
+        CallExpression: [validator.checkExpressionTypeChecks, validator.checkFunctionInlinable, validator.checkLogNotInSql],
+        CallStatement: validator.checkCallStatementIsCall,
         ListLiteral: validator.checkExpressionTypeChecks,
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
@@ -249,6 +251,32 @@ export class MinabValidator {
         if (!decl) return;
         const reason = inlineBlocker(decl, host => !!this.services.schema.getHostFunction(host));
         if (reason) report(accept, coded('query.functionNotInlinable', { name, reason }), { node });
+    }
+
+    /**
+     * `LOG` in a part that runs as SQL (D19): inside a query, or inside a filter on a collection
+     * (the filter is sent to the database). There `LOG(x)` is plain `x`, so nothing prints.
+     */
+    checkLogNotInSql(node: CallExpression, accept: ValidationAcceptor): void {
+        if (!isNameRef(node.callee) || node.callee.name !== 'LOG') return;
+        if (AstUtils.getContainerOfType(node, isQuery) || this.isInCollectionFilter(node)) {
+            report(accept, coded('call.logInSql'), { node });
+        }
+    }
+
+    private isInCollectionFilter(node: AstNode): boolean {
+        for (let current = node; current.$container; current = current.$container) {
+            const parent = current.$container;
+            if (!isFilterAccess(parent) || current.$containerProperty !== 'filter') continue;
+            const receiver = this.services.typeChecker.inferType(parent.receiver);
+            if (receiver.ok && receiver.type.kind === 'collection') return true;
+        }
+        return false;
+    }
+
+    /** A statement that stands alone must be a call (`LOG(x);`). The grammar takes any expression, so this check narrows it. */
+    checkCallStatementIsCall(node: CallStatement, accept: ValidationAcceptor): void {
+        if (!isCallExpression(node.call)) report(accept, coded('call.statementNotACall'), { node, property: 'call' });
     }
 
     /**

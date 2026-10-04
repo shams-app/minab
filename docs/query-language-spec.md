@@ -388,7 +388,32 @@ Built-ins are table-driven (`src/language/minab-builtins.ts`): each has a name, 
 
 The unit must be a text literal from the list for the type of the first argument. Anything else is `call.unknownDateUnit`. A `DATE` and a `DATETIME` do not mix in `DATE_DIFF`: cast one of them first (no implicit coercion).
 
+**Debugging (decision D19).**
+
+| Function | Signature | Notes |
+|---|---|---|
+| `LOG(value, label?)` | `(V, TEXT?) -> V` | Records the value as a log line and gives the value back unchanged. `V` is any type, `null` too. See §5.3.2. |
+
 Known difference: `UPPER`, `LOWER` and the case-insensitive checks use full Unicode case mapping in the interpreter and the database's simple mapping in SQL. They may differ for a few non-ASCII letters (for example `UPPER("straße")` is `STRASSE` in the interpreter and `STRAẞE` in Postgres, and `LOWER("İ")` has two code points in the interpreter and one in Postgres). Ordinary accented letters (`é`, `É`) agree. Text ordering in `GREATEST`/`LEAST` follows the same rule as `<` on text.
+
+#### 5.3.2 Debugging with `LOG`
+
+`LOG(value)` or `LOG(value, label)` is an **expression**. It records the value and returns it unchanged, so it can wrap any part of a rule without changing the answer: `LOG(2) + 1` is `3`. There is one level only (no `WARN` or `ERROR`).
+
+```
+LOG(COUNT(.orders[.status == "cancelled"]), "cancelled") < 5
+```
+
+Each call makes one **log entry**: the value, the optional label and the place of the call in the source. The entry goes to the host in two ways: as a `log` event while the run goes on, and in the `logs` list of the run result. A run keeps at most `logEntries` entries (100 by default, D36). Later entries are dropped, the result says `logsTruncated: true`, and the run does not fail.
+
+A log entry is **one line**: `label: value`, or only the value when there is no label. Text is quoted and every newline is written as `\n`, so a logged value can never fake a second log line (D37). The command line prints `file:line:col label: value` on **stderr**, so stdout stays clean for `--json`; `--no-logs` turns it off. On a server, logs are off by default in production, and the docs warn that a logged value may hold personal data (D37).
+
+**What prints and what does not.** `LOG` prints only where the interpreter evaluates it:
+
+- A part that runs as SQL does not print. Inside a query clause, or inside a filter that is sent to the database, `LOG(x)` compiles as plain `x`. The checker gives the warning `call.logInSql` there, and the query still runs.
+- The right side of a short-circuited `AND` or `OR` is not evaluated, so its `LOG` does not print.
+- A branch of `if`, `switch` or `if!` that is not taken does not print.
+- A function body prints each time the function is called.
 
 ### 5.4 Subqueries as expressions
 
@@ -741,7 +766,7 @@ fn cumulativeAdd(inputs: INTEGER[]): INTEGER {
 
 ### 8.2 Body
 
-A function body may contain local variable declarations (`let`, §7) and any of the other `BodyStatement` forms (assignment, loops, `INSERT`/`UPDATE`/`DELETE`, §9–§10), followed by exactly one trailing tail — either a bare expression or a full `FROM` pipeline — which is the function's return value:
+A function body may contain local variable declarations (`let`, §7) and any of the other `BodyStatement` forms (assignment, call statements such as `LOG(x);`, loops, `INSERT`/`UPDATE`/`DELETE`, §9–§10), followed by exactly one trailing tail — either a bare expression or a full `FROM` pipeline — which is the function's return value:
 
 ```
 fn discountedTotal(orderId: UUID, rate: DECIMAL): DECIMAL {
@@ -1171,6 +1196,20 @@ fn firstPairOver(a: INTEGER[], b: INTEGER[], limit: INTEGER): INTEGER {
 
 Note that `outer`/`inner` here each still push a `.` per the rule above, even though the example never uses it — `x` and `y` are plain `INTEGER`s (not records), so there's no field to reach via `.`, and naming both loop variables is what actually matters for telling them apart once nested. The named-variable form and `.` aren't in tension; the example just has no reason to reach for `.` when the values are scalars and already have clear names.
 
+### 9.5 Call statement
+
+A call followed by `;` is a statement: `LOG(x);`. It runs the call and drops the value. It is a `BodyStatement`, so it is valid wherever a `let` is valid: the top level, a function body, a loop body or a block.
+
+```
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    let cut: DECIMAL = LOG(total * rate / 100, "cut");
+    LOG(cut);
+    total - cut
+}
+```
+
+Only a call may stand alone. A statement such as `1 + 2;` is the error `call.statementNotACall`. The grammar takes any expression there (`target=Expression ';'`, the same start as an assignment, and the parser tells them apart at the `=` or the `;`), and the checker narrows it to a call. A call without `;` at the end of a block is still the block's tail. A call statement may call a user function or a host function; the value is dropped (a host function's effect is the reason to call it).
+
 ---
 
 ## 10. Data Manipulation (`INSERT` / `UPDATE` / `DELETE`)
@@ -1359,7 +1398,7 @@ Param:
     name=Name ':' type=Type;
 
 BodyStatement:
-    VariableDecl | AssignmentStatement | LoopStatement | BreakStatement | ContinueStatement
+    VariableDecl | AssignmentStatement | CallStatement | LoopStatement | BreakStatement | ContinueStatement
     | InsertStatement | DeleteStatement | UpdateStatement | IfStatement;
 
 InsertStatement:
@@ -1389,6 +1428,9 @@ SetAssignment:
 
 AssignmentStatement:
     target=Expression operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression ';';
+
+CallStatement:
+    call=Expression ';';
 
 LoopStatement:
     (label=Name ':')?

@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Diagnostic } from 'vscode-languageserver-types';
-import { createMinab, type DataPort, type MinabError, type PreparedProgram } from '../runtime/index.js';
+import { createMinab, type DataPort, type MinabError, type PreparedProgram, type SourceRange } from '../runtime/index.js';
 import { DEFAULT_CONFIG_NAME, ConfigError, discoverConfig, emptyConfig, loadConfigFile, loadRecordFile, type LoadedConfig } from './config.js';
 import { formatDiagnostic, isError, summarize, toCliDiagnostic } from './diagnostics.js';
 import { DataSourceError, FixtureExecutor, connectPostgres } from './executors.js';
@@ -56,6 +56,7 @@ interface Options {
     field?: string;
     json: boolean;
     trace: boolean;
+    logs: boolean;
 }
 
 class UsageError extends Error {}
@@ -77,6 +78,7 @@ Options:
       --field <json>     Value of \`$\` for a field rule, overriding the config
       --json             Print the result as JSON instead of for a human
       --trace            Print every SQL statement sent to the data source
+      --no-logs          Do not print the output of LOG (it goes to stderr by default)
   -h, --help             Show this help
   -v, --version          Show the version
 
@@ -128,7 +130,8 @@ function parseArgs(argv: string[]): Options | { help: true } | { version: true }
         record: flags.get('record') as string | undefined,
         field: flags.get('field') as string | undefined,
         json: flags.get('json') === true,
-        trace: flags.get('trace') === true
+        trace: flags.get('trace') === true,
+        logs: flags.get('no-logs') !== true
     };
 }
 
@@ -142,6 +145,7 @@ const ALIASES: Record<string, string | undefined> = {
     '--field': 'field',
     '--json': 'json',
     '--trace': 'trace',
+    '--no-logs': 'no-logs',
     '-h': 'help',
     '--help': 'help',
     '-v': 'version',
@@ -225,7 +229,7 @@ async function execute(options: Options, io: CliIo): Promise<number> {
             case 'compile':
                 return compile(program, options, io);
             case 'run':
-                return await run(program, config, options, io);
+                return await run(program, config, options, io, label);
         }
     } finally {
         minab.dispose();
@@ -267,12 +271,17 @@ function compile(program: PreparedProgram, options: Options, io: CliIo): number 
     return EXIT_OK;
 }
 
+/** `file:line:col label: value`. The position is where the `LOG` call starts (lines and columns count from 1). */
+function formatLogLine(file: string, range: SourceRange | undefined, message: string): string {
+    return range ? `${file}:${range.start.line + 1}:${range.start.character + 1} ${message}` : `${file} ${message}`;
+}
+
 /** Most failures carry their plain reason in `params.reason`; the others have it in the message. */
 function errorReason(error: MinabError): string {
     return typeof error.params.reason === 'string' ? error.params.reason : error.message;
 }
 
-async function run(program: PreparedProgram, config: LoadedConfig, options: Options, io: CliIo): Promise<number> {
+async function run(program: PreparedProgram, config: LoadedConfig, options: Options, io: CliIo, fileLabel: string): Promise<number> {
     const databaseUrl = options.database ?? process.env.MINAB_DATABASE_URL ?? config.database;
     const postgres = databaseUrl ? await connectPostgres(databaseUrl) : undefined;
     const base: DataPort = postgres ?? new FixtureExecutor(config.responses);
@@ -296,13 +305,16 @@ async function run(program: PreparedProgram, config: LoadedConfig, options: Opti
             { record: config.record, fieldValue: config.fieldValue },
             {
                 data,
-                events: options.trace
-                    ? {
-                          emit(event) {
-                              if (event.kind === 'statement') io.err(formatSql({ text: event.sql, params: event.params }));
+                events:
+                    options.trace || options.logs
+                        ? {
+                              emit(event) {
+                                  if (event.kind === 'statement' && options.trace) io.err(formatSql({ text: event.sql, params: event.params }));
+                                  // Logs go to stderr, so `--json` keeps stdout clean (D19). The message is one line (D37).
+                                  if (event.kind === 'log' && options.logs) io.err(formatLogLine(fileLabel, event.range, event.message));
+                              }
                           }
-                      }
-                    : undefined
+                        : undefined
             }
         );
         if (sourceFailure) {

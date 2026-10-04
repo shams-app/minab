@@ -37,6 +37,7 @@
 
 import {
     isAssignmentStatement,
+    isCallStatement,
     isBinaryExpression,
     isBlock,
     isBooleanLiteral,
@@ -69,6 +70,7 @@ import {
     isUnaryExpression,
     isVariableDecl,
     type AssignmentStatement,
+    type CallExpression,
     type BinaryExpression,
     type Block,
     type BodyStatement,
@@ -104,6 +106,7 @@ import {
 } from './values.js';
 import { castValue } from './casts.js';
 import { dataFailure } from '../runtime/errors.js';
+import { formatLogMessage } from '../runtime/log-format.js';
 import { NO_LIMITS, RunBudget, RunStopped } from '../runtime/limits.js';
 import { PortError } from '../runtime/ports.js';
 import type { MinabError, SourceRange } from '../runtime/types.js';
@@ -659,6 +662,9 @@ export class MinabInterpreter {
                     frame.types.set(statement.name, statement.type);
                 } else if (isAssignmentStatement(statement)) {
                     await this.assign(statement, state);
+                } else if (isCallStatement(statement)) {
+                    // A call that stands alone: the value is dropped (D19).
+                    await this.expression(statement.call, state);
                 } else if (isIfStatement(statement)) {
                     await this.ifStatement(statement, state);
                 } else {
@@ -747,7 +753,7 @@ export class MinabInterpreter {
 
     // ---- built-ins over in-memory collections ---------------------------
 
-    private async builtin(expr: { callee: Expression; args: Expression[] }, state: State): Promise<MinabValue> {
+    private async builtin(expr: CallExpression, state: State): Promise<MinabValue> {
         const callee = expr.callee;
         if (!isNameRef(callee)) fail('only a named function can be called');
         if (!isBuiltinName(callee.name)) {
@@ -775,7 +781,22 @@ export class MinabInterpreter {
                 literal: isStringLiteral(arg) ? arg.value : undefined
             };
         });
-        return this.runBuiltin(builtin, values, info, state);
+        const answer = this.runBuiltin(builtin, values, info, state);
+        if (builtin.logs) this.log(expr, values, state);
+        return answer;
+    }
+
+    /**
+     * `LOG(value, label?)`: keeps the entry in the run result and sends a `log` event, unless the run
+     * already has `logEntries` entries (D36). The value itself goes back to the caller unchanged.
+     */
+    private log(expr: AstNode, values: MinabValue[], state: State): void {
+        const value = externalize(values[0]);
+        const label = typeof values[1] === 'string' ? values[1] : undefined;
+        const message = formatLogMessage(value, label);
+        const time = state.budget.addLog(message);
+        if (time === undefined) return;
+        state.context.events?.emit({ kind: 'log', message, value, ...(label === undefined ? {} : { label }), range: expr.$cstNode?.range, time });
     }
 
     private runBuiltin(builtin: BuiltinSignature, args: MinabValue[], info: BuiltinArgInfo[], state: State): MinabValue {

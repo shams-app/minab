@@ -35,6 +35,7 @@ function entry<P extends DiagnosticParams = NoParams>(value: DiagnosticEntry<P>)
 }
 
 const error = 'error' as const;
+const warning = 'warning' as const;
 
 export const DIAGNOSTICS = {
     'call.argumentType': entry<{
@@ -84,6 +85,16 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.name}" is not a valid function name — a function name needs a lowercase letter; ALL-CAPS names are kept for built-ins`,
         doc: 'Built-in functions have ALL-CAPS names. A function you declare must contain at least one lowercase letter, so a new built-in can never clash with it.'
+    }),
+    'call.logInSql': entry({
+        severity: warning,
+        message: () => 'this LOG runs in the database and will not print',
+        doc: 'A LOG inside a query, or inside a filter that is sent to the database, is copied into the SQL as its plain value. It prints nothing. Move the LOG out of the query, for example around the whole result.'
+    }),
+    'call.statementNotACall': entry({
+        severity: error,
+        message: () => 'only a function call can stand alone as a statement',
+        doc: 'A statement that is not an assignment or a declaration must be a call such as LOG(x); . Write a call, or assign the value to a name.'
     }),
     'call.unknownDateUnit': entry<{ name: string; unit: string; allowed: string }>({
         severity: error,

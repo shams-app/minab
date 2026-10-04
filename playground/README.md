@@ -7,7 +7,7 @@ A website where you can write Minab, see it checked, see the SQL it compiles to,
 | Route | What |
 |---|---|
 | `/` | Landing page with a live demo (snippets run against the engine; the SQL shown is compiled live) |
-| `/play` | The workbench: Monaco editor, output tabs (Result · SQL · **Execution** · Problems · AST), host panel (Schema · Data · Record · Field) |
+| `/play` | The workbench: Monaco editor, output tabs (Result · SQL · **Execution** · **Console** · Problems · AST), host panel (Schema · Data · Record · Field) |
 | `/learn/:lesson` | A 12-lesson guided tour; each goal is checked against the real engine |
 | `/examples` | 29 examples: the repository's 11 `examples/` plus 18 written for the playground |
 | `/reference` | The cheat sheet (also a drawer inside the workbench) |
@@ -61,6 +61,7 @@ src/
 ```
 
 **Things worth knowing:**
+- **Console (`LOG`).** The runtime sends a `log` event for each `LOG(value, label?)` (`src/runtime/ports.ts`). The engine collects them in `RunReport.logs`, and `ui/output/ConsoleView.tsx` lists them in order. Hovering a line highlights the `LOG` call; clicking selects it.
 - **Hybrid execution, made visible.** The runtime sends a `statement` event, with the source range, just before each statement reaches the data port (`src/runtime/ports.ts`). The engine keeps each range, so the Execution tab can highlight exactly which span of the program became which SQL.
 - **One parse serves everything.**
   - The engine answers `analyze` (diagnostics, program kind, compiled SQL) on every pause in typing.

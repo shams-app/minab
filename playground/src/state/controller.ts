@@ -163,7 +163,7 @@ export function setHostOpen(hostOpen: boolean): void {
     setState({ hostOpen });
 }
 
-export function setHighlight(range: Range | undefined, kind: 'pushdown' | 'ast' | 'problem' = 'pushdown'): void {
+export function setHighlight(range: Range | undefined, kind: 'pushdown' | 'ast' | 'problem' | 'log' = 'pushdown'): void {
     setState({ highlight: range ? { range, kind } : undefined });
 }
 

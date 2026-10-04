@@ -34,6 +34,7 @@ export function useCommands(): Command[] {
             { id: 'autorun', title: 'Toggle auto-run', group: 'Actions', run: close(() => setAutoRun(!getState().autoRun)) },
             { id: 'sql', title: 'Show compiled SQL', group: 'Actions', run: close(() => setOutputTab('sql')) },
             { id: 'execution', title: 'Show execution map', group: 'Actions', keywords: 'trace pushdown', run: close(() => setOutputTab('execution')) },
+            { id: 'console', title: 'Show console (LOG output)', group: 'Actions', keywords: 'log debug print', run: close(() => setOutputTab('console')) },
             { id: 'ast', title: 'Show syntax tree', group: 'Actions', keywords: 'ast parse', run: close(() => setOutputTab('ast')) },
             { id: 'reference', title: 'Open the cheat sheet', group: 'Actions', keywords: 'reference docs help', run: close(() => setReferenceOpen(true)) },
             {

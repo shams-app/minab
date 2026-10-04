@@ -459,6 +459,16 @@ export const cheatsheet: CheatSection[] = [
                 exampleId: 'statements-in-function'
             },
             {
+                id: 'log',
+                title: 'LOG and the call statement',
+                syntax: 'LOG(total * rate / 100, "cut") < 5\nLOG(x);',
+                description:
+                    'Prints a value and gives it back unchanged, so it can wrap any part of a rule. The label is optional. A call can stand alone as a statement. Lines show in the Console tab. A `LOG` inside a query runs in the database and prints nothing.',
+                specRef: '§5.3.1',
+                keywords: ['LOG', 'debug', 'print', 'console'],
+                exampleId: 'debug-with-log'
+            },
+            {
                 id: 'loops',
                 title: 'Loops',
                 syntax: 'loop i from 1 to 10 by 2 { … }\nloop order in #Order where .total > 0 { … }\nloop remaining > 0 { … }',

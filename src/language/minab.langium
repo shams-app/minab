@@ -82,7 +82,7 @@ Param:
     name=Name ':' type=Type;
 
 BodyStatement:
-    VariableDecl | AssignmentStatement | LoopStatement | BreakStatement | ContinueStatement
+    VariableDecl | AssignmentStatement | CallStatement | LoopStatement | BreakStatement | ContinueStatement
     | InsertStatement | DeleteStatement | UpdateStatement | IfStatement;
 
 InsertStatement:
@@ -112,6 +112,9 @@ SetAssignment:
 
 AssignmentStatement:
     target=Expression operator=('=' | '+=' | '-=' | '*=' | '/=' | '?=' | '|=') value=Expression ';';
+
+CallStatement:
+    call=Expression ';';
 
 LoopStatement:
     (label=Name ':')?
