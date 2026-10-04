@@ -324,7 +324,8 @@ export const lessons: Lesson[] = [
         solution: nextSolution,
         host: { dataset: 'demo' },
         task: 'Run the loop and read the answer.',
-        goal: ({ report }) => report.stage === 'done' && (report.result?.kind === 'verdict' || report.result?.kind === 'value') && report.diagnostics.length === 0,
+        goal: ({ report }) =>
+            report.stage === 'done' && (report.result?.kind === 'verdict' || report.result?.kind === 'value') && report.diagnostics.length === 0,
         hints: ['Just press Run.'],
         focus: 'result'
     }
