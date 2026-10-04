@@ -1,6 +1,6 @@
 /**
- * Stub for the entry `@shamsine/minab/node`.
- * Phase H1 fills it with Node adapters (pg data port, config helpers).
- * R2 only creates the file, so the package `exports` map is complete from the start.
+ * The entry `@shamsine/minab/node`.
+ * R7 added the pg data port. Phase H1 adds the other Node adapters (config helpers and more).
  */
-export const notReady = 'phase H1';
+export { connectPostgres, pgDataPort } from './pg.js';
+export type { PgClientLike, PostgresConnection } from './pg.js';

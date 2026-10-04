@@ -1,20 +1,19 @@
 /**
- * The `minab` command (roadmap Phase 6).
+ * The `minab` command (roadmap Phase 6, moved onto the runtime API in R7).
  *
- * Three verbs over the services Phases 1-5 built, each answering one
- * question about a `.minab` file:
+ * Three verbs, each answering one question about a `.minab` file:
  *
- *  - `check`   — is it a valid program? (parser + `MinabValidator`, which
- *                since Phase 4 carries the type-checking diagnostics too)
- *  - `compile` — what SQL does it become? (`MinabSqlCompiler`)
- *  - `run`     — what does it evaluate to? (`MinabInterpreter`, pushing
- *                the relational parts down to the compiler, per ADR 0001)
+ *  - `check`   — is it a valid program? (`prepare` diagnostics)
+ *  - `compile` — what SQL does it become? (`PreparedProgram.compile`)
+ *  - `run`     — what does it evaluate to? (`PreparedProgram.run`)
+ *
+ * The CLI is a host like any other. It builds a runtime with `createMinab`,
+ * prepares the file, and runs it with a data port. It never touches the
+ * Langium services. `test/cli-imports.test.ts` checks that.
  *
  * Everything the host would normally supply — schema, rule context, the
  * record under validation, a data source — comes from a config file; see
- * `config.ts`. Nothing here decides anything about the language: this is a
- * front end over existing services, which is why Phase 6 is marked
- * Mechanical.
+ * `config.ts`.
  *
  * `runCli` takes its argv and its output sinks as parameters rather than
  * reading `process.argv` and calling `console.log`, so the test suite can
@@ -25,15 +24,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { URI, type LangiumDocument } from 'langium';
-import { NodeFileSystem } from 'langium/node';
 import type { Diagnostic } from 'vscode-languageserver-types';
-import { isQuery, type Model } from '../language/generated/ast.js';
-import { createMinabServices } from '../language/minab-module.js';
-import type { MinabServices } from '../language/minab-module.js';
+import { createMinab, type DataPort, type MinabError, type PreparedProgram } from '../runtime/index.js';
 import { DEFAULT_CONFIG_NAME, ConfigError, discoverConfig, emptyConfig, loadConfigFile, loadRecordFile, type LoadedConfig } from './config.js';
-import { formatDiagnostic, isError, summarize } from './diagnostics.js';
-import { DataSourceError, FixtureExecutor, PostgresExecutor, traced } from './executors.js';
+import { formatDiagnostic, isError, summarize, toCliDiagnostic } from './diagnostics.js';
+import { DataSourceError, FixtureExecutor, connectPostgres } from './executors.js';
 import { formatSql, formatValue } from '../host/format.js';
 
 export { formatSql, formatValue } from '../host/format.js';
@@ -202,32 +197,38 @@ async function execute(options: Options, io: CliIo): Promise<number> {
     // it skips Chevrotain's per-construction grammar re-validation, which
     // takes ~2.8s against this grammar and answers a question the test
     // suite already answers. See `MinabServiceOptions` in `minab-module.ts`.
-    const services = createMinabServices(NodeFileSystem, config.schema, config.ruleContext, { mode: 'production' }).Minab;
-
-    const document = await buildDocument(services, filePath);
-    const diagnostics = document.diagnostics ?? [];
-    const source = readFileSync(filePath, 'utf8');
-    const label = displayPath(filePath, io.cwd);
-    for (const diagnostic of diagnostics) {
-        io.err(formatDiagnostic(diagnostic, source, label));
-    }
-    if (diagnostics.some(isError)) {
-        io.err(`minab: ${summarize(diagnostics)} — ${STOPPED[options.command]}`);
-        if (options.command === 'check' && options.json) {
-            // Tools read this: each diagnostic carries its stable `code` and `data.params`.
-            io.out(JSON.stringify({ ok: false, diagnostics }, null, 2));
+    const minab = createMinab({
+        schema: config.schema,
+        ruleContext: config.ruleContext,
+        mode: 'production'
+    });
+    try {
+        const source = readFileSync(filePath, 'utf8');
+        const program = await minab.prepare(source);
+        const diagnostics = program.diagnostics.map(toCliDiagnostic);
+        const label = displayPath(filePath, io.cwd);
+        for (const diagnostic of diagnostics) {
+            io.err(formatDiagnostic(diagnostic, source, label));
         }
-        return EXIT_PROGRAM_ERROR;
-    }
+        if (diagnostics.some(isError)) {
+            io.err(`minab: ${summarize(diagnostics)} — ${STOPPED[options.command]}`);
+            if (options.command === 'check' && options.json) {
+                // Tools read this: each diagnostic carries its stable `code` and `data.params`.
+                io.out(JSON.stringify({ ok: false, diagnostics }, null, 2));
+            }
+            return EXIT_PROGRAM_ERROR;
+        }
 
-    const model = document.parseResult.value;
-    switch (options.command) {
-        case 'check':
-            return reportCheck(diagnostics, label, options, io);
-        case 'compile':
-            return compile(model, services, options, io);
-        case 'run':
-            return await run(model, services, config, options, io);
+        switch (options.command) {
+            case 'check':
+                return reportCheck(diagnostics, label, options, io);
+            case 'compile':
+                return compile(program, options, io);
+            case 'run':
+                return await run(program, config, options, io);
+        }
+    } finally {
+        minab.dispose();
     }
 }
 
@@ -246,41 +247,72 @@ function reportCheck(diagnostics: Diagnostic[], label: string, options: Options,
     return EXIT_OK;
 }
 
-function compile(model: Model, services: MinabServices, options: Options, io: CliIo): number {
-    if (!model.tail) {
-        io.err('minab: nothing to compile — the program has no query or expression');
-        return EXIT_PROGRAM_ERROR;
-    }
-    const compiled = isQuery(model.tail) ? services.sqlCompiler.compileQuery(model.tail) : services.sqlCompiler.compileValue(model.tail);
+function compile(program: PreparedProgram, options: Options, io: CliIo): number {
+    const compiled = program.compile();
     if (!compiled.ok) {
+        if (compiled.error.code === 'compile.nothingToCompile') {
+            io.err('minab: nothing to compile — the program has no query or expression');
+            return EXIT_PROGRAM_ERROR;
+        }
         // Refusing to compile is how the compiler tells the interpreter to
         // take a node itself (ADR 0001), so this is a legitimate answer to
         // `compile` — not a crash, and `run` may well still work.
         io.err(
-            `minab: this program does not compile to SQL on its own: ${compiled.reason}\n` +
+            `minab: this program does not compile to SQL on its own: ${errorReason(compiled.error)}\n` +
                 `Use "minab run" to evaluate it — the interpreter handles what SQL can't, and pushes the rest down.`
         );
         return EXIT_PROGRAM_ERROR;
     }
-    io.out(options.json ? JSON.stringify(compiled.query, null, 2) : formatSql(compiled.query));
+    io.out(options.json ? JSON.stringify(compiled.sql, null, 2) : formatSql(compiled.sql));
     return EXIT_OK;
 }
 
-async function run(model: Model, services: MinabServices, config: LoadedConfig, options: Options, io: CliIo): Promise<number> {
+/** Most failures carry their plain reason in `params.reason`; the others have it in the message. */
+function errorReason(error: MinabError): string {
+    return typeof error.params.reason === 'string' ? error.params.reason : error.message;
+}
+
+async function run(program: PreparedProgram, config: LoadedConfig, options: Options, io: CliIo): Promise<number> {
     const databaseUrl = options.database ?? process.env.MINAB_DATABASE_URL ?? config.database;
-    const postgres = databaseUrl ? await PostgresExecutor.connect(databaseUrl) : undefined;
-    const base = postgres ?? new FixtureExecutor(config.responses);
-    const executor = options.trace ? traced(base, query => io.err(formatSql(query))) : base;
+    const postgres = databaseUrl ? await connectPostgres(databaseUrl) : undefined;
+    const base: DataPort = postgres ?? new FixtureExecutor(config.responses);
+
+    // The runtime hides the driver's text, because a host must not leak SQL. A person at a
+    // terminal needs it, so the CLI keeps the first data source failure and prints it itself.
+    let sourceFailure: DataSourceError | undefined;
+    const data: DataPort = {
+        async execute(query, context) {
+            try {
+                return await base.execute(query, context);
+            } catch (e) {
+                if (e instanceof DataSourceError) sourceFailure ??= e;
+                throw e;
+            }
+        }
+    };
 
     try {
-        const result = await services.interpreter.evaluate(model, {
-            executor,
-            record: config.record,
-            recordTable: config.ruleContext.recordTable,
-            fieldValue: config.fieldValue
-        });
+        const result = await program.run(
+            { record: config.record, fieldValue: config.fieldValue },
+            {
+                data,
+                events: options.trace
+                    ? {
+                          emit(event) {
+                              if (event.kind === 'statement') io.err(formatSql({ text: event.sql, params: event.params }));
+                          }
+                      }
+                    : undefined
+            }
+        );
+        if (sourceFailure) {
+            io.err(`minab: ${(sourceFailure as DataSourceError).message}`);
+            return EXIT_PROGRAM_ERROR;
+        }
         if (!result.ok) {
-            io.err(`minab: cannot evaluate this program: ${result.reason}`);
+            io.err(`minab: cannot evaluate this program: ${errorReason(result.error)}`);
+            // Tools read the code. Human output stays as it was.
+            if (options.json) io.out(JSON.stringify({ ok: false, error: result.error }, null, 2));
             return EXIT_PROGRAM_ERROR;
         }
         io.out(options.json ? JSON.stringify(result.value ?? null, null, 2) : formatValue(result.value));
@@ -301,7 +333,10 @@ function loadConfig(options: Options, programPath: string, io: CliIo): LoadedCon
         config = discovered ? loadConfigFile(discovered) : emptyConfig();
     }
     if (options.record) {
-        config = { ...config, record: loadRecordFile(resolvePath(options.record, io.cwd)) };
+        config = {
+            ...config,
+            record: loadRecordFile(resolvePath(options.record, io.cwd))
+        };
     }
     if (options.field !== undefined) {
         config = { ...config, fieldValue: parseFieldValue(options.field) };
@@ -316,19 +351,6 @@ function parseFieldValue(text: string): unknown {
     } catch {
         return text;
     }
-}
-
-async function buildDocument(services: MinabServices, path: string): Promise<LangiumDocument<Model>> {
-    const documents = services.shared.workspace.LangiumDocuments;
-    const document = await documents.getOrCreateDocument(URI.file(path));
-    await services.shared.workspace.DocumentBuilder.build([document], {
-        // A file that doesn't parse gets its syntax errors and nothing
-        // else. Type-checking a half-recovered AST produces diagnostics
-        // about the typo's fallout rather than about the typo, and the
-        // first error is the only one worth reading anyway.
-        validation: { stopAfterLexingErrors: true, stopAfterParsingErrors: true }
-    });
-    return document as LangiumDocument<Model>;
 }
 
 function resolvePath(path: string, cwd: string): string {
@@ -350,7 +372,10 @@ function packageVersion(): string {
     for (let i = 0; i < 6; i++) {
         const candidate = join(dir, 'package.json');
         if (existsSync(candidate)) {
-            const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as { name?: string; version?: string };
+            const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as {
+                name?: string;
+                version?: string;
+            };
             if (parsed.version && parsed.name?.includes('minab')) return parsed.version;
         }
         const parent = dirname(dir);
