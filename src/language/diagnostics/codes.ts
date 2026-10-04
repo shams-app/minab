@@ -627,6 +627,11 @@ export const DIAGNOSTICS = {
         message: p => `the value at ${p.path} is not a valid ${p.expected}`,
         doc: 'A value does not match its Minab type in the wire encoding (for example a JSON number for a DECIMAL, which must be a string). Send the encoding the type needs. The value itself is never copied into the error.'
     }),
+    'wire.remoteFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => `the remote run failed: ${p.reason}`,
+        doc: 'The browser could not get an answer from the server: the network failed, the server answered with an HTTP error that is not a Minab error, or its answer was missing a result. Try again. params.reason says which.'
+    }),
     'wire.tooManyRuns': entry<{ limit: number; used: number }>({
         severity: error,
         message: p => `the request has ${p.used} runs, and the limit is ${p.limit}`,

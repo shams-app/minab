@@ -34,3 +34,6 @@ Small Node scripts for the repository itself (not for users of Minab).
 - Plain Node (18+), ES modules (`.mjs`), no dependencies.
 - Every script starts with a comment that says what it does and how to run it.
 - Every script has a test in `test/`.
+- `browser-bundle.mjs` — builds the browser entries for the browser platform, writes their sizes
+  to `bench/bundle.json`, and fails if a Node-only module is in a bundle (H5). `browser-bundle.d.mts`
+  types it for the tests. Run by `.github/workflows/browser-bundle.yml`. Tests: `test/browser/bundle.test.ts`.
