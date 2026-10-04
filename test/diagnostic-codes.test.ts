@@ -111,11 +111,13 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compile.writeColumn': { via: 'compiler', program: 'INSERT #Order VALUES { bogus: 1 };' },
     'compile.writeEmptySet': { via: 'compiler', program: 'UPDATE #Order SET { };' },
     'compile.writeNeedsName': { via: 'compiler', program: 'INSERT #Order VALUES FROM #Order SELECT .total + 1;' },
+    'compile.writePath': { via: 'runtime' }, // test/writes-json-paths.test.ts
     'compile.writeTarget': { via: 'compiler', program: 'INSERT #Order[.total > 1] VALUES { total: 1 };' },
 
     'data.error': { via: 'runtime' }, // needs a failing data port: test/run-errors.test.ts
     'data.noPort': { via: 'runtime' }, // test/runtime.test.ts
 
+    'eval.cannotCreateRecord': { via: 'runtime' }, // test/writes-json-paths.test.ts
     'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
     'eval.failed': { via: 'runtime' }, // test/run-errors.test.ts

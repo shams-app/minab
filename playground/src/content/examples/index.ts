@@ -288,6 +288,19 @@ export const examples: Example[] = [
 
     // ---- written for the playground ---------------------------------------
     {
+        id: 'path-assignment',
+        title: 'Assign through a relation',
+        summary: 'Set a field of a related record from a loop: `.customer.tier = "gold"`.',
+        notes: 'The path walks the `customer` ref of each delivered order and sets one column. It is a dry run here, so the Execution tab lists one `UPDATE` for each delivered order (nine of them) after the one read. A `null` ref would make the step a no-op; write `.customer!.tier` to create the missing record first, or `.customer |= { tier: "gold" }` to merge fields.',
+        source: '// Assign through a path (spec §9.3). The loop\'s order is `.`.\nloop order in #Order where .status == "delivered" {\n    .customer.tier = "gold";\n}\ntrue\n',
+        tags: ['writes', 'control-flow'],
+        level: 'advanced',
+        specRef: '§9.3',
+        host: { dataset: 'demo' },
+        focus: 'execution',
+        expect: { kind: 'value', value: true, statements: 10 }
+    },
+    {
         id: 'statements-in-function',
         title: 'Statements in a function',
         summary: '`let`, `+=` and `if!` inside a function body.',
