@@ -1,7 +1,7 @@
 /**
- * The wireframe's building blocks. Each is small, typed, and styled only
- * through `wireframe.css` class names that read design tokens. The design
- * handoff may restyle or replace them; the props are the contract.
+ * The design system's building blocks. Each is small, typed, and styled only
+ * through `wireframe.css` class names that read design tokens. The props are
+ * the contract (see design/contract.md).
  */
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
@@ -146,13 +146,21 @@ export interface EmptyStateProps {
     title: string;
     children?: ReactNode;
     action?: ReactNode;
-    tone?: 'neutral' | 'danger' | 'warning' | 'check-only';
+    tone?: 'neutral' | 'danger' | 'warning' | 'check-only' | 'success';
+    /** A big glyph in its sigil color (`.` for "nothing run yet"). Shown instead of the icon. */
+    glyph?: ReactNode;
 }
 
-export function EmptyState({ icon, title, children, action, tone = 'neutral' }: EmptyStateProps) {
+export function EmptyState({ icon, title, children, action, tone = 'neutral', glyph }: EmptyStateProps) {
     return (
         <div className="mb-empty" data-tone={tone}>
-            {icon && <Icon name={icon} size={22} />}
+            {glyph ? (
+                <span className="mb-empty-glyph" aria-hidden="true">
+                    {glyph}
+                </span>
+            ) : (
+                icon && <Icon name={icon} size={22} />
+            )}
             <p className="mb-empty-title">{title}</p>
             {children && <div className="mb-empty-body">{children}</div>}
             {action && <div className="mb-empty-action">{action}</div>}

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { Example } from '../../content/types.js';
 import type { EngineView } from '../../hooks/useEngine.js';
 import { Icon } from '../primitives/Icon.js';
@@ -64,6 +65,54 @@ export interface ToolbarProps {
     onOpenReference: () => void;
 }
 
+/** The three secondary actions. Wide: icon buttons. Narrow: one "More actions" menu. */
+function MoreActions({ onOpenReference, onExport, onEmbed }: Pick<ToolbarProps, 'onOpenReference' | 'onExport' | 'onEmbed'>) {
+    const [open, setOpen] = useState(false);
+    const root = useRef<HTMLSpanElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+        const onDown = (e: MouseEvent) => root.current && !root.current.contains(e.target as Node) && setOpen(false);
+        window.addEventListener('keydown', onKey);
+        window.addEventListener('mousedown', onDown);
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            window.removeEventListener('mousedown', onDown);
+        };
+    }, [open]);
+    const item = (icon: 'book' | 'download' | 'code', label: string, run: () => void) => (
+        <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+                setOpen(false);
+                run();
+            }}
+        >
+            <Icon name={icon} /> {label}
+        </button>
+    );
+    return (
+        <>
+            <span className="mb-toolbar-extras">
+                <IconButton icon="book" label="Cheat sheet" onClick={onOpenReference} />
+                <IconButton icon="download" label="Download for the CLI (.zip)" onClick={onExport} />
+                <IconButton icon="code" label="Copy embed code" onClick={onEmbed} />
+            </span>
+            <span className="mb-toolbar-more" ref={root}>
+                <IconButton icon="more" label="More actions" pressed={open} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)} />
+                {open && (
+                    <div className="mb-toolbar-menu" role="menu" aria-label="More actions">
+                        {item('book', 'Cheat sheet', onOpenReference)}
+                        {item('download', 'Download for the CLI (.zip)', onExport)}
+                        {item('code', 'Copy embed code', onEmbed)}
+                    </div>
+                )}
+            </span>
+        </>
+    );
+}
+
 export function Toolbar(props: ToolbarProps) {
     return (
         <div className="mb-toolbar" role="toolbar" aria-label="Program">
@@ -81,9 +130,8 @@ export function Toolbar(props: ToolbarProps) {
             <div className="mb-toolbar-end">
                 <EngineStatusPill engine={props.engine} />
                 <Toggle checked={props.autoRun} onChange={props.onAutoRunChange} label="Auto-run" hint="Run as you type" />
-                <IconButton icon="book" label="Cheat sheet" onClick={props.onOpenReference} />
-                <IconButton icon="download" label="Download for the CLI (.zip)" onClick={props.onExport} />
-                <IconButton icon="code" label="Copy embed code" onClick={props.onEmbed} />
+                <span className="mb-toolbar-divider" aria-hidden="true" />
+                <MoreActions onOpenReference={props.onOpenReference} onExport={props.onExport} onEmbed={props.onEmbed} />
                 <Button icon="share" onClick={props.onShare}>
                     Share
                 </Button>

@@ -1,6 +1,6 @@
 /**
- * A small stroke icon set for the wireframe. Replace freely during the
- * design handoff — components only ever refer to icons by `name`.
+ * The line icon set: 16 px, 1.8 stroke, `currentColor`. Components only
+ * ever refer to icons by `name`.
  */
 
 export type IconName =
@@ -39,7 +39,9 @@ export type IconName =
     | 'flag'
     | 'lightbulb'
     | 'circle'
-    | 'dot';
+    | 'dot'
+    | 'terminal'
+    | 'more';
 
 const PATHS: Record<IconName, string> = {
     play: 'M7 5v14l11-7z',
@@ -77,7 +79,9 @@ const PATHS: Record<IconName, string> = {
     flag: 'M4 22V4M4 4h13l-2 4 2 4H4',
     lightbulb: 'M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z',
     circle: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
-    dot: 'M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'
+    dot: 'M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+    terminal: 'M3 5h18v14H3zM7 10l3 2-3 2M13 15h4',
+    more: 'M5 12h.01M12 12h.01M19 12h.01'
 };
 
 export interface IconProps {
@@ -105,7 +109,7 @@ export function Icon({ name, size = 16, label, className }: IconProps) {
             aria-hidden={label ? undefined : true}
             data-icon={name}
         >
-            <path d={PATHS[name]} fill={name === 'play' || name === 'dot' ? 'currentColor' : 'none'} />
+            <path d={PATHS[name]} fill={name === 'play' || name === 'dot' ? 'currentColor' : 'none'} strokeWidth={name === 'more' ? 3 : undefined} />
         </svg>
     );
 }

@@ -87,7 +87,7 @@ export function CodeEditor(props: CodeEditorProps) {
             fontFamily: font.family,
             fontSize: font.size,
             lineHeight: font.lineHeight,
-            fontLigatures: true,
+            fontLigatures: false, // the design shows `!=`, `<=` and `=>` as typed
             lineNumbers: props.compact ? 'off' : 'on',
             lineDecorationsWidth: props.compact ? 8 : 10,
             folding: !props.compact,

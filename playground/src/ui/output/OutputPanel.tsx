@@ -18,7 +18,7 @@ export function OutputPanel({ tab, onTabChange, counts, tabs = ALL, children }: 
         result: { id: 'result', label: 'Result', icon: 'table', badge: counts.rows },
         sql: { id: 'sql', label: 'SQL', icon: 'code' },
         execution: { id: 'execution', label: 'Execution', icon: 'layers', badge: counts.statements, badgeTone: 'pushdown' },
-        console: { id: 'console', label: 'Console', icon: 'code', badge: counts.logs || undefined },
+        console: { id: 'console', label: 'Console', icon: 'terminal', badge: counts.logs || undefined },
         problems: { id: 'problems', label: 'Problems', icon: 'alert', badge: counts.problems || undefined, badgeTone: 'danger' },
         ast: { id: 'ast', label: 'AST', icon: 'tree' }
     };

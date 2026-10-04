@@ -13,7 +13,7 @@ A website where you can write Minab, see it checked, see the SQL it compiles to,
 | `/reference` | The cheat sheet (also a drawer inside the workbench) |
 | `/embed` | A compact workbench for `<iframe>`s: `?example=…&theme=dark&tabs=result,sql&readonly=1&autorun=0`, or `#s=<share>` |
 
-The visual design is a deliberate **wireframe**. The finished look comes from Claude Design. See [`design/README.md`](design/README.md) for the whole process and [`design/contract.md`](design/contract.md) for what a redesign may change.
+The workbench and the app shell follow the approved design, "Terminal Noir" (dark first, light on request): see [`design/handoff.md`](design/handoff.md). The other pages (landing, tour, gallery, reference, embed) still wear the old styles and take the new tokens until W3. See [`design/README.md`](design/README.md) for the whole process and [`design/contract.md`](design/contract.md) for what a redesign may change.
 
 ## Run it
 
@@ -57,10 +57,12 @@ src/
   content/    datasets (Brewline), examples, tour lessons, cheat sheet, landing copy, config JSON Schema
   ui/         presentational components — the part a redesign replaces
   routes/     pages: hooks in, ui out
-  styles/     tokens.css (the design contract) + wireframe.css (the placeholder skin)
+  styles/     tokens.css (the design contract, dark on `:root`) + wireframe.css (the skin: shell, workbench, output, host, overlays; pages)
+public/       favicon, apple-touch icon, OG image, and the self-hosted fonts in `fonts/`
 ```
 
 **Things worth knowing:**
+- **Lint.** `npm run lint` runs `oxlint` (type-aware) on `src/ui`, `src/monaco`, `test` and `scripts`. The rest of `src/` (engine, hooks, routes, content) has findings that are not fixed yet.
 - **Console (`LOG`).** The runtime sends a `log` event for each `LOG(value, label?)` (`src/runtime/ports.ts`). The engine collects them in `RunReport.logs`, and `ui/output/ConsoleView.tsx` lists them in order. Hovering a line highlights the `LOG` call; clicking selects it.
 - **Hybrid execution, made visible.** The runtime sends a `statement` event, with the source range, just before each statement reaches the data port (`src/runtime/ports.ts`). The engine keeps each range, so the Execution tab can highlight exactly which span of the program became which SQL.
 - **One parse serves everything.**
@@ -75,6 +77,7 @@ src/
 - **Nothing drifts silently.**
   - The repo's examples are imported as raw files.
   - `test/tokens.test.ts` fails if the grammar gains a keyword the highlighter doesn't know.
+  - `test/design-tokens.test.ts` fails if the two light blocks of `tokens.css` differ, if light and dark define different tokens, or if a syntax color falls below AA against the editor background.
   - `test/content.test.ts` runs every example, preset and lesson, and checks the starter doesn't already pass and the solution does.
 
 ## Adding content

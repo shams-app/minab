@@ -25,5 +25,7 @@ jobs:
       # the type-aware rules need the generated types.
       - run: npm run lint
       - run: npm run format:check
+      - run: npm run lint
+        working-directory: playground
       - run: npm run format:check
         working-directory: playground

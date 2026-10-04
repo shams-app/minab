@@ -25,7 +25,7 @@ engine (worker) → client → state/store → hooks → routes (composition) �
 
 ## 1. Design tokens
 
-All defined in `src/styles/tokens.css`. Light values sit on `:root`. Dark values are repeated in two blocks that must stay identical: `@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) {…} }` and `:root[data-theme='dark'] {…}`.
+All defined in `src/styles/tokens.css`. Dark values sit on `:root` (dark is the default). Light values are repeated in two blocks that must stay identical: `@media (prefers-color-scheme: light) { :root:not([data-theme='dark']) {…} }` and `:root[data-theme='light'] {…}`. `test/design-tokens.test.ts` checks this.
 
 ### Surfaces and text
 | Token | Used for |

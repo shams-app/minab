@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import type { AstNodeView, Range } from '../../engine/protocol.js';
-import { Badge, EmptyState } from '../primitives/primitives.js';
+import { EmptyState } from '../primitives/primitives.js';
 import { Icon } from '../primitives/Icon.js';
 
 export interface AstViewProps {
@@ -37,7 +37,7 @@ function Node({ node, depth, onHighlight, onReveal }: { node: AstNodeView; depth
                         {k}=<code>{JSON.stringify(v)}</code>
                     </span>
                 ))}
-                {node.inferredType && <Badge tone="accent">{node.inferredType}</Badge>}
+                {node.inferredType && <span className="mb-ast-inferred">{node.inferredType}</span>}
             </div>
             {open && node.children.length > 0 && (
                 <ul role="group">
