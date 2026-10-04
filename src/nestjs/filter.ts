@@ -22,6 +22,7 @@ function safeError(error: MinabError): MinabError {
     return { code: error.code, message: 'internal error', params: {} };
 }
 
+/** The HTTP status and the JSON body for a Minab exception. The body never has SQL, a driver message or a stack. */
 export function minabErrorBody(exception: MinabException | WireError): { status: number; body: Record<string, unknown> } {
     const error = exception.error;
     const status = minabHttpStatus(error.code);
@@ -30,6 +31,7 @@ export function minabErrorBody(exception: MinabException | WireError): { status:
     return { status, body: { v: 1, error: shown, ...(diagnostics ? { diagnostics } : {}) } };
 }
 
+/** Turns a `MinabException` or a `WireError` into an HTTP answer. Add it to a controller with `@UseFilters`. */
 @Catch(MinabException, WireError)
 export class MinabExceptionFilter implements ExceptionFilter {
     constructor(@Optional() @Inject(HttpAdapterHost) private readonly adapterHost?: HttpAdapterHost) {}

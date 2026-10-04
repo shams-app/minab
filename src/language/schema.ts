@@ -39,6 +39,7 @@ export type ColumnType =
     | { kind: 'ref'; table: string; nullable: boolean; foreignKey?: string }
     | { kind: 'collection'; table: string; foreignKey?: string };
 
+/** One column of a table: a scalar, a `ref` to another table, or a `collection` of rows of another table. */
 export interface MinabColumnSchema {
     /** The name Minab source and result rows use. Any text (spec §2.4). */
     name: string;
@@ -47,6 +48,7 @@ export interface MinabColumnSchema {
     sqlName?: string;
 }
 
+/** One table of the schema. */
 export interface MinabTableSchema {
     /** The name Minab source uses. Any text (spec §2.4). */
     name: string;
@@ -67,6 +69,7 @@ export interface MinabTableSchema {
     primaryKey?: string;
 }
 
+/** The whole read surface of every program: the tables and columns a program may use. A program can read all of it, so keep it small. */
 export interface MinabSchema {
     /**
      * Names this schema for caches (runtime D29). Two schemas with the same
