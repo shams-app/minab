@@ -2,14 +2,14 @@ import { useNavigate } from 'react-router';
 import { useGallery } from '../hooks/useGallery.js';
 import { preloadEditor } from '../monaco/LazyCodeEditor.js';
 import { ExampleCard, ExampleGrid, GalleryFilters } from '../ui/gallery/Gallery.js';
-import { SectionHeader } from '../ui/landing/Landing.js';
+import { PageHeader } from '../ui/landing/Landing.js';
 
 export function ExamplesPage() {
     const gallery = useGallery();
     const navigate = useNavigate();
     return (
         <div className="mb-page" onMouseEnter={preloadEditor}>
-            <SectionHeader
+            <PageHeader
                 title="Examples"
                 body={`${gallery.total} programs, every one verified against the engine. The first eleven are the repository’s own \`examples/\`.`}
             />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CheatSection } from '../../content/reference/cheatsheet.js';
 import { CodeBlock, Markdown } from '../primitives/Code.js';
 import { Badge, Button, EmptyState } from '../primitives/primitives.js';
@@ -24,27 +24,63 @@ export function CheatSheet({ sections, specUrl, onOpenExample, compact }: CheatS
             }))
             .filter(s => s.entries.length > 0);
     }, [sections, query]);
+    const total = filtered.reduce((n, s) => n + s.entries.length, 0);
+    const [inView, setInView] = useState<string>();
+    // The section chip of the section being read turns active.
+    useEffect(() => {
+        if (compact || typeof IntersectionObserver === 'undefined') return;
+        const seen = new Set<string>();
+        const observer = new IntersectionObserver(
+            entries => {
+                for (const e of entries) e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id);
+                const first = filtered.find(s => seen.has(`ref-${s.id}`));
+                if (first) setInView(first.id);
+            },
+            { rootMargin: '-120px 0px -60% 0px' }
+        );
+        for (const s of filtered) {
+            const node = document.getElementById(`ref-${s.id}`);
+            if (node) observer.observe(node);
+        }
+        return () => observer.disconnect();
+    }, [filtered, compact]);
+    const searching = query.trim() !== '';
     return (
         <div className="mb-cheatsheet" data-compact={compact ? 'true' : undefined}>
-            <div className="mb-search">
-                <Icon name="search" />
-                <input
-                    className="mb-input"
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="Search: GROUPBY, $, CAST, switch…"
-                    aria-label="Search the cheat sheet"
-                />
+            <div className="mb-cheatsheet-sticky">
+                <div className="mb-search" data-filled={searching ? 'true' : undefined}>
+                    <Icon name="search" />
+                    <input
+                        className="mb-input"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Search: GROUPBY, $, CAST, switch…"
+                        aria-label="Search the cheat sheet"
+                    />
+                    {searching ? (
+                        <span className="mb-search-count mb-mono" role="status">
+                            {total} {total === 1 ? 'card' : 'cards'}
+                        </span>
+                    ) : (
+                        compact && <kbd className="mb-kbd mb-search-hint">esc</kbd>
+                    )}
+                </div>
+                {!compact && (
+                    <nav className="mb-cheatsheet-toc" aria-label="Sections">
+                        {filtered.map(s => (
+                            <a
+                                key={s.id}
+                                className="mb-chip"
+                                href={`#ref-${s.id}`}
+                                data-state={searching || inView === s.id ? 'active' : undefined}
+                                aria-current={!searching && inView === s.id ? 'location' : undefined}
+                            >
+                                {s.title}
+                            </a>
+                        ))}
+                    </nav>
+                )}
             </div>
-            {!compact && (
-                <nav className="mb-cheatsheet-toc" aria-label="Sections">
-                    {filtered.map(s => (
-                        <a key={s.id} href={`#ref-${s.id}`}>
-                            {s.title}
-                        </a>
-                    ))}
-                </nav>
-            )}
             {filtered.length === 0 && (
                 <EmptyState icon="search" title="No matches">
                     Try a keyword, like FROM or EXISTS.
@@ -69,8 +105,8 @@ export function CheatSheet({ sections, specUrl, onOpenExample, compact }: CheatS
                                 <CodeBlock code={entry.syntax} copyable />
                                 <Markdown source={entry.description} />
                                 {entry.exampleId && (
-                                    <Button size="sm" variant="ghost" icon="play" onClick={() => onOpenExample(entry.exampleId!)}>
-                                        Run an example
+                                    <Button size="sm" variant="ghost" className="mb-cheat-run" onClick={() => onOpenExample(entry.exampleId!)}>
+                                        Run an example →
                                     </Button>
                                 )}
                             </article>

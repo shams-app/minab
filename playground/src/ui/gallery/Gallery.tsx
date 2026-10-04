@@ -1,13 +1,18 @@
 import type { Example, ExampleTag, Level } from '../../content/types.js';
 import { TAG_LABELS } from '../../content/examples/index.js';
-import { CodeBlock, Inline } from '../primitives/Code.js';
+import { CodeBlock, Inline, InlineCode } from '../primitives/Code.js';
 import { Badge, Button, EmptyState } from '../primitives/primitives.js';
 import { Icon } from '../primitives/Icon.js';
 
 export interface GalleryFiltersProps {
     query: string;
     onQuery: (query: string) => void;
-    tags: Array<{ id: ExampleTag; label: string; count: number; active: boolean }>;
+    tags: Array<{
+        id: ExampleTag;
+        label: string;
+        count: number;
+        active: boolean;
+    }>;
     onToggleTag: (tag: ExampleTag) => void;
     level: Level | 'all';
     onLevel: (level: Level | 'all') => void;
@@ -29,7 +34,7 @@ export function GalleryFilters(props: GalleryFiltersProps) {
                     aria-label="Search examples"
                 />
             </div>
-            <div className="mb-chip-row" role="group" aria-label="Filter by topic">
+            <div className="mb-chip-row mb-chip-scroll" role="group" aria-label="Filter by topic">
                 {props.tags.map(tag => (
                     <button
                         key={tag.id}
@@ -40,11 +45,11 @@ export function GalleryFilters(props: GalleryFiltersProps) {
                         data-tag={tag.id}
                         onClick={() => props.onToggleTag(tag.id)}
                     >
-                        {tag.label} <span className="mb-muted">{tag.count}</span>
+                        {tag.label} <span className="mb-chip-count">{tag.count}</span>
                     </button>
                 ))}
             </div>
-            <div className="mb-row">
+            <div className="mb-filter-row">
                 <label className="mb-label" htmlFor="gallery-level">
                     Level
                 </label>
@@ -54,13 +59,13 @@ export function GalleryFilters(props: GalleryFiltersProps) {
                     <option value="intermediate">Intermediate</option>
                     <option value="advanced">Advanced</option>
                 </select>
-                <span className="mb-muted" role="status">
+                <span className="mb-count mb-mono" role="status">
                     {props.resultCount} of {props.total}
                 </span>
                 {props.resultCount !== props.total && (
-                    <Button size="sm" variant="ghost" onClick={props.onClear}>
+                    <button type="button" className="mb-link-button" onClick={props.onClear}>
                         Clear filters
-                    </Button>
+                    </button>
                 )}
             </div>
         </div>
@@ -97,7 +102,7 @@ export function ExampleCard({ example, href, onOpen }: ExampleCardProps) {
                     <Inline text={example.summary} />
                 </p>
             </header>
-            <CodeBlock code={preview.split('\n').slice(0, 7).join('\n')} className="mb-example-preview" />
+            <CodeBlock code={preview.split('\n').slice(0, 5).join('\n')} className="mb-example-preview" />
             <footer>
                 <div className="mb-chip-row">
                     {example.tags.map(tag => (
@@ -106,7 +111,7 @@ export function ExampleCard({ example, href, onOpen }: ExampleCardProps) {
                         </Badge>
                     ))}
                 </div>
-                <span className="mb-muted">
+                <span className="mb-example-meta mb-mono">
                     {example.level} · {example.specRef}
                     {example.repoPath ? ' · from the repo' : ''}
                 </span>
@@ -116,6 +121,14 @@ export function ExampleCard({ example, href, onOpen }: ExampleCardProps) {
 }
 
 export function ExampleGrid({ children, empty, onClear }: { children: React.ReactNode; empty: boolean; onClear: () => void }) {
-    if (empty) return <EmptyState icon="search" title="No examples match" action={<Button onClick={onClear}>Clear filters</Button>} />;
+    if (empty)
+        return (
+            <EmptyState glyph="∅" title="No examples match" action={<Button onClick={onClear}>Clear filters</Button>}>
+                <code className="mb-empty-code">
+                    <InlineCode>EXISTS(#Example[.title LIKE $])</InlineCode> <span className="tok tok-constant">→ false</span>
+                </code>
+                <p>Try fewer words, another topic or a different level.</p>
+            </EmptyState>
+        );
     return <div className="mb-example-grid">{children}</div>;
 }

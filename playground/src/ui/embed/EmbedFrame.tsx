@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Wordmark } from '../shell/AppShell.js';
+import { Icon } from '../primitives/Icon.js';
+import { Lockup } from '../shell/AppShell.js';
 
 export interface EmbedFrameProps {
     title?: string;
@@ -15,13 +16,22 @@ export function EmbedFrame({ title, editor, output, runButton, openHref }: Embed
         <div className="mb-embed">
             <header className="mb-embed-head">
                 <a href={openHref} target="_blank" rel="noreferrer" className="mb-embed-brand">
-                    <Wordmark />
+                    <Lockup markSize={18} />
                 </a>
                 {title && <span className="mb-embed-title">{title}</span>}
                 <div className="mb-row">
                     {runButton}
-                    <a className="mb-button" data-variant="ghost" data-size="sm" href={openHref} target="_blank" rel="noreferrer">
-                        Open in playground ↗
+                    <a
+                        className="mb-button mb-embed-open"
+                        data-variant="ghost"
+                        data-size="sm"
+                        href={openHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open in playground"
+                    >
+                        <span className="mb-embed-open-text">Open in playground</span>
+                        <Icon name="external" size={14} />
                     </a>
                 </div>
             </header>
