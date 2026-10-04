@@ -178,6 +178,9 @@ function utf8Length(text: string): number {
  * quoted names and comments does not count. The parser takes more than linear time and stack on deep
  * programs (a 64 KB source could use gigabytes), so this check comes first.
  */
+/** A source nested at least this deep is a suspect when the parser fails with a TypeError. Overflows were seen from about 80 levels. */
+const STACK_SUSPECT_DEPTH = 40;
+
 export function bracketDepth(source: string): number {
     let depth = 0;
     let deepest = 0;
@@ -244,7 +247,9 @@ export async function prepareProgram(
         } catch (e) {
             // The parser ran out of stack on a deep program (some shapes fail at about 80 levels). The depth it
             // could not take counts as over the limit, and `used` is a lower bound.
-            if (e instanceof RangeError) {
+            // An overflow at an unlucky place can also surface as a TypeError (a node was half built, seen on
+            // Node 24 with a warm parser), so a TypeError on a deeply nested source counts as an overflow too.
+            if (e instanceof RangeError || (e instanceof TypeError && brackets >= STACK_SUSPECT_DEPTH)) {
                 return stoppedAtPrepare(
                     set,
                     recordTable,

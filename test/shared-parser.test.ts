@@ -6,7 +6,7 @@
  */
 
 import { EmptyFileSystem } from 'langium';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { parseConfig } from '../src/host/config.js';
 import { createMinabServices } from '../src/language/minab-module.js';
 import type { MinabSchema } from '../src/language/schema.js';
@@ -69,5 +69,20 @@ describe('the shared production parser', () => {
         const program = await other.prepare('.weight > 1');
         expect(program.diagnostics).toEqual([]);
         expect(program.ok).toBe(true);
+    });
+
+    test('a TypeError from a stack overflow on a deep source is limit.tooDeep, on a shallow source it is not hidden', async () => {
+        const { Minab } = createMinabServices(EmptyFileSystem, orderSchema('spy'), record, { mode: 'production' });
+        const parser = Minab.parser.LangiumParser; // the shared one
+        const minab = createMinab({ schema: orderSchema('spy'), ruleContext: record, limits: { nestingDepth: 1_000_000 } });
+        const overflow = () => {
+            throw new TypeError("Cannot set properties of undefined (setting 'tail')");
+        };
+        const spy = vi.spyOn(parser, 'parse').mockImplementationOnce(overflow);
+        const deep = await minab.prepare(`${'['.repeat(60)}1${']'.repeat(60)}`);
+        expect(deep.diagnostics.map(d => d.code)).toEqual(['limit.tooDeep']);
+        spy.mockImplementationOnce(overflow);
+        await expect(minab.prepare('1 + 1')).rejects.toThrow(TypeError);
+        spy.mockRestore();
     });
 });
