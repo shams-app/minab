@@ -621,6 +621,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `wire format version ${p.version} is not supported (supported: ${p.supported})`,
         doc: 'The "v" field of the request names a wire format this server does not know. Use one of the supported versions.'
+    }),
+    'wire.workerFailed': entry<{ reason: string }>({
+        severity: error,
+        message: p => `the Minab worker failed: ${p.reason}`,
+        doc: 'The browser worker could not do the work: it stopped, it was disposed, it did not know the program, or it got a message it could not read. Create the runtime again.'
     })
 } as const;
 
