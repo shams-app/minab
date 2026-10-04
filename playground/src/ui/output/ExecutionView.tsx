@@ -52,9 +52,7 @@ function TraceItem({ entry, onHighlight, onReveal }: { entry: TraceEntry } & Pic
             <div className="mb-trace-head">
                 {entry.dryRun ? <Badge tone="check-only">Write {entry.index} · dry run</Badge> : <Badge tone="pushdown">Statement {entry.index}</Badge>}
                 <span className="mb-muted">
-                    {entry.dryRun
-                        ? 'not run'
-                        : `${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} · ${entry.durationMs.toFixed(1)} ms`}
+                    {entry.dryRun ? 'not run' : `${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} · ${entry.durationMs.toFixed(1)} ms`}
                 </span>
             </div>
             {origin && (

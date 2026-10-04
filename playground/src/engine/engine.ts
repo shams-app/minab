@@ -189,7 +189,10 @@ class Tracer {
                     columns: [],
                     durationMs: 0,
                     dryRun: true,
-                    origin: event.range && node && sameRange(event.range, node.$cstNode!.range) ? { range: event.range, type: node.$type, text: node.$cstNode!.text } : undefined
+                    origin:
+                        event.range && node && sameRange(event.range, node.$cstNode!.range)
+                            ? { range: event.range, type: node.$type, text: node.$cstNode!.text }
+                            : undefined
                 });
             }
             if (event.kind === 'log') {

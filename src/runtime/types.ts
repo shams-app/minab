@@ -120,6 +120,7 @@ export interface RunOptions {
     writes?: WriteMode;
 }
 
+/** How a run treats `INSERT`, `UPDATE` and `DELETE`: collect them (`dry-run`) or run them in one transaction (`apply`). */
 export type WriteMode = 'dry-run' | 'apply';
 
 /** One `INSERT`, `UPDATE` or `DELETE` of a run. */

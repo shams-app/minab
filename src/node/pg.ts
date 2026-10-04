@@ -25,12 +25,20 @@ export function pgDataPort(client: Pick<PgClientLike, 'query'>): DataPort {
     return wrapQuery((text, params) => client.query(text, params));
 }
 
-/** What the write port needs from a `pg` pool: it lends one connection for the whole transaction. */
-export interface PgPoolLike {
-    connect(): Promise<Pick<PgClientLike, 'query'> & { release(error?: unknown): void }>;
+/** A connection lent by a pool: `query`, and `release` to give it back. */
+export interface PgPooledClient extends Pick<PgClientLike, 'query'> {
+    /** Gives the connection back. A truthy `error` makes the pool drop it. */
+    release(error?: unknown): void;
 }
 
-type PgQueryable = Pick<PgClientLike, 'query'>;
+/** What the write port needs from a `pg` pool: it lends one connection for the whole transaction. */
+export interface PgPoolLike {
+    /** Lends one connection. */
+    connect(): Promise<PgPooledClient>;
+}
+
+/** What `pgWritePort` needs from a client: only `query`. */
+export type PgQueryable = Pick<PgClientLike, 'query'>;
 
 function isPool(source: PgQueryable | PgPoolLike): source is PgPoolLike {
     // A `Client` has `connect` too, so ask for the counter that only a pool has.

@@ -55,6 +55,7 @@ export function queryFunctionDataPort(query: QueryFunction): DataPort {
  */
 export type WriteQueryResult = QueryFunctionResult | { rows?: Row[]; rowCount?: number | null } | [Row[], number];
 
+/** A query function for writes: `(text, params)` gives rows, `{ rows, rowCount }` or `[rows, affected]`. */
 export type WriteQueryFunction = (text: string, params: unknown[]) => Promise<WriteQueryResult>;
 
 /** The number of rows a write changed, from any of the results above. */
