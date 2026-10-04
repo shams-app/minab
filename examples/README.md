@@ -42,7 +42,7 @@ A check-only example (a construct that `minab run` does not execute yet):
 - A folder that contains `<folder name>.minab` must have an `expected.json`.
   If it does not, `test/examples.test.ts` fails.
 - A folder without a `.minab` program of its own name is not an example and is
-  ignored. Later phases add `examples/nestjs` and `examples/browser` this way.
+  ignored. `examples/nestjs` (a NestJS app with its own package) is one; `examples/browser` will be another.
 - The program starts with a comment that says how to run it. A check-only
   program also says `CHECK-ONLY` in that comment.
 - A new example is also listed in the table of the root `README.md`.
