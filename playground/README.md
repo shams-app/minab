@@ -48,8 +48,8 @@ src/
     database.ts     PGlite: lazy boot, citext, JSON-shaped results, preview, SQL console
     ddl.ts          host schema + seed rows → CREATE TABLE / INSERT (also the exported seed.sql)
     protocol.ts     every type that crosses the worker boundary
-    worker.ts       message router
-  client/     the UI thread's promise API over the worker (restartable)
+    worker.ts       `serveEngine`: the browser entry's `serveMinab` with the engine as its one host request
+  client/     the UI thread's promise API over the worker: a thin layer over `createWorkerMinab` (restartable, a run can be cancelled)
   state/      zustand store, the controller (debounced analyze, auto-run, host application), share links, persistence
   hooks/      view models: useWorkbench, useHost, useTour, useGallery, useShare, useCommands, useEngine, useTheme, useSnippet
   monaco/     Monaco, trimmed; Minab language + providers; theme generated from CSS tokens; lazy wrapper

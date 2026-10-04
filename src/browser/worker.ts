@@ -50,9 +50,26 @@ export interface WorkerPorts {
     events?: EventSink;
 }
 
+/** A handler for `WorkerMinab.request`. `signal` aborts when the main thread cancels the request. */
+export type RequestHandler = (payload: unknown, context: { signal: AbortSignal }) => unknown;
+
 export interface ServeOptions {
     ports?: WorkerPorts;
+    /**
+     * Requests the host app's own code answers in the worker, by name (`WorkerMinab.request(name, payload)`).
+     * The payload and the answer must be clonable by `postMessage`. A handler that throws gives `wire.requestFailed`.
+     */
+    requests?: Record<string, RequestHandler>;
 }
+
+export interface MinabServer {
+    close(): void;
+    /** Sends an event to `WorkerMinab.onEvent` on the main thread. The payload must be clonable. */
+    emit(name: string, payload?: unknown): void;
+}
+
+/** One server for each endpoint: serving an endpoint again replaces the server that was there. */
+const served = new WeakMap<object, MinabServer>();
 
 interface PendingCall {
     resolve(value: Json): void;
@@ -70,7 +87,9 @@ function portFailure(error: MinabError): Error {
 }
 
 /** Starts answering the messages that come in at `endpoint`. */
-export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {}): { close(): void } {
+export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {}): MinabServer {
+    // A worker file that imports this module starts a server at once (see the end of the file). Its own call replaces that one.
+    served.get(endpoint)?.close();
     let minab: Minab | undefined;
     let runtimeOptions: WorkerRuntimeOptions | undefined;
     // The editor services (phase E5): their own small cache, because a document here is never checked or run.
@@ -191,6 +210,25 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
         }
     }
 
+    async function handleRequest(message: Extract<ToWorker, { type: 'request' }>): Promise<void> {
+        const handlers = options.requests ?? {};
+        const handler = Object.hasOwn(handlers, message.name) ? handlers[message.name] : undefined;
+        const failure = (reason: string) => fail(message.id, runError('wire.requestFailed', undefined, { reason }));
+        if (!handler) return failure(`unknown request ${message.name}`);
+        const controller = new AbortController();
+        runs.set(message.id, controller);
+        try {
+            const value = await handler(message.payload, { signal: controller.signal });
+            if (controller.signal.aborted) return fail(message.id, runError('cancelled', undefined));
+            answer(message.id, value === undefined ? null : value);
+        } catch (error) {
+            if (controller.signal.aborted) return fail(message.id, runError('cancelled', undefined));
+            failure(error instanceof Error ? error.message : String(error));
+        } finally {
+            runs.delete(message.id);
+        }
+    }
+
     async function handle(message: ToWorker): Promise<void> {
         switch (message.type) {
             case 'create':
@@ -248,6 +286,8 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
             }
             case 'run':
                 return handleRun(message);
+            case 'request':
+                return handleRequest(message);
             case 'cancel':
                 runs.get(message.id)?.abort();
                 return;
@@ -284,12 +324,18 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
         });
     });
     endpoint.start?.();
-    return {
+    const server: MinabServer = {
         close() {
             closed = true;
             minab?.dispose();
+            if (served.get(endpoint) === server) served.delete(endpoint);
+        },
+        emit(name, payload) {
+            if (!closed) send({ v: BRIDGE_VERSION, type: 'event', name, payload });
         }
     };
+    served.set(endpoint, server);
+    return server;
 }
 
 // In a Web Worker this file starts itself. In Node or on the main thread it only exports `serveMinab`.

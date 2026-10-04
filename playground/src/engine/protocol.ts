@@ -233,7 +233,8 @@ export interface EngineApi {
     warmUp(): Promise<void>;
     setHost(host: HostSettings): Promise<{ ok: true; tables: string[] } | { ok: false; error: string }>;
     analyze(source: string): Promise<AnalyzeReport>;
-    run(source: string, runId: number): Promise<RunReport>;
+    /** `signal` stops the program at its next check. It is not sent over the bridge: the host request's own signal is used. */
+    run(source: string, runId: number, signal?: AbortSignal): Promise<RunReport>;
     /** Runs against a one-off host, leaving the current host untouched (landing-page snippets). */
     runSnippet(host: HostSettings, source: string): Promise<RunReport>;
     hover(source: string, offset: number): Promise<HoverInfo | undefined>;
@@ -249,14 +250,14 @@ export interface EngineApi {
 
 export type EngineMethod = keyof EngineApi;
 
+/** The name of the host request that carries every `EngineApi` method (see `engine/worker.ts`). */
+export const ENGINE_REQUEST = 'engine';
+
+/** What one `engine` request holds: the method and its arguments. A `signal` never crosses. */
 export interface EngineRequest<M extends EngineMethod = EngineMethod> {
-    id: number;
     method: M;
     args: Parameters<EngineApi[M]>;
 }
 
-export type EngineResponse = { id: number; ok: true; value: unknown } | { id: number; ok: false; error: string };
-
-export type EngineEvent = { event: 'status'; status: EngineStatus };
-
-export type EngineMessage = EngineResponse | EngineEvent;
+/** The host event with the engine status. */
+export const ENGINE_STATUS_EVENT = 'status';

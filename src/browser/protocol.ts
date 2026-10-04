@@ -4,7 +4,7 @@
  * Both sides import this file and nothing else of each other. Every message
  * is plain data that `postMessage` can clone, and every message has `v`.
  *
- * - The main thread sends requests with an `id` (`create`, `prepare`, `compile`, `run`, `editor`, `dispose`),
+ * - The main thread sends requests with an `id` (`create`, `prepare`, `compile`, `run`, `editor`, `request`, `dispose`),
  *   `cancel`, `release` and the answers to port calls (`port-result`).
  * - The worker answers each request with `result` and the same `id`. While a run is going, it can
  *   call back to a port on the main thread (`port-call`) and wait for the `port-result`.
@@ -70,7 +70,9 @@ export type ToWorker =
     | { v: 1; type: 'dispose'; id: string }
     /** Editor services (phase E5). They read the text: no program is kept. `offset` is a UTF-16 offset into `source`. */
     | { v: 1; type: 'editor'; id: string; method: EditorMethod; source: string; offset: number; ruleContext?: MinabRuleContext }
-    /** Aborts the run with this id and its pending port calls. */
+    /** A request to a handler the host app put in `serveMinab` (`requests`). `cancel` with the same `id` aborts it. */
+    | { v: 1; type: 'request'; id: string; name: string; payload?: unknown }
+    /** Aborts the run (or request) with this id and its pending port calls. */
     | { v: 1; type: 'cancel'; id: string }
     /** Frees a prepared program in the worker. */
     | { v: 1; type: 'release'; programId: string }
@@ -85,7 +87,9 @@ export type FromWorker =
     /** Asks the main thread to call a port. `runId` is the `id` of the run that needs it. */
     | { v: 1; type: 'port-call'; callId: string; runId: string; port: PortName; method: string; args: Json[] }
     /** The worker stopped waiting for this call (cancel or timeout). The main thread aborts the port's signal. */
-    | { v: 1; type: 'cancel-call'; callId: string };
+    | { v: 1; type: 'cancel-call'; callId: string }
+    /** An event the host app's worker code sent with `emit` (see `serveMinab`). */
+    | { v: 1; type: 'event'; name: string; payload: unknown };
 
 /** What `prepare` answers, besides the program id kept on both sides. */
 export interface PreparedInfo {
