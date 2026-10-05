@@ -250,7 +250,7 @@ Two findings, neither fixed here since both are outside "documentation":
 
 ---
 
-## Phase 9 — Packaging / release — Done (2026-09-19; not yet published)
+## Phase 9 — Packaging / release — Done (2026-09-19); published as 0.2.0 on 2026-10-05
 
 **Sign-off: Mechanical.**
 
