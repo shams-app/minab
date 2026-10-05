@@ -9,14 +9,14 @@ It also has a full type system, user-defined functions, `if`/`if!`/`switch`, thr
 
 ## Status
 
-Minab parses, resolves, validates, type-checks, compiles, and runs. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
+Minab 0.2.0 is the first public release. It parses, resolves, validates, type-checks, compiles, and runs. Before 1.0, a release may break something. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
 
 What runs:
 
 - **Parsing** — the full grammar.
 - **Scope resolution** — `.` / `^` / `#alias` / `KEY` against the spec §2.2 scope stack.
 - **Validation and type checking** — sigil placement, no implicit coercion, the §3.4 collection-vs-scalar boundary, §7.7 null rules.
-- **Execution** — a hybrid ([ADR 0001](docs/adr/0001-execution-strategy.md)): the relational layer compiles to parameterized SQL, everything else is interpreted against the record the host holds, with the interpreter pushing the smallest table-touching subexpression down to the compiler. Statements, all three loop forms, `LOG`, exact `DECIMAL` values and run limits all work.
+- **Execution** — a hybrid ([ADR 0001](docs/adr/0001-execution-strategy.md)): the relational layer compiles to parameterized SQL, everything else is interpreted against the record the host holds, with the interpreter pushing the smallest table-touching subexpression down to the compiler. Statements, all three loop forms, `INSERT`/`UPDATE`/`DELETE` (a dry run unless you apply them), `LOG`, exact `DECIMAL` values and run limits all work.
 - **A CLI** — `minab run` / `compile` / `check`, documented below.
 - **Editor support** — a language server and a VS Code extension, and Monaco support for web apps; see [`vscode-extension/`](vscode-extension/README.md).
 - **A web playground** — write, check, compile and run Minab in the browser against a real PostgreSQL (PGlite, WebAssembly), with a guided tour and a verified example gallery; see [`playground/`](playground/README.md).
@@ -27,7 +27,16 @@ What you can embed (see [Use Minab from your app](#use-minab-from-your-app)):
 - **NestJS** — a module, a service, an exception filter and a run endpoint for stored programs (`@shamsine/minab/nestjs`).
 - **The browser** — the runtime in a Web Worker, local runs, runs delegated to a server by program id, and Monaco (`@shamsine/minab/browser`, `@shamsine/minab/monaco`).
 
-Not executed yet, each failing with an explicit reason rather than a wrong answer: `INSERT`/`UPDATE`/`DELETE` (§10) and writes to a record path. They still parse, resolve, and type-check, so `minab check` works on them.
+Known limitations (the same list is in the [CHANGELOG](CHANGELOG.md#020---2026-10-05)):
+
+- A user function can be called inside a query only when its body is one expression (no `let`, no statements, no recursion). A host function, or a function that is not inlinable, in the value of an `INSERT` or `UPDATE` fails with `compile.notSql`.
+- A statement block inside a query is refused (`compile.blockInQuery`). A `LOG` inside a query prints nothing and gives a warning.
+- With several `GROUPBY` keys, `KEY.<name>` reads one key. A bare `KEY` has no value.
+- Some writes are refused or do not check: assigning through a member of a local `JSON` variable, a relation step after a to-many step in a write path (`compile.writePath`), and a filter on the fields of a `JSON` array element.
+- A dry run does not see its own writes in later reads (except `JSON` array columns), so a program that depends on its own writes can give another answer than with `--apply`.
+- A `JSON` column that holds the JSON value `null` is `null` in the interpreter, but not in SQL.
+- `minab.config.json` cannot declare host functions or inputs yet, so the CLI and the language server use none. Hosts declare them with `createMinab`.
+- The compiled SQL targets PostgreSQL only.
 
 The language is still in development, so any release before 1.0 may break something. The language spec §12 lists a handful of open questions; those are deferred additions to the language, not gaps in what's specified today.
 
@@ -42,7 +51,7 @@ minab --version
 
 Or run it without installing: `npx @shamsine/minab check my-rule.minab`.
 
-The package contains the CLI and the language server. The VS Code extension is a separate download: build or download `minab-vscode-<version>.vsix` and install it with `code --install-extension minab-vscode-<version>.vsix` (see [`vscode-extension/`](vscode-extension/README.md)).
+The package contains the CLI and the language server. The VS Code extension is a separate install: search for **Minab** (publisher `shamsine`) in the VS Code Marketplace, or in Open VSX for Cursor and VSCodium. You can also install a `minab-vscode-<version>.vsix` file with `code --install-extension minab-vscode-<version>.vsix` (see [`vscode-extension/`](vscode-extension/README.md)).
 
 ## Use Minab from your app
 
@@ -160,13 +169,11 @@ Each directory under [`examples/`](examples/) holds one program and the `minab.c
 | [`cancelled-orders-limit`](examples/cancelled-orders-limit/cancelled-orders-limit.minab) | Reducing a collection with a filter and `COUNT` | §3.4 |
 | [`booking-overlap`](examples/booking-overlap/booking-overlap.minab) | A record-level rule with a correlated `#Booking` check | §6.1 |
 | [`customer-exists`](examples/customer-exists/customer-exists.minab) | A field-level rule (`$`): a referential-integrity check | §6.2 |
-| [`discounted-total`](examples/discounted-total/discounted-total.minab) | A user function, called with `&` | §8 |
+| [`discounted-total`](examples/discounted-total/discounted-total.minab) | A user function, called by name | §8 |
 | [`order-status-switch`](examples/order-status-switch/order-status-switch.minab) | `switch` as an expression in a rule | §9.2 |
-| [`overdue-loop`](examples/overdue-loop/overdue-loop.minab) | A `for-in` loop — **check-only** | §9.4 |
-| [`order-dml`](examples/order-dml/order-dml.minab) | `UPDATE` / `INSERT` — **check-only** | §10 |
-| [`reconcile-overdue-accounts`](examples/reconcile-overdue-accounts/reconcile-overdue-accounts.minab) | Functions, loops, `if`, `is`, and writes together — **check-only** | showcase §14 |
-
-*Check-only* means `minab check` passes but `minab run` refuses, since the evaluator doesn't execute loops or writes yet.
+| [`overdue-loop`](examples/overdue-loop/overdue-loop.minab) | A `for-in` loop | §9.4 |
+| [`order-dml`](examples/order-dml/order-dml.minab) | `UPDATE` / `INSERT` (a dry run unless you use `--apply`) | §10 |
+| [`reconcile-overdue-accounts`](examples/reconcile-overdue-accounts/reconcile-overdue-accounts.minab) | Functions, loops, `if`, `is`, and writes together | showcase §14 |
 
 ## Usage
 
@@ -185,7 +192,7 @@ Three commands, each taking one `.minab` file:
 | `minab compile <file>` | Prints the SQL the program compiles to, with its parameters. Runs nothing. |
 | `minab run <file>` | Evaluates the program against a data source and prints the result. |
 
-Options: `-c/--config <file>`, `-d/--database <url>`, `-r/--record <file>`, `--field <json>`, `--json`, `--trace`, `-h/--help`, `-v/--version`.
+Options: `-c/--config <file>`, `-d/--database <url>`, `-r/--record <file>`, `--field <json>`, `--json`, `--trace`, `--apply`, `--no-logs`, `-h/--help`, `-v/--version`.
 
 Exit codes are `0` for success, `1` for a program that is invalid or failed to run, `2` for a bad invocation. A validation rule that evaluates to `false` still exits `0` — the rule's answer is on stdout, and the exit status says whether the program *ran*, not what it decided. Diagnostics and `--trace` output go to stderr, so `minab run … --json` stays pipeable.
 
