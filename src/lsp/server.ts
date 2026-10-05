@@ -21,6 +21,7 @@ import {
     type InitializeResult
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { isAbsolute, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     complete,
@@ -68,6 +69,23 @@ function sameRange(a: Diagnostic, b: Diagnostic): boolean {
 
 export const CONFIG_GLOB = '**/minab.config.json';
 
+/**
+ * The server sends this notification after it checks a document. It tells the
+ * client which config file the document uses (`configPath` is `null` when there is none).
+ */
+export const CONFIG_USED_NOTIFICATION = 'minab/configUsed';
+
+export interface ConfigUsedParams {
+    uri: string;
+    configPath: string | null;
+}
+
+/** The `minab.configPath` setting. Empty or missing means: find the config like the CLI. */
+function configPathSetting(settings: unknown): string | undefined {
+    const value = (settings as { configPath?: unknown } | null | undefined)?.configPath;
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
 /** Starts the language server and listens on its connection. */
 export function startMinabLanguageServer(options: MinabLanguageServerOptions = {}): MinabLanguageServer {
     const connection = options.connection ?? createConnection(ProposedFeatures.all);
@@ -112,6 +130,7 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
         // A newer version came while this one was checked: its own check will send the diagnostics.
         if (documents.get(uri)?.version !== version) return;
         sent.set(uri, document.diagnostics ?? []);
+        void connection.sendNotification(CONFIG_USED_NOTIFICATION, { uri, configPath: resolved.configPath ?? null } satisfies ConfigUsedParams);
         await connection.sendDiagnostics({ uri, version, diagnostics: document.diagnostics ?? [] });
     }
 
@@ -131,9 +150,22 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
         void connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
     });
 
+    // A relative `minab.configPath` is relative to the first workspace folder.
+    let workspaceRoot: string | undefined;
+    function applyConfigPath(setting: string | undefined): void {
+        registry.setOverride(setting === undefined || isAbsolute(setting) || workspaceRoot === undefined ? setting : resolvePath(workspaceRoot, setting));
+    }
+
     let canWatch = false;
     connection.onInitialize((params): InitializeResult => {
         canWatch = params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
+        const rootUri = params.workspaceFolders?.[0]?.uri ?? params.rootUri;
+        try {
+            workspaceRoot = rootUri?.startsWith('file:') ? fileURLToPath(rootUri) : undefined;
+        } catch {
+            workspaceRoot = undefined;
+        }
+        applyConfigPath(configPathSetting(params.initializationOptions));
         return {
             capabilities: {
                 textDocumentSync: TextDocumentSyncKind.Incremental,
@@ -152,6 +184,13 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
     connection.onInitialized(() => {
         if (!canWatch) return;
         void connection.client.register(DidChangeWatchedFilesNotification.type, { watchers: [{ globPattern: CONFIG_GLOB }] });
+    });
+
+    // The client sends the `minab` settings when the user changes them.
+    connection.onDidChangeConfiguration(({ settings }) => {
+        applyConfigPath(configPathSetting((settings as { minab?: unknown } | null | undefined)?.minab));
+        registry.invalidateAll();
+        for (const textDocument of documents.all()) void schedule(textDocument);
     });
 
     connection.onDidChangeWatchedFiles(({ changes }) => {

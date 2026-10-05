@@ -1,9 +1,18 @@
 {
   "name": "minab-vscode",
   "displayName": "Minab",
-  "description": "Syntax highlighting and live diagnostics for Minab (.minab) files",
+  "description": "Syntax highlighting, snippets and live diagnostics for Minab (.minab) files",
   "publisher": "shamsine",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#0D1015",
+    "theme": "dark"
+  },
+  "homepage": "https://minab-lang.org",
+  "bugs": {
+    "email": "security@minab-lang.org"
+  },
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/shams-app/minab.git",
@@ -14,7 +23,9 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Snippets",
+    "Linters"
   ],
   "activationEvents": [
     "onLanguage:minab"
@@ -36,7 +47,51 @@
         "scopeName": "source.minab",
         "path": "./syntaxes/minab.tmLanguage.json"
       }
-    ]
+    ],
+    "snippets": [
+      {
+        "language": "minab",
+        "path": "./snippets/minab.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "minab.restartServer",
+        "title": "Restart Language Server",
+        "category": "Minab"
+      },
+      {
+        "command": "minab.openConfig",
+        "title": "Open Config File",
+        "category": "Minab"
+      }
+    ],
+    "configuration": {
+      "title": "Minab",
+      "properties": {
+        "minab.configPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Path to the `minab.config.json` to use for every `.minab` file. An empty value means: use the nearest `minab.config.json` above each file. A relative path starts at the first workspace folder."
+        },
+        "minab.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "enumDescriptions": [
+            "No trace.",
+            "Trace the messages between VS Code and the server.",
+            "Trace the messages and their content."
+          ],
+          "description": "How much of the communication with the Minab language server is written to the \"Minab\" output channel."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.json",
@@ -44,16 +99,28 @@
     "bundle:client": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=out/extension.js",
     "bundle:server": "esbuild ../src/language/main.ts --bundle --platform=node --format=esm --outfile=server/main.mjs --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\"",
     "package": "npm run bundle && vsce package --no-dependencies",
-    "check:vsix": "node scripts/check-vsix.mjs"
+    "check:vsix": "node scripts/check-vsix.mjs",
+    "test": "npm run bundle && tsc -p tsconfig.test.json && node out-test/runTest.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
     "@types/vscode": "^1.85.0",
     "typescript": "~5.9.3",
     "esbuild": "^0.25.0",
-    "@vscode/vsce": "^3.0.0"
+    "@vscode/vsce": "^3.0.0",
+    "@vscode/test-electron": "^2.5.2"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
-  }
+  },
+  "keywords": [
+    "minab",
+    "shamsine",
+    "query language",
+    "rules",
+    "validation",
+    "sql",
+    "language server",
+    "lsp"
+  ]
 }

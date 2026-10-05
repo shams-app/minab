@@ -23,11 +23,15 @@ const required = [
     'extension/server/main.mjs',
     'extension/syntaxes/minab.tmLanguage.json',
     'extension/language-configuration.json',
+    'extension/snippets/minab.json',
+    'extension/images/icon.png',
+    'extension/out/extension.js',
     'extension/readme.md',
     'extension/LICENSE.txt'
 ];
 const forbidden = [
     { test: entry => entry.startsWith('extension/src/'), why: 'source files' },
+    { test: entry => entry.startsWith('extension/test/') || entry.startsWith('extension/out-test/'), why: 'test files' },
     { test: entry => entry.endsWith('.map'), why: 'source maps' },
     { test: entry => entry.includes('node_modules/'), why: 'node_modules (the bundle has what it needs)' }
 ];
