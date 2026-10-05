@@ -23,6 +23,12 @@ export class ConfigRegistry {
     // Services are built from the file's content, so a changed file gives new services.
     private readonly cache = new ServiceCache(16, 'production');
     private readonly loaded = new Map<string, LoadedConfig | string>();
+    private override: string | undefined;
+
+    /** Use this config file for every document (the `minab.configPath` setting). `undefined` goes back to discovery. */
+    setOverride(configPath: string | undefined): void {
+        this.override = configPath;
+    }
 
     /** Forget a config file. The next `resolve` reads it again. */
     invalidate(configPath: string): void {
@@ -34,7 +40,7 @@ export class ConfigRegistry {
     }
 
     resolve(documentUri: string): ResolvedDocument {
-        const configPath = configPathOf(documentUri);
+        const configPath = this.override ?? configPathOf(documentUri);
         if (configPath === undefined) return { services: this.build(emptyConfig()) };
         let entry = this.loaded.get(configPath);
         if (entry === undefined) {

@@ -10,12 +10,19 @@ of its own `minab.config.json`. The features come from `src/editor/`.
   (triggers `.`, `#`, `(`), hover, go to definition, signature help (triggers `(`, `,`),
   document symbols, find references, rename (with prepare), semantic tokens, quick fixes (code actions),
   and the watch on `**/minab.config.json`.
+- `bin.ts`: the `minab-lsp` command (the second `bin` entry of the package). It starts the server on stdio.
 - `config-registry.ts`: `ConfigRegistry`. Finds the nearest config for a document (like the CLI),
   loads it once, and gives the services for its schema. It uses the runtime's `ServiceCache`, so two
-  configs with the same schema share one service set. `invalidate(path)` forgets a changed file.
+  configs with the same schema share one service set. `invalidate(path)` forgets a changed file. `setOverride(path)` makes every document use one file (the `minab.configPath` setting).
 - `adapters.ts`: converts `src/editor/` results to LSP types, and builds the semantic tokens legend. No logic of its own.
 
 ## Rules
+
+- Settings (E4): `configPath` comes in the initialization options and in `workspace/didChangeConfiguration`
+  (`settings.minab.configPath`). A relative path starts at the first workspace folder. An empty value goes
+  back to discovery. A change reads all configs again and checks all open documents again.
+- After each check the server sends the notification `minab/configUsed` (`{ uri, configPath }`, `configPath`
+  is `null` when there is no config). The VS Code status bar item shows it.
 
 - A document with no config, or with a config that cannot be read, has an empty schema. A broken
   config shows one warning message, once for each message.

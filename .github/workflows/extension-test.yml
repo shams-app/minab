@@ -1,0 +1,33 @@
+# Starts a real VS Code with the extension, opens a folder and checks that a type error gets a diagnostic.
+name: Extension smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vscode-extension/package-lock.json
+      # The extension bundles src/language/main.ts, so build the root first.
+      - run: npm ci
+      - run: npm run build
+      - run: npm ci
+        working-directory: vscode-extension
+      - uses: actions/cache@v4
+        with:
+          path: vscode-extension/.vscode-test
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('vscode-extension/package-lock.json') }}
+      # VS Code needs a display. xvfb-run gives it a virtual one.
+      - run: xvfb-run -a npm test
+        working-directory: vscode-extension

@@ -8,3 +8,6 @@ bun.lock
 .gitignore
 **/*.ts
 scripts/**
+test/**
+out-test/**
+tsconfig.test.json

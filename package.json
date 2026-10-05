@@ -90,7 +90,8 @@
     }
   },
   "bin": {
-    "minab": "./out/src/cli/bin.js"
+    "minab": "./out/src/cli/bin.js",
+    "minab-lsp": "./out/src/lsp/bin.js"
   },
   "files": [
     "out/src",

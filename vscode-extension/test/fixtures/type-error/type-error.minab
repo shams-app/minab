@@ -1,0 +1,3 @@
+FROM Order
+WHERE .status == 5
+SELECT .id

@@ -1,0 +1,63 @@
+{
+    "Record rule": {
+        "prefix": ["recordrule", "rule"],
+        "description": "A record rule: a true or false test on the fields of one record",
+        "body": ["// Record rule: true when the record is valid.", ".${1:field} ${2:>} ${3:0}"]
+    },
+    "Field rule": {
+        "prefix": ["fieldrule"],
+        "description": "A field rule: a true or false test on one value, written as $",
+        "body": ["// Field rule: \\$ is the value of the field.", "\\$ ${1:>} ${2:0}"]
+    },
+    "Query": {
+        "prefix": ["query", "from"],
+        "description": "A pipeline query: FROM, WHERE and SELECT",
+        "body": ["FROM ${1:Table}", "WHERE ${2:.field == value}", "SELECT ${3:.field}"]
+    },
+    "Query with grouping": {
+        "prefix": ["groupby"],
+        "description": "A pipeline query with GROUPBY, HAVING and ORDERBY",
+        "body": [
+            "FROM ${1:Table}",
+            "GROUPBY ${2:.field}",
+            "HAVING ${3:COUNT(.) > 1}",
+            "SELECT KEY AS ${4:key}, ${5:COUNT(.)} AS ${6:total}",
+            "ORDERBY ${6:total} DESC"
+        ]
+    },
+    "Function": {
+        "prefix": ["fn", "function"],
+        "description": "A function declaration",
+        "body": ["fn ${1:name}(${2:value}: ${3:INTEGER}): ${4:INTEGER} {", "\t${0:value}", "}"]
+    },
+    "Switch": {
+        "prefix": ["switch"],
+        "description": "A switch expression with a default case",
+        "body": ["switch ${1:.field} {", "\t${2:\"a\"} => ${3:1},", "\t_ => ${4:0}", "}"]
+    },
+    "If expression": {
+        "prefix": ["if"],
+        "description": "An if expression with an else branch",
+        "body": ["if ${1:condition} {", "\t${2:value}", "} else {", "\t${3:other}", "}"]
+    },
+    "If statement": {
+        "prefix": ["if!", "ifstatement"],
+        "description": "An if statement (it runs steps and has no value)",
+        "body": ["if! ${1:condition} {", "\t$0", "}"]
+    },
+    "Loop over a collection": {
+        "prefix": ["loop", "loopin"],
+        "description": "A loop over the items of a collection",
+        "body": ["loop ${1:item} in ${2:.items} {", "\t$0", "}"]
+    },
+    "Loop over a range": {
+        "prefix": ["loopfrom"],
+        "description": "A loop over a range of numbers",
+        "body": ["loop ${1:i} from ${2:1} to ${3:10} {", "\t$0", "}"]
+    },
+    "Variable": {
+        "prefix": ["let"],
+        "description": "A variable declaration",
+        "body": ["let ${1:name}: ${2:INTEGER} = ${3:0};"]
+    }
+}
