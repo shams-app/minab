@@ -8,7 +8,8 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    # Our own runner; pull requests from forks run on GitHub's (docs/ci-runner.md).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'minab' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

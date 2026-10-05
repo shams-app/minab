@@ -21,7 +21,8 @@ permissions:
 
 jobs:
   playwright:
-    runs-on: ubuntu-latest
+    # Our own runner; pull requests from forks run on GitHub's (docs/ci-runner.md).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'minab' }}
     defaults:
       run:
         working-directory: playground
@@ -37,7 +38,8 @@ jobs:
       - run: npm ci
         working-directory: .
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # Our runner has the system libraries already and cannot use sudo (docs/ci-runner.md).
+      - run: npx playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
       - run: npm run build
       - run: npm run test:site
       - uses: actions/upload-artifact@v4
@@ -48,7 +50,8 @@ jobs:
           retention-days: 7
 
   lighthouse:
-    runs-on: ubuntu-latest
+    # Our own runner; pull requests from forks run on GitHub's (docs/ci-runner.md).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'minab' }}
     defaults:
       run:
         working-directory: playground
@@ -65,4 +68,10 @@ jobs:
         working-directory: .
       - run: npm ci
       - run: npm run build
+      # GitHub's runners have Chrome. Ours does not, so Lighthouse uses Playwright's Chromium.
+      - name: Install Chromium for Lighthouse
+        if: runner.environment != 'github-hosted'
+        run: |
+          npx playwright install chromium
+          echo "CHROME_PATH=$(node -p "require('@playwright/test').chromium.executablePath()")" >> "$GITHUB_ENV"
       - run: npm run lighthouse

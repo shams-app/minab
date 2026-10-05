@@ -16,7 +16,8 @@ on:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    # Our own runner; pull requests from forks run on GitHub's (docs/ci-runner.md).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'minab' }}
     strategy:
       fail-fast: false
       matrix:

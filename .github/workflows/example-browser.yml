@@ -9,7 +9,8 @@ on:
 
 jobs:
   playwright:
-    runs-on: ubuntu-latest
+    # Our own runner; pull requests from forks run on GitHub's (docs/ci-runner.md).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'minab' }}
     services:
       postgres:
         image: postgres:16
@@ -54,7 +55,8 @@ jobs:
         run: |
           npm ci
           npm run setup
-          npx playwright install --with-deps chromium
+          # Our runner has the system libraries already and cannot use sudo (docs/ci-runner.md).
+          npx playwright install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
       - name: Playwright tests
         working-directory: examples/browser
         run: npm test

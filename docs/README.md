@@ -61,6 +61,7 @@ The [embedding guide](guides/embedding.md#8-limits-logs-security-and-versions) h
 ## Releasing
 
 - [Releasing Minab](releasing.md): the release checklist, the `next` channel, the scripts.
+- [The CI runner](ci-runner.md): which workflows run on our own machine and which on GitHub's.
 - [Changelog fragments](../changes/README.md) and the [CHANGELOG](../CHANGELOG.md).
 
 ## History and the plan

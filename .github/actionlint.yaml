@@ -1,0 +1,4 @@
+# The label of our own runner (docs/ci-runner.md), which actionlint cannot know.
+self-hosted-runner:
+  labels:
+    - minab

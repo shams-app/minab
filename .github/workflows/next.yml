@@ -27,6 +27,8 @@ concurrency:
 
 jobs:
   next:
+    # Stays on GitHub's runner: npm trusted publishing and provenance do not
+    # work on a self-hosted runner (docs/ci-runner.md).
     runs-on: ubuntu-latest
     env:
       REPO_PRIVATE: ${{ github.event.repository.private }}

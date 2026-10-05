@@ -24,7 +24,8 @@ concurrency:
 
 jobs:
   progress:
-    runs-on: ubuntu-latest
+    # Our own runner (docs/ci-runner.md).
+    runs-on: minab
     steps:
       - uses: actions/checkout@v4
         with:

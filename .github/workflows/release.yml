@@ -31,6 +31,8 @@ concurrency:
 
 jobs:
   release:
+    # Stays on GitHub's runner: npm trusted publishing and provenance do not
+    # work on a self-hosted runner (docs/ci-runner.md).
     runs-on: ubuntu-latest
     env:
       # A tag push is never a dry run. A manual run is one unless it says "false".
