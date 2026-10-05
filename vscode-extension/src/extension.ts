@@ -26,7 +26,7 @@ interface ConfigUsedParams {
 
 /** What other code (the smoke test) can ask the extension. */
 export interface MinabExtensionApi {
-    /** The text of the status bar item, or `undefined` while it is hidden. */
+    /** The text of the status bar item (without its icon), or `undefined` while it is hidden. */
     statusBarText(): string | undefined;
     /** The config file the server used for the last check of this document. `null`: none. `undefined`: not checked yet. */
     configUsedBy(uri: string): string | null | undefined;
@@ -104,7 +104,7 @@ export async function activate(context: ExtensionContext): Promise<MinabExtensio
     await client.start();
 
     return {
-        statusBarText: () => (shownConfig === undefined ? undefined : item.text),
+        statusBarText: () => (shownConfig === undefined ? undefined : item.text.replace(/^\$\([^)]*\)\s*/, '')),
         configUsedBy: uri => configByDocument.get(uri)
     };
 }
