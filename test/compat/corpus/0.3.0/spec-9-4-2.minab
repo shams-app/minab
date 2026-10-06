@@ -1,0 +1,7 @@
+let sumEven: INTEGER = 0;
+
+loop n from 0 to 20 by 2 {
+    sumEven = sumEven + n;
+}
+
+sumEven

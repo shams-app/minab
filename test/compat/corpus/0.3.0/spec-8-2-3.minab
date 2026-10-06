@@ -1,0 +1,5 @@
+fn cancelledOrdersFor(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId AND .status == "cancelled"
+    SELECT .id
+}

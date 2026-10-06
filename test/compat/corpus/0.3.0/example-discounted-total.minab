@@ -1,0 +1,12 @@
+// A user function (spec §8): typed parameters, a typed return, no `return`
+// keyword — the body's last expression is the result. A user function is
+// called by its name, like a built-in; its name needs a lowercase letter.
+//
+//   minab run discounted-total.minab
+//   minab compile discounted-total.minab     # explains why there is no SQL form
+
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    total - (total * rate / 100)
+}
+
+discounted(200, 15)

@@ -1,0 +1,4 @@
+let age: INTEGER? = null;                    // fine: INTEGER? accepts null
+let scores: INTEGER[]? = null;                // fine: the column itself can be null
+let scores2: INTEGER[]? = [1, 2, 3];          // fine: or a non-null array
+let scores3: INTEGER?[]? = [1, null, 3];      // fine: elements can be null too

@@ -1,0 +1,5 @@
+let total: INTEGER = 0;
+total += 5;    // total = total + 5
+
+let label: TEXT = "order";
+label += "-42";    // label = "order-42"

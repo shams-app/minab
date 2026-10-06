@@ -1,0 +1,1 @@
+let currentUser: TEXT = "x";      // error: "currentUser" is a host input

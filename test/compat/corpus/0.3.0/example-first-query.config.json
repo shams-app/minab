@@ -1,0 +1,31 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customer",
+        "primaryKey": "id",
+        "columns": { "id": "UUID", "name": "TEXT", "country": "TEXT?" }
+      },
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "customer": { "ref": "Customer", "foreignKey": "customer_id" },
+          "status": "TEXT",
+          "total": "DECIMAL"
+        }
+      }
+    ]
+  },
+  "data": {
+    "responses": [
+      {
+        "rows": [
+          { "id": "o-104", "total": 980.0, "customer_name": "Ada Lovelace" },
+          { "id": "o-87", "total": 412.5, "customer_name": "Grace Hopper" }
+        ]
+      }
+    ]
+  }
+}

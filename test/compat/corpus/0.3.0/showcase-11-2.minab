@@ -1,0 +1,1 @@
+let discount: DECIMAL? = if .tier == "gold" { 0.20 };

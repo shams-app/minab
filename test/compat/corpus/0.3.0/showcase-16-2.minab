@@ -1,0 +1,3 @@
+FROM Order
+WHERE .`Order date` <= .`Ship date`
+SELECT .id, .`FROM` AS source

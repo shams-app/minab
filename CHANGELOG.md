@@ -4,6 +4,15 @@ All notable changes to Minab are recorded here. The format follows [Keep a Chang
 
 The npm package (`@shamsine/minab`, the CLI and language server) and the VS Code extension (`minab-vscode`) are versioned together.
 
+## [0.3.0] - 2026-10-06
+
+The embeddable runtime (Node, NestJS, browser and Monaco entry points, Unicode names, the built-in library, the guides and the security and performance guards) was already part of 0.2.0. Version 0.3.0 adds the compatibility guard and the Marketplace-ready extension. The known limitations of 0.2.0 still apply.
+
+### Added
+
+- The VS Code extension is ready for the Marketplace: snippets, an icon, the settings `minab.configPath` and `minab.trace.server`, a status bar item that names the config file in use, the command "Minab: Restart Language Server", and a new README. A new `minab-lsp` command starts the language server for Neovim, Helix and Zed (see `docs/editors.md`).
+- The runtime exports `LANGUAGE_VERSION` and `migrate`, and `prepare` takes a `languageVersion` option, so a host can store the language version with each program. A program for a newer language gives `compat.newerLanguage`.
+
 ## [0.2.0] - 2026-10-05
 
 The first public release. Version 0.2.0 was packaged on 2026-09-19, but it was never published. This section covers the whole of it: the first build and everything that came after, up to the first release. Before 1.0, a minor release may change behavior. Entries marked **Breaking** changed something that only existed in the unpublished builds.
@@ -107,4 +116,5 @@ This is what does not run or does not check yet. Each item fails with an explici
 - The playground website is deployed from `main` to Cloudflare Pages, with preview deploys for pull requests and long caching for the large database files. The footer shows the Minab version. Lighthouse, accessibility and smoke checks run in CI, and they led to small fixes: keyboard focus on code blocks, a name for the tour progress bar, and better contrast for string and key colors in the light theme.
 - The playground runs loops, `.$index` and tuples, and the `overdue-loop` example runs.
 
+[0.3.0]: https://github.com/shams-app/minab/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shams-app/minab/releases/tag/v0.2.0

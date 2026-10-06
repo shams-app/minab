@@ -1,0 +1,41 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customer",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "name": "TEXT",
+          "orders": {
+            "collection": "Order",
+            "foreignKey": "customer_id"
+          }
+        }
+      },
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "status": "TEXT"
+        }
+      }
+    ]
+  },
+  "data": {
+    "responses": [
+      {
+        "match": "COUNT",
+        "value": 2
+      }
+    ]
+  },
+  "rule": {
+    "recordTable": "Customer"
+  },
+  "record": {
+    "id": "c-1",
+    "name": "Ada Lovelace"
+  }
+}
