@@ -10,18 +10,21 @@
 /** The language version of this runtime. An integer, 1 for the language of 0.2.0. */
 export const LANGUAGE_VERSION = 1;
 
+/** One step of a migration: rewrites the source of a program from one language version to the next. */
 export interface Migration {
     from: number;
     /** Always `from + 1`: a migration moves one step. */
     to: number;
     /** One sentence for the host developer: what changes in a program. */
     describe: string;
+    /** Gives the source of the program for version `to`. */
     transform(source: string): string;
 }
 
 /** The real migrations, in order. Empty today. */
 export const MIGRATIONS: readonly Migration[] = [];
 
+/** The result of `migrate`: the new source and the steps used, or the versions that have no path. */
 export type MigrateResult = { ok: true; source: string; applied: readonly Migration[] } | { ok: false; from: number; to: number };
 
 /** Runs the migrations from `fromVersion` up to `toVersion`. Fails when a step is missing. */
