@@ -1,0 +1,6 @@
+let priority: INTEGER = switch .status {
+    "urgent" => 1,
+    "high" => 2,
+    "normal", "low" => 3,
+    _ => 0
+};

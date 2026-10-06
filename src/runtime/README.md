@@ -19,6 +19,8 @@ database driver. A test checks the imports.
 - `errors.ts`: builds run errors from the registry, and maps a data port failure to a code.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
   `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `run()`. Also the `expect` check.
+- `migrate.ts`: `LANGUAGE_VERSION`, the list of `MIGRATIONS` (empty today) and `migrate(source, from, to)`. `prepare`
+  takes `languageVersion` (Q5). See `docs/compatibility.md`.
 - `analyze.ts`: program analysis (R5). `analyzeProgram` builds `PreparedProgram.analysis`
   from the AST and the schema. It never runs the program.
 - `service-cache.ts`: Langium services, cached by schema version, rule context and host declarations.

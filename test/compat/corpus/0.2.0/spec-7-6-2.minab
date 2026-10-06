@@ -1,0 +1,2 @@
+let point: (INTEGER, INTEGER) = (3, 4);
+let labeled: (TEXT, DECIMAL) = ("shipping", 12.50);

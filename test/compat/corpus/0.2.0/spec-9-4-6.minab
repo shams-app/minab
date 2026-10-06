@@ -1,0 +1,18 @@
+fn firstPairOver(a: INTEGER[], b: INTEGER[], limit: INTEGER): INTEGER {
+    let result: INTEGER = 0;
+
+    outer: loop x in a {
+        inner: loop y in b {
+            if x + y > limit {
+                result = x + y;
+                break outer;
+                null
+            } else {
+                continue inner;
+                null
+            }
+        }
+    }
+
+    result
+}

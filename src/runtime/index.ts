@@ -26,6 +26,8 @@ export type {
 export type { ColumnType, MinabColumnSchema, MinabRuleContext, MinabSchema, MinabTableSchema } from '../language/schema.js';
 export type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';
 export type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
+export { LANGUAGE_VERSION, MIGRATIONS, migrate } from './migrate.js';
+export type { MigrateResult, Migration } from './migrate.js';
 export { DEFAULT_LIMITS } from './limits.js';
 export type { Limits } from './limits.js';
 export { PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK } from './ports.js';

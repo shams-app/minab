@@ -1,0 +1,597 @@
+{
+  "spec-2-3-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-2-3-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-2-3-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-3-1-1.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-3-2-1.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-3-2-2.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-3-3-1.minab": {
+    "context": {
+      "recordTable": "Order",
+      "fieldType": "UUID"
+    },
+    "check": []
+  },
+  "spec-3-4-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-2-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-4.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-5.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-4-3-6.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-5-3-2-1.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-5-4-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-6-1-1.minab": {
+    "context": {
+      "recordTable": "Booking"
+    },
+    "check": []
+  },
+  "spec-6-1-2.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-6-1-3.minab": {
+    "context": {
+      "recordTable": "Booking"
+    },
+    "check": []
+  },
+  "spec-6-2-1.minab": {
+    "context": {
+      "recordTable": "Order",
+      "fieldType": "TEXT"
+    },
+    "check": []
+  },
+  "spec-6-2-2.minab": {
+    "context": {
+      "recordTable": "Order",
+      "fieldType": "DECIMAL"
+    },
+    "check": []
+  },
+  "spec-6-3-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-7-1-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-7-3-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-7-3-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-7-4-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-7-4-2.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-7-6-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-2-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-2-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-2-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-3-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-6-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-8-7-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-1-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-1-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-2-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-2-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-2-4.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-9-3-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-3-7.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-3-8.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-4-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-4-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-4-4.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "spec-9-4-5.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-4-6.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "spec-9-5-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-5-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-5-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-6-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-5.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-8.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-9.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-10.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-11.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-12.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-13.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-14.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-7-15.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-8-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-8-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-9-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-10-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-10-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-10-6.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-11-2.minab": {
+    "context": {
+      "recordTable": "Customer"
+    },
+    "check": []
+  },
+  "showcase-12-5.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-12-6.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-14-1.minab": {
+    "context": {},
+    "check": []
+  },
+  "showcase-16-1.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-16-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-19-2.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "showcase-19-3.minab": {
+    "context": {
+      "recordTable": "Order"
+    },
+    "check": []
+  },
+  "example-booking-overlap.minab": {
+    "config": "example-booking-overlap.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 1
+    }
+  },
+  "example-cancelled-orders-limit.minab": {
+    "config": "example-cancelled-orders-limit.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 1
+    }
+  },
+  "example-customer-exists.minab": {
+    "config": "example-customer-exists.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 1
+    }
+  },
+  "example-discounted-total.minab": {
+    "config": "example-discounted-total.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": "170",
+      "statements": 0
+    }
+  },
+  "example-first-query.minab": {
+    "config": "example-first-query.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": [
+        {
+          "id": "o-104",
+          "total": 980,
+          "customer_name": "Ada Lovelace"
+        },
+        {
+          "id": "o-87",
+          "total": 412.5,
+          "customer_name": "Grace Hopper"
+        }
+      ],
+      "statements": 1
+    }
+  },
+  "example-order-dml.minab": {
+    "config": "example-order-dml.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 0
+    }
+  },
+  "example-order-status-switch.minab": {
+    "config": "example-order-status-switch.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 0
+    }
+  },
+  "example-overdue-loop.minab": {
+    "config": "example-overdue-loop.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": true,
+      "statements": 1
+    }
+  },
+  "example-reconcile-overdue-accounts.minab": {
+    "config": "example-reconcile-overdue-accounts.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": 1,
+      "statements": 2
+    }
+  },
+  "example-shipping-report.minab": {
+    "config": "example-shipping-report.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": [
+        {
+          "id": "o-104",
+          "total": 980,
+          "shipped_at": "2026-09-02T10:14:00Z"
+        },
+        {
+          "id": "o-87",
+          "total": 412.5,
+          "shipped_at": "2026-09-05T16:40:00Z"
+        }
+      ],
+      "statements": 1
+    }
+  },
+  "example-top-customers.minab": {
+    "config": "example-top-customers.config.json",
+    "check": [],
+    "run": {
+      "ok": true,
+      "value": [
+        {
+          "customer_name": "Ada Lovelace",
+          "total_spent": 4820.5,
+          "order_count": 12
+        },
+        {
+          "customer_name": "Grace Hopper",
+          "total_spent": 3180,
+          "order_count": 9
+        }
+      ],
+      "statements": 1
+    }
+  }
+}

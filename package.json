@@ -131,6 +131,7 @@
     "prepack": "npm run build:release",
     "predocs:api": "npm run langium:generate",
     "docs:api": "typedoc",
+    "compat:snapshot": "node scripts/compat-snapshot.mjs",
     "docs:diagnostics": "tsc -b tsconfig.json && node scripts/diagnostics-doc.mjs",
     "prelint": "npm run langium:generate",
     "lint": "oxlint --type-aware src test scripts && oxlint vscode-extension/src",

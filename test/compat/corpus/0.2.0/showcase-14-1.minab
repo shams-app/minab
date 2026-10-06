@@ -1,0 +1,41 @@
+fn daysSincePayment(customerId: UUID): INTEGER {
+    let days: INTEGER = (
+        FROM Payment WHERE .customer_id == customerId SELECT .days_ago AS d ORDERBY d LIMIT 1
+    );
+    days
+}
+
+fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
+    let flaggedCount: INTEGER = 0;
+
+    loop customer in #Customers where .balance > cutoff {
+        let daysLate: INTEGER = daysSincePayment(.id);
+
+        let newStatus: TEXT = if daysLate > 90 {
+            let notes: JSON = .metadata;
+            if notes is object {
+                "disputed"
+            } else {
+                "severe"
+            }
+        } else if daysLate > graceDays {
+            "late"
+        } else {
+            "ok"
+        };
+
+        if! newStatus != "ok" {
+            flaggedCount = flaggedCount + 1;
+
+            UPDATE #Customers[.id == customer.id]
+            SET { status: newStatus, flaggedAt +: 1 };
+
+            if! newStatus == "severe" {
+                INSERT #CollectionsQueue
+                VALUES { customer_id: customer.id, reason: newStatus };
+            }
+        }
+    }
+
+    flaggedCount
+}

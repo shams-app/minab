@@ -1,0 +1,12 @@
+// `switch` and `if` are expressions (spec §9.1, §9.2). This record rule
+// derives a priority from the order's status and requires it to be urgent
+// enough for a manual review. Case values are literals; `_` is the default.
+//
+//   minab run order-status-switch.minab
+
+switch .status {
+    "urgent" => .total > 0,
+    "high" => .total > 500,
+    "normal", "low" => .total > 5000,
+    _ => false
+}

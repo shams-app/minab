@@ -103,6 +103,8 @@ const CASES: Record<DiagnosticCode, Case> = {
 
     'compile.blockInQuery': { via: 'compiler', program: 'FROM Order SELECT switch .status { "a" => { let x: INTEGER = 1; x }, _ => 2 } AS s' },
 
+    'compat.newerLanguage': { via: 'runtime' }, // test/compat/compat.test.ts
+    'compat.noMigration': { via: 'runtime' }, // test/compat/compat.test.ts
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'compile.nothingToCompile': { via: 'runtime' }, // test/runtime.test.ts
     'compile.notSql': { via: 'runtime' }, // test/run-errors.test.ts
@@ -254,7 +256,7 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/);
+        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|compat|deprecated|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/);
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);

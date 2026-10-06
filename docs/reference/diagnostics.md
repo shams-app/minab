@@ -136,6 +136,15 @@ A program cannot become SQL.
 | `compile.writePath` | error | this record path cannot be assigned: {reason} | `reason` | A path assignment walks relations from a record, one step at a time. Every step before the last must be a relation, and a step after a filtered or to-many step cannot create records. Assign through a loop variable or a shorter path. |
 | `compile.writeTarget` | error | the target of a write must be a table (#Table), a to-many relation of a record (.orders) or a JSON array column (.tags) | none | INSERT, UPDATE and DELETE write to a table or to a JSON array column. An INSERT target cannot have a filter or a position. |
 
+## compat
+
+A program was stored for another language version (D38).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `compat.newerLanguage` | error | the program was stored for language version {requested}, and this runtime supports up to version {supported} | `requested`, `supported` | The program was saved by a newer Minab. Update the Minab package, or save the program again with the version this runtime supports. |
+| `compat.noMigration` | error | no migration path from language version {from} to {to} | `from`, `to` | The program was stored for an old language version, and this runtime has no migration for it. Rewrite the program by hand and store it with the current version. |
+
 ## eval
 
 A program fails while it runs.

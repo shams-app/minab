@@ -24,6 +24,8 @@ const AREAS = {
     null: 'A null rule is broken (spec §7.7).',
     call: 'A function call is wrong.',
     compile: 'A program cannot become SQL.',
+    compat: 'A program was stored for another language version (D38).',
+    deprecated: 'A form still works but will be removed (D38). None today.',
     eval: 'A program fails while it runs.',
     limit: 'A limit of the host stopped the program (D36).',
     data: 'The data port failed or is missing.',

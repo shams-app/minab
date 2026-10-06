@@ -8,6 +8,7 @@ One page that lists every document. Start with the row that fits you.
 | Put Minab in my app | [Embedding guide](guides/embedding.md) |
 | Put Minab in Shamsine | [Minab in Shamsine](guides/shamsine.md) |
 | Look up a function or type | The API reference (`npm run docs:api`, see [below](#api-reference)) |
+| Know what may change between versions | [Compatibility](compatibility.md) |
 | Understand an error code | [Diagnostic codes](reference/diagnostics.md) |
 | Write in an editor | [VS Code extension](../vscode-extension/README.md), [playground](../playground/README.md) |
 
@@ -35,6 +36,7 @@ The [release checklist](releasing.md) says where it is published.
 
 ## Reference
 
+- [Compatibility](compatibility.md): the version policy, `languageVersion`, migrations and the golden corpus.
 - [Diagnostic codes](reference/diagnostics.md): every stable code, with its message and parameters. Generated.
 - [Wire format v1](reference/wire-format.md): the JSON of a run request and its answer. JSON Schema files are in [`schemas/`](../schemas/README.md).
 

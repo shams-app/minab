@@ -1,0 +1,2 @@
+let total: INTEGER = 0;
+total = total + 5;
