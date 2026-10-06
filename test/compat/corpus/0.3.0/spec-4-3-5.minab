@@ -1,0 +1,5 @@
+FROM Order
+GROUPBY .customer
+HAVING SUM(.total) > 1000
+SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
+ORDERBY total_spent DESC

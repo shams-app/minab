@@ -1,0 +1,11 @@
+let min_amount: DECIMAL = 100.00;
+
+let flagged_statuses: TEXT[] = ["flagged", "under_review"];
+
+let top_customer_id: UUID = (
+    FROM Order
+    GROUPBY .customer
+    SELECT KEY.id
+    ORDERBY SUM(.total) DESC
+    LIMIT 1
+);

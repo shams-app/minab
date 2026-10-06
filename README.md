@@ -9,7 +9,7 @@ It also has a full type system, user-defined functions, `if`/`if!`/`switch`, thr
 
 ## Status
 
-Minab 0.2.0 is the first public release. It parses, resolves, validates, type-checks, compiles, and runs. Before 1.0, a release may break something. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
+Minab 0.3.0 is the current release. It parses, resolves, validates, type-checks, compiles, and runs. 0.2.0 was the first public release and brought the embeddable runtime; 0.3.0 adds the compatibility guard (`LANGUAGE_VERSION`, `migrate`) and the VS Code extension for the Marketplace. Before 1.0, a release may break something. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
 
 What runs:
 
@@ -27,7 +27,7 @@ What you can embed (see [Use Minab from your app](#use-minab-from-your-app)):
 - **NestJS** — a module, a service, an exception filter and a run endpoint for stored programs (`@shamsine/minab/nestjs`).
 - **The browser** — the runtime in a Web Worker, local runs, runs delegated to a server by program id, and Monaco (`@shamsine/minab/browser`, `@shamsine/minab/monaco`).
 
-Known limitations (the same list is in the [CHANGELOG](CHANGELOG.md#020---2026-10-05)):
+Known limitations (the same list is in the [CHANGELOG](CHANGELOG.md#020---2026-10-05); nothing in it changed in 0.3.0):
 
 - A user function can be called inside a query only when its body is one expression (no `let`, no statements, no recursion). A host function, or a function that is not inlinable, in the value of an `INSERT` or `UPDATE` fails with `compile.notSql`.
 - A statement block inside a query is refused (`compile.blockInQuery`). A `LOG` inside a query prints nothing and gives a warning.

@@ -1,0 +1,3 @@
+let labeled: (TEXT, DECIMAL) = ("shipping", 12.50);
+
+labeled[0] == "shipping" AND labeled[1] > 10

@@ -1,0 +1,4 @@
+// schema: table سفارش with columns مبلغ (DECIMAL) and وضعیت (TEXT)
+FROM سفارش
+WHERE .وضعیت == "ارسال‌شده" AND .مبلغ > 100
+SELECT .مبلغ AS مبلغ_کل

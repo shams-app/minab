@@ -1,0 +1,31 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": { "id": "UUID", "total": "DECIMAL", "tracking_code": "TEXT" }
+      },
+      {
+        "name": "Shipment",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "tracking_code": "TEXT",
+          "status": "TEXT",
+          "delivered_at": "DATETIME?"
+        }
+      }
+    ]
+  },
+  "data": {
+    "responses": [
+      {
+        "rows": [
+          { "id": "o-104", "total": 980.0, "shipped_at": "2026-09-02T10:14:00Z" },
+          { "id": "o-87", "total": 412.5, "shipped_at": "2026-09-05T16:40:00Z" }
+        ]
+      }
+    ]
+  }
+}

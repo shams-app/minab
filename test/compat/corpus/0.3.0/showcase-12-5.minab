@@ -1,0 +1,19 @@
+fn firstEvenOver(values: INTEGER[], threshold: INTEGER): INTEGER {
+    let result: INTEGER = 0;
+    let seen: INTEGER = 0;
+
+    loop v in values {
+        if! v % 2 != 0 {
+            continue;
+        }
+
+        seen = seen + 1;
+
+        if! v > threshold {
+            result = v;
+            break;
+        }
+    }
+
+    result
+}

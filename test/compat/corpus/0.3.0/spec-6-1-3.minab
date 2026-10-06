@@ -1,0 +1,4 @@
+.end_date > .start_date AND NOT EXISTS(
+    #Booking[. != ^ AND .room_id == ^.room_id
+             AND .start_date < ^.end_date AND .end_date > ^.start_date]
+)

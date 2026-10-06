@@ -1,0 +1,15 @@
+// Declarative writes (spec §10, showcase §13): UPDATE with an inline filter
+// and a compound `+:` operator, then an INSERT from a filtered table.
+//
+// `minab run` is a dry run: it prints the two statements and changes nothing.
+// `minab run --apply --database <url>` writes them, in one transaction.
+//
+//   minab run order-dml.minab
+
+UPDATE #Customer[.country == "TR"]
+SET { checked: true, points +: 10 };
+
+INSERT #Archive
+VALUES #Customer[.country == "TR"];
+
+true

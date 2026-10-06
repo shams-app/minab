@@ -1,0 +1,4 @@
+let discount: DECIMAL? = null;
+discount ?= 0.10;    // discount was null, so it's now 0.10
+
+discount ?= 0.20;    // discount is already 0.10 (not null), so this is a no-op
