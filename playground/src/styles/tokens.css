@@ -379,3 +379,10 @@
         --duration-slow: 0ms;
     }
 }
+
+/* TV demo mode (`?demo=tv`, see src/hooks/useDemoMode.ts): everything is sized with rem, so one root size scales the page. */
+:root[data-demo='tv'] {
+    font-size: 150%;
+    --editor-font-size: 21px;
+    --editor-line-height: 32px;
+}
