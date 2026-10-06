@@ -1,0 +1,11 @@
+fn countUntilOver(limit: INTEGER): INTEGER {
+    let count: INTEGER = 0;
+    let runningTotal: INTEGER = 0;
+
+    loop runningTotal <= limit {
+        count = count + 1;
+        runningTotal = runningTotal + count;
+    }
+
+    count
+}

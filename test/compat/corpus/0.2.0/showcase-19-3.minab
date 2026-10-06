@@ -1,0 +1,2 @@
+// These do not print: the right side of AND is skipped when the left side is false
+false AND LOG(true)

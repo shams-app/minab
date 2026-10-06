@@ -1,0 +1,3 @@
+let threshold: INTEGER = 100;
+
+.total > threshold

@@ -8,7 +8,8 @@
 import { resolveHostDeclarations } from '../language/host-declarations.js';
 import { DEFAULT_RULE_CONTEXT } from '../language/schema.js';
 import { resolveLimits } from './limits.js';
-import { prepareProgram } from './prepare.js';
+import { LANGUAGE_VERSION, migrate } from './migrate.js';
+import { prepareProgram, refusedByVersion } from './prepare.js';
 import { DEFAULT_SERVICE_CACHE_SIZE, ServiceCache } from './service-cache.js';
 import type { CacheStats, Minab, MinabOptions, PrepareOptions, PreparedProgram } from './types.js';
 
@@ -31,7 +32,26 @@ export function createMinab(options: MinabOptions): Minab {
             const set = cache.get(options.schema, ruleContext, host);
             // One URI for each call: calls may overlap, and a shared URI would make them fight.
             const uri = `minab:///prepared/${counter++}.minab`;
-            return prepareProgram(set, uri, source, prepareOptions.expect, ruleContext.recordTable, localHostFunctions, limits);
+            let text = source;
+            const requested = prepareOptions.languageVersion ?? LANGUAGE_VERSION;
+            if (!Number.isInteger(requested) || requested < 1) throw new TypeError('languageVersion must be a whole number of 1 or more');
+            if (requested > LANGUAGE_VERSION) {
+                return refusedByVersion(set, ruleContext.recordTable, limits, {
+                    code: 'compat.newerLanguage',
+                    params: { requested, supported: LANGUAGE_VERSION }
+                });
+            }
+            if (requested < LANGUAGE_VERSION) {
+                const migrated = migrate(source, requested, LANGUAGE_VERSION);
+                if (!migrated.ok) {
+                    return refusedByVersion(set, ruleContext.recordTable, limits, {
+                        code: 'compat.noMigration',
+                        params: { from: requested, to: LANGUAGE_VERSION }
+                    });
+                }
+                text = migrated.source;
+            }
+            return prepareProgram(set, uri, text, prepareOptions.expect, ruleContext.recordTable, localHostFunctions, limits);
         },
         cacheStats(): CacheStats {
             return { size: cache.size, created: cache.created, hits: cache.hits, openDocuments: cache.openDocuments() };

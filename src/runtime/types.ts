@@ -78,6 +78,12 @@ export interface PrepareOptions {
      * checked, and `resultType` still tells the host the type.
      */
     expect?: ExpectedType;
+    /**
+     * The language version the program was stored with (`LANGUAGE_VERSION` when it was saved).
+     * Newer than the runtime: `compat.newerLanguage`. Older: the migrations run first, and the
+     * diagnostics then refer to the migrated source. Missing: the current version.
+     */
+    languageVersion?: number;
 }
 
 /** Given, never asked: the record under validation, `$`, and the values of the declared host inputs. */

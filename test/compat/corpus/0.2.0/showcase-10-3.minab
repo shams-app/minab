@@ -1,0 +1,6 @@
+fn cancelledOrdersFor(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId AND .status == "cancelled"
+    SELECT .id
+}
+// cancelledOrdersFor(x) : JSON — an array of UUIDs, one per cancelled order

@@ -1,0 +1,1 @@
+let tier: TEXT = if .total > 1000 { "gold" } else if .total > 100 { "silver" } else { "bronze" };

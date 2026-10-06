@@ -1,0 +1,5 @@
+FROM Order
+WHERE .status == "shipped" AND .customer.country == "US"
+SELECT .id, .total, .customer.name AS customer_name
+ORDERBY .total DESC
+LIMIT 20

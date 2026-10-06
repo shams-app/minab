@@ -343,6 +343,23 @@ function limitDiagnostic(code: 'limit.sourceTooLong' | 'limit.tooDeep', range: S
     return { severity: 'error', code, message: message.reason, range, params: message.params };
 }
 
+/** A program that is refused before it is parsed because of its language version (Q5). */
+export function refusedByVersion(
+    set: ServiceSet,
+    recordTable: string | undefined,
+    limits: Limits,
+    diagnostic: { code: 'compat.newerLanguage' | 'compat.noMigration'; params: Record<string, number> }
+): PreparedProgram {
+    const message = coded(diagnostic.code as 'compat.newerLanguage', diagnostic.params as { requested: number; supported: number });
+    return stoppedAtPrepare(set, recordTable, limits, {
+        severity: 'error',
+        code: diagnostic.code,
+        message: message.reason,
+        range: EMPTY_RANGE,
+        params: message.params
+    });
+}
+
 /** A program that a limit stopped at `prepare`: one error, no analysis. `run` and `compile` refuse it. */
 function stoppedAtPrepare(set: ServiceSet, recordTable: string | undefined, limits: Limits, diagnostic: MinabDiagnostic): PreparedProgram {
     const { services } = set;

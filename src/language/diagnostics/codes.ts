@@ -7,7 +7,8 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, eval, limit, data, query, rule, wire.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, compat, deprecated, eval, limit, data, query, rule, wire.
+ *    `deprecated.*` codes are warnings. A form that is going away gets one (D38). There is none today.
  *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
  *  - Do not change a message here without a reason: tests and users read it.
@@ -123,6 +124,16 @@ export const DIAGNOSTICS = {
         doc: 'The host aborted the run with its AbortSignal. Nothing is wrong with the program.'
     }),
 
+    'compat.newerLanguage': entry<{ requested: number; supported: number }>({
+        severity: error,
+        message: p => `the program was stored for language version ${p.requested}, and this runtime supports up to version ${p.supported}`,
+        doc: 'The program was saved by a newer Minab. Update the Minab package, or save the program again with the version this runtime supports.'
+    }),
+    'compat.noMigration': entry<{ from: number; to: number }>({
+        severity: error,
+        message: p => `no migration path from language version ${p.from} to ${p.to}`,
+        doc: 'The program was stored for an old language version, and this runtime has no migration for it. Rewrite the program by hand and store it with the current version.'
+    }),
     'compile.blockInQuery': entry({
         severity: error,
         message: () => 'a block with statements cannot run inside a query (a statement cannot become SQL)',
