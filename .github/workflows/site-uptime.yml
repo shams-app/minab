@@ -1,0 +1,80 @@
+# Uptime check for launch week (W5). Every 10 minutes it fetches the landing page
+# and the PostgreSQL .wasm file of the live site. If either is down the job fails,
+# and GitHub sends the owner a notification.
+#
+# It only checks inside the launch window (LAUNCH_START to LAUNCH_END, UTC dates).
+# After LAUNCH_END the scheduled runs finish at once. To extend it, change the dates.
+# "Run workflow" in the Actions tab always checks, whatever the date.
+name: Site uptime
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://minab-lang.org
+  LAUNCH_START: '2026-10-18'
+  LAUNCH_END: '2026-10-27'
+
+jobs:
+  uptime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the launch window
+        id: window
+        run: |
+          today=$(date -u +%F)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || { [[ ! "$today" < "$LAUNCH_START" ]] && [[ ! "$today" > "$LAUNCH_END" ]]; }; then
+            echo "check=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "check=false" >> "$GITHUB_OUTPUT"
+            echo "Outside the launch window ($LAUNCH_START to $LAUNCH_END). Nothing to check."
+          fi
+
+      - name: Landing page is up
+        if: steps.window.outputs.check == 'true'
+        run: |
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 5 --max-time 30 \
+            --output landing.html "$SITE_URL/"
+          grep -q '<div id="root"' landing.html || { echo "The landing page has no app root."; exit 1; }
+          echo "Landing page ok ($(wc -c < landing.html) bytes)."
+
+      - name: PostgreSQL .wasm file is up
+        if: steps.window.outputs.check == 'true'
+        run: |
+          # The hashed file name is inside a script chunk, so follow the scripts from the page until it shows up.
+          wasm=$(python3 - <<'PY'
+          import os, re, sys, urllib.request
+
+          site = os.environ["SITE_URL"]
+
+          def get(path):
+              with urllib.request.urlopen(site + path, timeout=30) as r:
+                  return r.read().decode("utf-8", "replace")
+
+          todo = re.findall(r'/assets/[A-Za-z0-9_.-]+\.js', get("/"))
+          seen = set()
+          while todo and len(seen) < 80:
+              path = todo.pop(0)
+              if path in seen:
+                  continue
+              seen.add(path)
+              text = get(path)
+              found = re.search(r'pglite-[A-Za-z0-9_-]+\.wasm', text)
+              if found:
+                  print(found.group(0))
+                  sys.exit(0)
+              todo += ["/assets/" + name for name in re.findall(r'(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+\.js)', text) if "/assets/" + name not in seen]
+          sys.exit("Could not find the pglite .wasm file name in the page scripts.")
+          PY
+          )
+          echo "Checking /assets/$wasm"
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 5 --max-time 60 \
+            --output pglite.wasm "$SITE_URL/assets/$wasm"
+          head -c 4 pglite.wasm | od -An -c | grep -q '\0   a   s   m' || { echo "The file is not a WebAssembly module."; exit 1; }
+          echo "WASM ok ($(wc -c < pglite.wasm) bytes)."

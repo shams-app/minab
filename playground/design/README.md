@@ -10,7 +10,9 @@ The playground already **works end to end**. What's left is its look. This guide
 | [`contract.md`](contract.md) | The seam: design tokens, the component inventory and props, and what may and may not change |
 | [`design-briefs.md`](design-briefs.md) | What each screen must show (briefs 0–14), used by the W1 session inside Claude Design, plus the wiring rules for W2 and W3 (brief 15). **You do not paste these.** |
 | `handoff.md` | Written by W1: the Claude Design canvas link and every approved decision. W2 and W3 build from it. |
-| [`launch-kit.md`](launch-kit.md) | Demo storyboard, screenshot list, case-study outline, launch posts |
+| [`launch-kit.md`](launch-kit.md) | Demo storyboard, screenshot list, case study, launch posts |
+| [`tv-demo.md`](tv-demo.md) | The 2-minute TV demo (English and Persian): script, demo mode, offline proof, rehearsal checklist, backup video plan |
+| [`fact-sheet.md`](fact-sheet.md) | One page: what Minab is, who it is for, three numbers, links, what not to claim |
 
 > **Short version for the owner:** paste the W1 prompt from [`docs/production/phases/prompts.md`](../../docs/production/phases/prompts.md) into **Claude Code** (claude.ai/code, or the Code tab in the Claude desktop app). The session asks you 4 questions, builds the designs in Claude Design, and sends you links to review. That is all. The steps below say what the session does.
 

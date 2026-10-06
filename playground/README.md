@@ -11,6 +11,7 @@ A website where you can write Minab, see it checked, see the SQL it compiles to,
 | `/learn/:lesson` | A 12-lesson guided tour; each goal is checked against the real engine |
 | `/examples` | 29 examples: the repository's 11 `examples/` plus 18 written for the playground |
 | `/reference` | The cheat sheet (also a drawer inside the workbench) |
+| `/?demo=tv` | TV demo mode: bigger text, dark theme, and everything preloaded so the demo works offline (see below) |
 | `/embed` | A compact workbench for `<iframe>`s: `?example=…&theme=dark&tabs=result,sql&readonly=1&autorun=0`, or `#s=<share>` |
 
 The workbench and the app shell follow the approved design, "Terminal Noir" (dark first, light on request): see [`design/handoff.md`](design/handoff.md). The other pages (landing, tour, gallery, reference, embed) still wear the old styles and take the new tokens until W3. See [`design/README.md`](design/README.md) for the whole process and [`design/contract.md`](design/contract.md) for what a redesign may change.
@@ -44,6 +45,10 @@ The site is on Cloudflare Pages (project `minab`, domain `minab-lang.org`; decis
 
 The repository needs two secrets: `CLOUDFLARE_API_TOKEN` (permission "Cloudflare Pages: Edit") and `CLOUDFLARE_ACCOUNT_ID`. The footer shows the Minab version from the root `package.json` (D42).
 
+## Demo mode (TV)
+
+`/?demo=tv` is for presentations (W5, D44). The flag is read by `src/hooks/useDemoMode.ts`, called from `routes/Root.tsx`, and kept for the tab. It sets `<html data-demo="tv">` (150% text and a larger editor font, in `tokens.css`) and the dark theme. It loads Monaco, the engine, PostgreSQL (PGlite) and the page chunks of the script. Then it sets `data-demo-ready="true"` and shows a "Demo ready" toast. After that the demo works with the network off, as long as the page is not reloaded. The script, the checklist and the proof are in [`design/tv-demo.md`](design/tv-demo.md); `tests/tv-demo.spec.ts` runs the script offline.
+
 ## How it's built
 
 ```
@@ -59,7 +64,7 @@ src/
     worker.ts       `serveEngine`: the browser entry's `serveMinab` with the engine as its one host request
   client/     the UI thread's promise API over the worker: a thin layer over `createWorkerMinab` (restartable, a run can be cancelled)
   state/      zustand store, the controller (debounced analyze, auto-run, host application), share links, persistence
-  hooks/      view models: useWorkbench, useHost, useTour, useGallery, useShare, useCommands, useEngine, useTheme, useSnippet
+  hooks/      view models: useWorkbench, useHost, useTour, useGallery, useShare, useCommands, useEngine, useTheme, useSnippet, useDemoMode
   monaco/     Monaco, trimmed; Minab language + providers; theme generated from CSS tokens; lazy wrapper
   syntax/     one tokenizer for Monaco and every static snippet; SQL highlighter and pretty-printer
   content/    datasets (Brewline), examples, tour lessons, cheat sheet, landing copy, config JSON Schema

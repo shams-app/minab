@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { cheatsheet, REPO_URL, SPEC_URL } from '../content/reference/cheatsheet.js';
 import { useCommands } from '../hooks/useCommands.js';
+import { useDemoMode } from '../hooks/useDemoMode.js';
 import { useShare } from '../hooks/useShare.js';
 import { useTheme, useThemeSync } from '../hooks/useTheme.js';
 import { dismissToast, run, setPaletteOpen, setReferenceOpen } from '../state/controller.js';
@@ -34,6 +35,7 @@ const TITLES: Array<[RegExp, string]> = [
 
 export function Root() {
     useThemeSync();
+    useDemoMode();
     const theme = useTheme();
     const commands = useCommands();
     const share = useShare();
