@@ -11,14 +11,14 @@ A phase can start as soon as every phase in its Depends has `Status: done`. Phas
 ```mermaid
 flowchart LR
    A[A · Start<br/>A1 bootstrap, A2 decisions] --> B[B · Code-wide sweep<br/>B1, runs alone]
-   A --> Q[Q · CI, release, quality<br/>Q1–Q5]
+   A --> Q[Q · CI, release, quality<br/>Q1–Q6]
    A --> R1[R1 · ADR 0002]
-   A --> W[W · Website<br/>W1–W5]
+   A --> W[W · Website<br/>W1–W6]
    B --> L[L · Language<br/>L1–L7]
-   B --> C[C · Correctness<br/>C1–C8]
+   B --> C[C · Correctness<br/>C1–C10]
    L --> R[R · Runtime<br/>R2–R8]
    R1 --> R
-   R --> H[H · Hosts: Node, NestJS, browser<br/>H1–H7]
+   R --> H[H · Hosts: Node, NestJS, browser<br/>H1–H8]
    R --> E[E · Editor: LSP, VS Code, Monaco<br/>E1–E5]
    R --> X[X · Execution: statements, loops, writes<br/>X1–X6]
    C --> X
@@ -42,7 +42,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 
 ## Phase list
 
-61 phases. Kinds: **Design**, **Mechanical**, **Mixed**, **Owner** (see [card format](../README.md#card-format)).
+66 phases. Kinds: **Design**, **Mechanical**, **Mixed**, **Owner** (see [card format](../README.md#card-format)).
 
 ### A — Start
 
@@ -66,6 +66,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [Q3](Q3.md) | Security hardening | Mixed | M | [R4](R4.md), [H2](H2.md) |
 | [Q4](Q4.md) | Performance budgets | Mechanical | M | [R4](R4.md), [H5](H5.md) |
 | [Q5](Q5.md) | Compatibility guard: language version and golden corpus | Mechanical | S | [R2](R2.md), [V1](V1.md) |
+| [Q6](Q6.md) | A real release runs only from a version tag | Mechanical | S | [Q2](Q2.md) |
 
 ### L — Language
 
@@ -91,6 +92,8 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [C6](C6.md) | `check` accepts a top-level collection filter | Mechanical | M | [L1](L1.md) |
 | [C7](C7.md) | `GROUPBY` on a related field | Mechanical | S | [C1](C1.md) |
 | [C8](C8.md) | Checker completeness | Mixed | S | [L1](L1.md) |
+| [C9](C9.md) | Null and `IN`: one answer in both runtimes | Mechanical | M | [C4](C4.md), [L4](L4.md), [X1](X1.md) |
+| [C10](C10.md) | Literals and kind tests compile to SQL that Postgres accepts | Mechanical | M | [C2](C2.md), [X1](X1.md), [X2](X2.md) |
 
 ### R — Runtime: one API, ports and adapters
 
@@ -116,6 +119,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [H5](H5.md) | Remote runs, routing and the browser bundle | Mechanical | M | [H4](H4.md) |
 | [H6](H6.md) | Browser example app with browser tests | Mechanical | M | [H5](H5.md), [H3](H3.md), [E5](E5.md) |
 | [H7](H7.md) | The playground uses the published browser entry | Mechanical | S | [H5](H5.md), [E1](E1.md), [L7](L7.md) |
+| [H8](H8.md) | Host safety fixes: endpoint guards, one runtime per schema, host checks | Mechanical | M | [H3](H3.md), [Q3](Q3.md) |
 
 ### E — Editor: language server, VS Code and Monaco
 
@@ -154,6 +158,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [W3](W3.md) | Build the design: landing, learn, examples, reference, embed | Mechanical | M | [W2](W2.md) |
 | [W4](W4.md) | Deploy and verify the website | Mechanical | M | [W3](W3.md) |
 | [W5](W5.md) | Launch kit and the TV demo | Owner | M | [W4](W4.md), [V2](V2.md) |
+| [W6](W6.md) | Playground fixes: the Data panel follows the open example | Mechanical | S | [W4](W4.md) |
 
 ### V — Releases and the 1.0 gate
 
@@ -161,8 +166,8 @@ The picture shows lanes only. The exact order is the Depends column below.
 | --- | --- | --- | --- | --- |
 | [V1](V1.md) | Release 0.2.0: the first public release | Owner | S | [L2](L2.md), [C3](C3.md), [C4](C4.md), [C5](C5.md), [C6](C6.md), [C7](C7.md), [C8](C8.md), [Q2](Q2.md) |
 | [V2](V2.md) | Release 0.3.0: embeddable | Owner | S | [V1](V1.md), [L3](L3.md), [L5](L5.md), [L6](L6.md), [R5](R5.md), [H3](H3.md), [H6](H6.md), [H7](H7.md), [E5](E5.md), [G1](G1.md), [G2](G2.md), [Q3](Q3.md), [Q4](Q4.md), [Q5](Q5.md) |
-| [V3](V3.md) | Release 0.4.0: the whole language runs | Owner | S | [V2](V2.md), [X2](X2.md), [X4](X4.md), [X6](X6.md), [L4](L4.md), [L7](L7.md), [E3](E3.md), [E4](E4.md) |
-| [V4](V4.md) | Production readiness review | Mixed | M | [V3](V3.md), [W4](W4.md) |
+| [V3](V3.md) | Release 0.4.0: one answer in both runtimes | Owner | S | [V2](V2.md), [C9](C9.md), [C10](C10.md), [H8](H8.md), [Q6](Q6.md) |
+| [V4](V4.md) | Production readiness review | Mixed | M | [V3](V3.md), [W4](W4.md), [W6](W6.md) |
 | [V5](V5.md) | Release 1.0.0 | Owner | S | [V4](V4.md) |
 
 ## Release trains
@@ -173,8 +178,8 @@ A release contains **everything merged to `main`** when it is cut; the Depends o
 |---|---|---|
 | **0.2.0** (V1) | Correct, and published for the first time | `&` removed (L1), spec examples under test (L2), every wrong answer fixed (C1–C8), CI and release automation (Q1, Q2) |
 | **0.3.0** (V2) | Embeddable, ready for Shamsine | Runtime API and ports (R2–R8), Node, NestJS and browser hosts (H1–H7), Monaco (E5), Unicode names (L3), built-ins and dates (L5, L6), guides (G1, G2), security, performance, compatibility (Q3–Q5) |
-| **0.4.0** (V3) | The whole language runs | Statements, loops, writes (X3–X6), queries take every expression (X1, X2), the language backlog (L4), `LOG` (L7), the full language server and the Marketplace extension (E2–E4) |
-| **1.0.0** (V5) | Production | The readiness review (V4) passes; the website is live (W4) |
+| **0.4.0** (V3) | One answer in both runtimes | The `null` and `IN` rules (C9), literals and kind tests that Postgres accepts (C10), host safety fixes (H8), releases only from a version tag (Q6). Changed on 2026-10-11: the old theme of 0.4.0 ("the whole language runs": X1–X6, L4, L7, E2–E4) already shipped in 0.2.0 and 0.3.0 |
+| **1.0.0** (V5) | Production | The readiness review (V4) passes; the website is live (W4) and its known bug is fixed (W6) |
 
 ## Shamsine cards M.0–M.16
 
@@ -277,7 +282,7 @@ The old plan's notes for review, and where they went: Q1 → D01 · Q2 → D34, 
 
 ## After 1.0 (not in this plan)
 
-Kept here so they are not lost. None of them blocks production.
+Kept here so they are not lost. None of them blocks production. V4 adds the Later items it moves after 1.0 to the section "Post-1.0" of `docs/production/readiness.md` (V4 writes that file).
 
 - **Explain mode** for rules: show which sub-condition was false, with its values (old note S1; D45).
 - **`minab schema pull`**: build the schema from Postgres foreign keys, Prisma or TypeORM (S3).

@@ -6,7 +6,7 @@ Every question the owner must answer for Minab to reach production. Each one has
 
 **How to record an answer.** Replace `_(open)_` after **Answer:** with the chosen option, your words if any, and the date. Example: `**Answer:** (a), but use "Asia/Tehran" as the default time zone — 2026-10-03`. To postpone a question to its phase, write `**Answer:** ask at phase L6`. The progress tool counts open answers.
 
-**Groups:** [Product and process](#product-and-process) (D01–D09) · [Language](#language) (D10–D26) · [Runtime and hosts](#runtime-and-hosts) (D27–D39) · [Website and launch](#website-and-launch) (D40–D45)
+**Groups:** [Product and process](#product-and-process) (D01–D09) · [Language](#language) (D10–D26) · [Runtime and hosts](#runtime-and-hosts) (D27–D39) · [Website and launch](#website-and-launch) (D40–D45) · [After the sitting](#after-the-sitting) (D46–D47)
 
 ---
 
@@ -841,3 +841,63 @@ From `playground/design/brief.md` ("Open items for Hamed"):
 - (b) A language feature: a message attached to the rule in Minab source.
 
 **Answer:** (a) — 2026-10-02
+
+---
+
+## After the sitting
+
+Decisions found after A2, when the plan for 0.4.0 changed (2026-10-11). They have the same parts as the decisions above. The owner accepted the recommendation of each one together with that plan change ("all proposals are ok").
+
+<a id="d46"></a>
+### D46 — A `null` value in arithmetic, ordering and `LIKE`
+
+**Blocks:** C9
+
+**Context.** Spec §7.7 makes the *literal* `null` a check error next to `<`, `>`, `<=`, `>=`, `LIKE` and the arithmetic operators. It does not say what happens when a nullable *value* is `null` at run time (a nullable column, or a `ref` through an empty link). Today the two runtimes disagree. For `.n + .a`, `-.n`, `.n * 2`, `.n / 2`, `.n % 2` and `.n \ 2`, the interpreter fails with "expected a number" and Postgres answers `null`. For `.n < 5`, `.n > .a` and `.t LIKE "a%"`, the interpreter fails ("not a valid operator against null") and Postgres answers `null`, so a `WHERE` drops the row. This was checked on `main` with the differential harness on 2026-10-11.
+
+**Options.**
+- (a) **Recommended. Arithmetic gives `null`; comparisons stay `true` or `false`.** These are the rules of "lifted" operators in C#.
+  - Arithmetic (`+`, `-`, `*`, `/`, `\`, `%` and unary `-`) with a `null` operand gives `null`. This comes before any other check, so `null / 0` is `null`, not a division error. The result type is nullable when an operand is nullable. Text `+` already works like this (D13), and so do the built-ins (D20).
+  - An ordering comparison (`<`, `<=`, `>`, `>=`) or `LIKE` with a `null` operand gives `false`. A comparison is always `true` or `false`, as `==` already is (§7.7 rule 2). So `NOT (.n < 5)` is `true` when `.n` is `null`.
+  - The literal `null` next to these operators stays a check error (§7.7 rule 3).
+- (b) Three-valued logic, like SQL. A comparison with `null` gives `null`, and `AND`, `OR`, `NOT`, `if` and every rule must handle a `null` boolean. This undoes §7.7 rule 2, and every rule result becomes nullable.
+- (c) An error in both runtimes. Postgres has no clean way to raise an error inside an expression, and a filter on a nullable column would fail at the first row with a `null`.
+
+**Example (recommended):**
+```
+// .n is INTEGER? and null in this record, .t is TEXT? and null, .a is 4
+.n + .a                  // null
+-.n                      // null
+.n / 0                   // null (no division-by-zero error)
+COALESCE(.n, 0) + .a     // 4
+.n < 5                   // false
+.n >= 5                  // false
+NOT (.n < 5)             // true
+.t LIKE "a%"             // false
+.n < null                // ✗ check error, as today (§7.7 rule 3)
+FROM Item WHERE .n < 5 SELECT .id    // a row with a null n is not returned (as today in SQL)
+```
+
+**Answer:** (a), accepted with the plan change that adds C9 (owner: "all proposals are ok") — 2026-10-11
+
+<a id="d47"></a>
+### D47 — `is array`, `is object`, `is string`, `is number` and `is boolean` on a value that is not `JSON`
+
+**Blocks:** C10
+
+**Context.** Spec §5.6 says the five kinds describe a `JSON` value. On any other type the answer is known before the program runs, and the grammar does not stop it. Today `check` accepts `.a is array` on an `INTEGER` column, and Postgres then fails (`jsonb_typeof(bigint)` does not exist). The interpreter answers from the JavaScript value, which is not consistent: `.a is number` is `true` for an `INTEGER`, `.x is number` is `false` for a `DECIMAL`, and `TODAY() is string` is `true`. This was checked on `main` on 2026-10-11.
+
+**Options.**
+- (a) **Recommended. A check error.** When the type of the operand is known and is not `JSON`, `is` or `isnot` with one of the five kinds is a check error with a new code (for example `type.kindTestNeedsJson`: "`is number` tests the kind of a JSON value, but `.total` is DECIMAL"). `is null` and `isnot null` stay valid for every type (§5.6, §7.7). A `JSON` value (a `JSON` column, a `JSON` local or parameter, a JSON literal) keeps the run-time test.
+- (b) The declared type decides. `INTEGER` and `DECIMAL` are `number`, `TEXT` and `CITEXT` are `string`, `BOOLEAN` is `boolean`, an array type is `array`, and every other type has no kind. Both runtimes answer with a constant.
+
+**Example (recommended):**
+```
+let config: JSON = { theme: "dark" };
+config is object         // true (a run-time test, as today)
+.metadata isnot array    // fine: .metadata is JSON
+.total is number         // ✗ check error: .total is DECIMAL, not JSON
+.total isnot null        // fine: a null test works on every type
+```
+
+**Answer:** (a), accepted with the plan change that adds C10 (owner: "all proposals are ok") — 2026-10-11
