@@ -11,7 +11,7 @@ The plan is written for AI sessions (Claude Code). Every phase is a **card** wit
 | File | What it is | Who edits it |
 |---|---|---|
 | `README.md` (this file) | How the plan works and the rules every phase follows | Owner only |
-| [`decisions.md`](decisions.md) | Every open decision (D01–D45), each with options, a recommendation and an example | Phase A2 (the decision sitting); a phase may add an answer to one decision it had to ask |
+| [`decisions.md`](decisions.md) | Every open decision (D01–D47), each with options, a recommendation and an example | Phase A2 (the decision sitting); a phase may add an answer to one decision it had to ask |
 | [`phases/README.md`](phases/README.md) | The phase list with Depends (the source for the graph), lanes, release trains, old → new mapping, coverage map | Owner only |
 | `phases/<ID>.md` | One card per phase | Owner only (A2 may adjust cards to match answers) |
 | [`phases/prompts.md`](phases/prompts.md) | Copy-and-paste prompt for every phase, plus helper prompts | Owner only |
@@ -130,6 +130,7 @@ Some files are edited by many phases. Depends chains keep those phases from runn
 | `minab-interpreter.ts` value and operator code | C2, C3, C4 | C2 first, then C3 and C4 (different functions) |
 | `minab-interpreter.ts` evaluation context and ports | R2, R3, R4 | Chain R2 → R3 → R4 |
 | `minab-interpreter.ts` statements | X3, X4, X5, X6 | Chain X3 → X4, X3 → X5 → X6 |
+| `minab-sql-compiler.ts` operators, literals, `IN` and `is` | C9, C10 | Different functions. If both run at once, merge `main` into the second before it ends |
 | `src/cli/main.ts` | L1, R7, L7, X5 | L1 → R7 → (L7, H1 → X5); L7 and X5 touch different commands (logs vs. `--apply`): if both run at once, merge `main` into the second before it ends |
 | `playground/src/engine/**` | L1, R8, X3, X4, E1, L7, H7, X5, X6 | L1 → R8, then R8 → X3 → X4 and X3 → L7 → H7 → X5 → X6; E1 changes only `intel.ts` |
 | Playground tokenizer `playground/src/syntax/tokens.ts` (moved to `src/editor/tokens.ts` by E5) | L1, L3, L4, L7, E5 | Chain L1 → L3 → L4 → L7 → E5 |
