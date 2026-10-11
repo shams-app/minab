@@ -3,6 +3,20 @@
 This is the checklist for the release phases (V1, V2, V3, V5). A release is one
 tag push. The tag starts `.github/workflows/release.yml`.
 
+**A real release runs only from a version tag.** The first step of the workflow
+(`scripts/release-guard.mjs`) checks the run before it builds anything:
+
+| Run | Result |
+|---|---|
+| Tag push `vX.Y.Z`, and `package.json` says `X.Y.Z` | Real release |
+| Tag push with another tag name | Stops: the tag does not match the version |
+| Hand-started on any branch or tag, `dry-run` on | Dry run: builds and tests, publishes nothing |
+| Hand-started on the tag `vX.Y.Z`, `dry-run` off | Real release (use it to run a failed release again) |
+| Hand-started on a branch, `dry-run` off | Stops at once: never do this |
+
+The GitHub release always uses the existing tag `vX.Y.Z` (`gh release create
+--verify-tag`). The workflow never creates a tag.
+
 ## What a release publishes
 
 | Place | What | Who can see it |
@@ -59,7 +73,7 @@ run the release again after you add the secret.
 9. **Push the tag** (the owner, or a session the owner told to):
    `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must be `v` plus the
    `package.json` version, or the workflow stops.
-10. **Watch `release.yml`.** It checks the tag, builds, tests, builds the
+10. **Watch `release.yml`.** It checks the tag (`release-guard.mjs`), builds, tests, builds the
     `.vsix`, publishes to npm, creates the GitHub release, and publishes the
     extension (if the secrets exist). A prerelease version (`X.Y.Z-rc.1`) is
     published to npm under the tag `next`, and the GitHub release is marked as a
@@ -70,8 +84,14 @@ run the release again after you add the secret.
 13. **Do the manual VS Code check:** install the extension, open a `.minab` file,
     and see highlighting, diagnostics and hover.
 
-If `release.yml` fails after the npm step, do not push the tag again: npm does
-not allow the same version twice. Fix the problem, bump to the next patch
+**Run a failed release again.** In the Actions tab, start **Release**, choose
+the tag `vX.Y.Z` (not a branch) in "Use workflow from", and turn `dry-run` off.
+Never start it with `dry-run` off on a branch: the workflow stops such a run.
+
+If `release.yml` fails after the npm step, a second run fails at `npm publish`,
+because npm does not allow the same version twice. Then publish the missing
+parts by hand (the GitHub release with `gh release create vX.Y.Z --verify-tag`,
+the extension with `vsce` or `ovsx`), or fix the problem, bump to the next patch
 version and release that.
 
 ## The API reference
@@ -98,5 +118,6 @@ never committed.
 | `scripts/changelog.mjs` | `--version X.Y.Z`, `--check`, `--notes X.Y.Z` |
 | `scripts/bump-version.mjs` | `X.Y.Z` sets both package versions |
 | `scripts/next-version.mjs` | `--run N` prints the prerelease version |
+| `scripts/release-guard.mjs` | Stops a real release run that is not on the tag `vX.Y.Z` |
 
 Tests: `test/release-scripts.test.ts`.

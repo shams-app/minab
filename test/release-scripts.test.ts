@@ -1,6 +1,6 @@
 /**
  * Q2 — the release scripts (`scripts/changelog.mjs`, `bump-version.mjs`,
- * `next-version.mjs`), run on temporary folders. They never touch the real
+ * `next-version.mjs`), run on temporary folders. Q6 — `release-guard.mjs`. They never touch the real
  * CHANGELOG or the real versions.
  */
 
@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { bumpVersion } from '../scripts/bump-version.mjs';
 import { extractNotes, main as changelog, parseFragment } from '../scripts/changelog.mjs';
 import { main as nextVersionMain, nextVersion } from '../scripts/next-version.mjs';
+import { main as releaseGuardMain, releaseGuard } from '../scripts/release-guard.mjs';
 
 const ROOT_CHANGELOG = `# Changelog
 
@@ -233,5 +234,52 @@ describe('bump-version.mjs', () => {
     test('refuses a value that is not a version', () => {
         expect(() => bumpVersion(dir, 'latest', () => {})).toThrow('not a version');
         expect(() => bumpVersion(dir, '1.0.0; rm -rf /', () => {})).toThrow('not a version');
+    });
+});
+
+describe('release-guard.mjs', () => {
+    const run = (refType: string, refName: string, dryRun: boolean) => releaseGuard({ refType, refName, version: '0.4.0', dryRun });
+
+    test('a tag push v0.4.0 is a real run', () => {
+        expect(run('tag', 'v0.4.0', false)).toBe('Real release of version 0.4.0 from the tag v0.4.0.');
+    });
+
+    test('a tag push v0.4.1 is refused: the tag does not match the version', () => {
+        expect(() => run('tag', 'v0.4.1', false)).toThrow('The tag v0.4.1 does not match the package.json version 0.4.0 (expected v0.4.0).');
+    });
+
+    test('a hand run on main with dry-run on is a dry run', () => {
+        expect(run('branch', 'main', true)).toBe('Dry run on the branch main: build and test version 0.4.0, publish nothing.');
+    });
+
+    test('a hand run on main with dry-run off is refused', () => {
+        expect(() => run('branch', 'main', false)).toThrow('A real release runs only from a version tag.');
+    });
+
+    test('a branch named like the tag is still a branch', () => {
+        expect(() => run('branch', 'v0.4.0', false)).toThrow('runs only from a version tag');
+    });
+
+    test('a hand run on the tag v0.4.0 with dry-run off is allowed (a second try)', () => {
+        expect(run('tag', 'v0.4.0', false)).toContain('Real release');
+    });
+
+    test('a hand run on the tag foo with dry-run off is refused', () => {
+        expect(() => run('tag', 'foo', false)).toThrow('does not match');
+    });
+
+    test('reads package.json and the GitHub variables', () => {
+        write('package.json', JSON.stringify({ name: 'x', version: '0.4.0' }));
+        const env = { GITHUB_REF_TYPE: 'branch', GITHUB_REF_NAME: 'main', DRY_RUN: 'false' };
+        expect(() => releaseGuardMain(['--root', dir], env)).toThrow('runs only from a version tag');
+        expect(releaseGuardMain(['--root', dir, '--ref-type', 'tag', '--ref-name', 'v0.4.0'], env)).toContain('Real release');
+        expect(releaseGuardMain(['--root', dir], { ...env, DRY_RUN: 'true' })).toContain('Dry run');
+    });
+
+    test('a dry-run value that is not true or false is refused', () => {
+        write('package.json', JSON.stringify({ name: 'x', version: '0.4.0' }));
+        const env = { GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v0.4.0' };
+        expect(() => releaseGuardMain(['--root', dir], env)).toThrow('--dry-run must be');
+        expect(() => releaseGuardMain(['--root', dir, '--dry-run', 'no'], env)).toThrow('--dry-run must be');
     });
 });
