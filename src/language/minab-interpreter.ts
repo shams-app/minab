@@ -85,6 +85,7 @@ import {
     type AssignmentStatement,
     type CallExpression,
     type BinaryExpression,
+    type Subquery,
     type Block,
     type BodyStatement,
     type Expression,
@@ -623,6 +624,8 @@ export class MinabInterpreter {
         if (isUnaryExpression(expr)) {
             const operand = await this.expression(expr.operand, state);
             if (expr.negated) return !this.truthy(operand);
+            // A `null` operand gives `null` (D46).
+            if (operand === null || operand === undefined) return null;
             if (expr.operator === '-') return negate(this.number(operand));
             return this.number(operand);
         }
@@ -1197,7 +1200,7 @@ export class MinabInterpreter {
         }
 
         const left = await this.expression(expr.left, state);
-        const right = await this.expression(expr.right, state);
+        const right = operator === 'IN' && isSubquery(expr.right) ? await this.subqueryValues(expr.right, state) : await this.expression(expr.right, state);
 
         if (operator === '==' || operator === '!=') {
             const caseInsensitive = this.isCaseInsensitive(expr, state);
@@ -1210,13 +1213,13 @@ export class MinabInterpreter {
             return items.some(i => this.equal(left, i, caseInsensitive));
         }
         if (operator === 'LIKE') {
-            if (left === null || right === null) fail('LIKE is not a valid operator against null (spec §7.7)');
+            // A comparison is always true or false: a `null` side gives `false` (D46).
+            if (left === null || right === null) return false;
             return this.like(String(left), String(right), this.isCaseInsensitive(expr, state));
         }
         if (operator === '<' || operator === '<=' || operator === '>' || operator === '>=') {
-            if (left === null || right === null) {
-                fail(`"${operator}" is not a valid operator against null (spec §7.7)`);
-            }
+            // A comparison is always true or false: a `null` side gives `false` (D46).
+            if (left === null || right === null) return false;
             const exact = decimalCompare(left, right);
             const folded = exact === undefined && typeof left === 'string' && typeof right === 'string' && this.isCaseInsensitive(expr, state);
             const a = folded ? (left as string).toLowerCase() : (exact ?? (left as number));
@@ -1235,12 +1238,27 @@ export class MinabInterpreter {
         if (operator !== '+' && operator !== '-' && operator !== '*' && operator !== '/' && operator !== '%' && operator !== '\\') {
             fail(`operator "${operator}" is not evaluated yet`);
         }
-        if (operator === '+' && this.isTextSum(expr, left, right)) {
-            return left === null || right === null ? null : String(left) + String(right);
-        }
+        // Arithmetic with a `null` operand gives `null`, before any other check: `null / 0` is `null` (D46).
+        if (left === null || right === null) return null;
+        if (operator === '+' && this.isTextSum(expr, left, right)) return String(left) + String(right);
         const a = this.number(left);
         const b = this.number(right);
         return arithmetic(operator as Arithmetic, a, b);
+    }
+
+    /**
+     * The values of a one-column subquery on the right of `IN` (spec §5.4): one value per row,
+     * compared with the same `==` rules as a list. The query runs as one statement.
+     */
+    private async subqueryValues(subquery: Subquery, state: State): Promise<MinabValue[]> {
+        const compiled = this.compiler.compileQuery(subquery.query, this.outerResolver(state), this.clockOf(state));
+        if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
+        const rows = await this.runStatement(compiled.query, subquery, state);
+        const item = subquery.query.selectClause?.items[0]?.expression;
+        return rows.map(row => {
+            const value = Object.values(row)[0] ?? null;
+            return item ? this.readPushed(item, value) : value;
+        });
     }
 
     /** `+` joins texts (D13). A `null` side gives `null`. */

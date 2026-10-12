@@ -305,6 +305,9 @@ Notes:
   | `%` | two numbers | the remainder, with the sign of the left side: `-7 % 3` is `-1`, `7.5 % 2` is `1.5` |
   | `\` | two numbers | integer division: always an `INTEGER`, even for `DECIMAL` operands, cut toward zero (not rounded): `7 \ 2` is `3`, `-7 \ 2` is `-3`, `7.9 \ 2` is `3`. `a == (a \ b) * b + a % b` for every sign. A result outside the safe integer range is `eval.integerOutOfRange` in the interpreter |
 
+  | `+ - * / % \`, unary `-` | a side that is `null` at run time | `null`. This comes before any other check, so `null / 0` is `null`, not an error. The result type is nullable when an operand is nullable (§7.7, D46) |
+  | `< <= > >=`, `LIKE` | a side that is `null` at run time | `false`, never `null`: `NOT (.n < 5)` is `true` when `.n` is `null`. The literal `null` next to them is still a check error (§7.7, D46) |
+
   `/`, `%` and `\` by zero are the evaluation error `eval.divisionByZero` (Postgres `22012`). `\` has the same precedence as `*`, `/` and `%`; it is only an operator outside a string and outside a backtick name, where `\` is still an escape (§2.3).
 - `NOT` binds tighter than `AND`/`OR` but looser than comparison, and is right-recursive into itself: `NOT NOT x` is valid; `NOT x == y` parses as `NOT (x == y)`.
 - `IN` and `LIKE` are **non-chaining** comparison operators — `a < b < c` is not valid, matching standard convention. `IN` expects a `ListLiteral` or collection expression on the right, and is defined as repeated `==` under the hood — which is why `null` is a fine element to include in that list (§7.7), even though `null` isn't a valid operand for `LIKE` itself.
@@ -485,6 +488,8 @@ if x isnot null { ... }
 Deliberately lowercase and unrelated to `TypeRef` (§7.2) — `is object`/`is array`/etc. describe a JSON value's structural kind, not one of Minab's own column types, and the vocabulary here is exactly the six kinds the JSON spec defines (`null`, `boolean`, `number`, `string`, `array`, `object`), nothing more. `isnot` is one keyword (no space), parallel to `is`, not `is` + `not` as two tokens.
 
 `is null`/`isnot null` aren't only for `JSON` — `x is null` and `x == null` mean exactly the same thing for any expression, not just a `JSON` one (§7.7), and both spellings are equally valid.
+
+A JSON `null` is `null`. `CAST("null" AS JSON) is null` is `true`, and so is `CAST("null" AS JSON) == null`. The two runtimes give the same answer: the SQL form reads a JSON `null` as SQL `NULL` before it tests or compares a `JSON` value.
 
 `is`/`isnot` are grammatically valid on **any** expression, not only `JSON`-typed ones — `.total isnot null` works exactly like `x isnot null` would. But only the `null`/`not null` check is meaningful outside `JSON` — applying `is array` or `is boolean` to something whose declared type is already, say, `DECIMAL` is always statically decidable (always false) rather than an actual runtime test — the grammar doesn't stop you from writing it, but it's not doing anything a JSON-shape test is meant to do. The five non-null kinds only really earn their keep against a `JSON` value (or, once JSON path traversal exists, an untyped value pulled out of one).
 
@@ -740,6 +745,30 @@ The natural reading of this — stated here as an explicit generalization, not s
 .status IN [null, "flagged"]           // fine — same as: .status == null OR .status == "flagged"
 .total < null                          ✗ semantic error — < doesn't accept null as an operand
 .description LIKE null                 ✗ semantic error — LIKE doesn't accept null as an operand
+```
+
+**A `null` value at run time (D46).** Rule 3 is about the *literal* `null`. A nullable value (a nullable column, a `ref` through an empty link, a variable) can still be `null` when the program runs. Then:
+
+- **Arithmetic gives `null`.** `+`, `-`, `*`, `/`, `\`, `%` and unary `-` with a `null` operand give `null`. This comes before any other check, so `null / 0` is `null`, not a division error. The result type is nullable when an operand is nullable. Text `+` already works like this, and so do the built-ins.
+- **A comparison is always `true` or `false`.** `<`, `<=`, `>`, `>=` and `LIKE` with a `null` operand give `false`, as `==` already is never unknown (rule 2). So `NOT (.n < 5)` is `true` when `.n` is `null`.
+- **`IN` is never `null`**, because it is repeated `==`: `null IN [1, null]` is `true`, `4 IN [1, null]` is `false`, and `NOT (x IN …)` is the plain opposite. The same holds for a subquery on the right: `.customer_id IN (FROM Customer WHERE .vip SELECT .id)`.
+
+The interpreter and the compiled SQL give the same answer. SQL is three-valued, so the compiler writes these forms in a way that never gives `NULL` (for example `COALESCE(a < b, FALSE)`, and `IS NOT DISTINCT FROM` for `IN`). In a `WHERE`, `HAVING` or filter condition, `NULL` and `false` drop the same rows, so there the compiler may keep the plain form.
+
+```
+// .n is INTEGER? and null in this record, .t is TEXT? and null, .a is 4
+.n + .a                  // null
+-.n                      // null
+.n / 0                   // null (no division-by-zero error)
+COALESCE(.n, 0) + .a     // 4
+.n < 5                   // false
+.n >= 5                  // false
+NOT (.n < 5)             // true
+.t LIKE "a%"             // false
+.n IN [1, null]          // true
+.a IN [1, null]          // false
+.n < null                // ✗ check error, as before (rule 3)
+FROM Item WHERE .n < 5 SELECT .id    // a row with a null n is not returned
 ```
 
 ---
