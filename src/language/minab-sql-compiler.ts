@@ -550,7 +550,7 @@ export class MinabSqlCompiler {
     ): { alias: string; set: string; where: string } {
         const scope = this.scopeFor(source.alias, source.table);
         const physical = quoteIdent(this.sqlTable(source.table));
-        const predicates = [...source.predicates, ...(statement.whereClause ? [this.expression(statement.whereClause.condition, ctx, [scope])] : [])];
+        const predicates = [...source.predicates, ...(statement.whereClause ? [this.condition(statement.whereClause.condition, ctx, [scope])] : [])];
         const ordered = statement.orderByClause !== undefined || statement.limitClause !== undefined;
         if (!ordered) {
             return { alias: source.alias, set: build(source.alias, scope), where: predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '' };
@@ -868,10 +868,10 @@ export class MinabSqlCompiler {
         const select = this.selectClause(query, ctx, scopes);
         const from = this.fromClause(query, scope, ctx, scopes);
         // A related collection brings its own predicates (`<fk> = <outer key>`, `[filter]`). The user's WHERE follows them.
-        const predicates = [...source.predicates, ...(query.whereClause ? [this.expression(query.whereClause.condition, ctx, scopes)] : [])];
+        const predicates = [...source.predicates, ...(query.whereClause ? [this.condition(query.whereClause.condition, ctx, scopes)] : [])];
         const where = predicates.length > 0 ? ` WHERE ${predicates.join(' AND ')}` : '';
         const groupBy = query.groupByClause ? ` GROUP BY ${query.groupByClause.keys.map(k => this.groupKey(k.expression, ctx, scopes)).join(', ')}` : '';
-        const having = query.havingClause ? ` HAVING ${this.expression(query.havingClause.condition, ctx, scopes)}` : '';
+        const having = query.havingClause ? ` HAVING ${this.condition(query.havingClause.condition, ctx, scopes)}` : '';
         const orderBy = query.orderByClause
             ? ` ORDER BY ${query.orderByClause.items
                   .map(i => `${this.expression(i.expression, ctx, scopes)}${i.direction === 'DESC' ? ' DESC' : ''}`)
@@ -1052,12 +1052,26 @@ export class MinabSqlCompiler {
         return text?.includes('.') ? text : expr.value;
     }
 
+    /**
+     * A `WHERE`, `HAVING` or filter condition. There a row is kept only when the condition is
+     * `TRUE`, so SQL's `NULL` and `FALSE` keep the same rows. Under `AND` and `OR` (and nowhere
+     * else) this stays true, so a comparison reached only through them may keep its plain form,
+     * which Postgres can answer with an index (D46).
+     */
+    private condition(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        ctx.truthPosition = true;
+        return this.expression(expr, ctx, scopes);
+    }
+
     private expression(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        // Only the node right under `condition` (or under `AND`/`OR` there) is in a truth position.
+        const truth = ctx.truthPosition;
+        ctx.truthPosition = false;
+        if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes, truth);
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
         if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr));
         if (isBooleanLiteral(expr)) return expr.value === 'true' ? 'TRUE' : 'FALSE';
         if (isNullLiteral(expr)) return 'NULL';
-        if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes);
         if (isUnaryExpression(expr)) return this.unary(expr, ctx, scopes);
         if (isCallExpression(expr)) return this.call(expr, ctx, scopes);
         if (isCastExpr(expr)) {
@@ -1158,11 +1172,11 @@ export class MinabSqlCompiler {
         return this.expression(expr, ctx, scopes);
     }
 
-    /** `x is null` is `x IS NULL`. The other kinds read `jsonb_typeof`, and a `null` answers `false` (`isnot`: `true`), as in the interpreter. */
+    /** `x is null` is `x IS NULL` (a JSON `null` is `null` too, spec §5.6). The other kinds read `jsonb_typeof`, and a `null` answers `false` (`isnot`: `true`), as in the interpreter. */
     private typeTest(expr: TypeTestExpression, ctx: Ctx, scopes: SqlScope[]): string {
         const value = this.expression(expr.value, ctx, scopes);
         const is = expr.operator === 'is';
-        if (isNullLiteral(expr.test)) return `(${value} IS ${is ? '' : 'NOT '}NULL)`;
+        if (isNullLiteral(expr.test)) return `(${this.jsonNullAsNull(value, expr.value)} IS ${is ? '' : 'NOT '}NULL)`;
         const kind = JSON_KINDS[expr.test.$type];
         if (!kind) fail(`"${expr.test.$type}" is not a JSON kind`);
         return `(jsonb_typeof(${value}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
@@ -1335,22 +1349,29 @@ export class MinabSqlCompiler {
         return `(SELECT ${quoteIdent(alias)}.${quoteIdent(column)} FROM ${quoteIdent(this.sqlTable(row.table))} AS ${quoteIdent(alias)} WHERE ${quoteIdent(alias)}.${quoteIdent(pk)} = ${row.keyExpr})`;
     }
 
-    private binary(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
+    private binary(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[], truth: boolean): string {
         const op = expr.operator;
         if (op === 'AND' || op === 'OR') {
-            return `(${this.expression(expr.left, ctx, scopes)} ${op} ${this.expression(expr.right, ctx, scopes)})`;
+            const side = (e: Expression) => (truth ? this.condition(e, ctx, scopes) : this.expression(e, ctx, scopes));
+            const l = side(expr.left);
+            return `(${l} ${op} ${side(expr.right)})`;
         }
         if (op === 'IN') {
-            return this.inComparison(expr, ctx, scopes);
+            return this.inComparison(expr, ctx, scopes, truth);
         }
         if (op === '==' || op === '!=') {
             const identity = this.identityComparison(expr, ctx, scopes);
             if (identity) return identity;
+            const [l, r] = this.textFamilySides(expr.left, expr.right, ctx, scopes);
+            return `${this.jsonNullAsNull(l, expr.left)} ${COMPARISONS[op]} ${this.jsonNullAsNull(r, expr.right)}`;
         }
         const comparison = COMPARISONS[op];
         if (comparison) {
             const [l, r] = this.textFamilySides(expr.left, expr.right, ctx, scopes);
-            return `${l} ${comparison} ${r}`;
+            const plain = `${l} ${comparison} ${r}`;
+            // An ordering or `LIKE` with a `null` side is `false`, never SQL's `NULL` (D46).
+            if (truth || (!this.canBeNull(expr.left) && !this.canBeNull(expr.right))) return plain;
+            return `COALESCE(${plain}, FALSE)`;
         }
         const left = () => this.expression(expr.left, ctx, scopes);
         const right = () => this.expression(expr.right, ctx, scopes);
@@ -1381,17 +1402,66 @@ export class MinabSqlCompiler {
         return [cast(l, this.isTextArg(left) && !lc), cast(r, this.isTextArg(right) && !rc)];
     }
 
-    /** `IN`: with a `CITEXT` side, the `TEXT` side (value or list items) is cast to `citext`. */
-    private inComparison(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
-        const value = this.expression(expr.left, ctx, scopes);
-        const valueCitext = this.isCitextArg(expr.left);
-        if (!isListLiteral(expr.right)) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
+    /**
+     * `IN` is repeated `==` (spec §7.7), so it is never `NULL`: `null IN [1, null]` is `true`.
+     * SQL `IN` is three-valued, so the plain form is used only where it gives the same rows:
+     * when no side can be `null`, or in a truth position when the value and the items are not
+     * both nullable (there `NULL` and `FALSE` keep the same rows). Otherwise a list is
+     * `(v IS NOT DISTINCT FROM a OR …)` and a subquery is an `EXISTS` with the same test.
+     * With a `CITEXT` side, the `TEXT` side (value or list items) is cast to `citext` (D15).
+     */
+    private inComparison(expr: BinaryExpression, ctx: Ctx, scopes: SqlScope[], truth: boolean): string {
+        const valueNullable = this.canBeNull(expr.left);
+        const plainIsSafe = (itemsNullable: boolean) => (truth ? !(valueNullable && itemsNullable) : !valueNullable && !itemsNullable);
+        if (isSubquery(expr.right)) {
+            const item = expr.right.query.selectClause?.items[0]?.expression;
+            if (plainIsSafe(!item || this.canBeNull(item))) {
+                const value = this.expression(expr.left, ctx, scopes);
+                return `${value} IN (${this.query(expr.right.query, ctx, scopes)})`;
+            }
+            // The value is written once, inside the `EXISTS`.
+            const query = this.query(expr.right.query, ctx, scopes);
+            return `EXISTS (SELECT 1 FROM (${query}) AS "_in"("v") WHERE "_in"."v" IS NOT DISTINCT FROM ${this.expression(expr.left, ctx, scopes)})`;
+        }
+        if (!isListLiteral(expr.right)) fail('IN is compiled only against a list literal or a subquery');
         const items = expr.right.items;
-        const anyCitext = valueCitext || items.some(i => this.isCitextArg(i));
-        if (!anyCitext) return `${value} IN ${this.inList(expr.right, ctx, scopes)}`;
-        const cast = (sql: string, arg: Expression) => (this.isTextArg(arg) && !this.isCitextArg(arg) ? `CAST(${sql} AS citext)` : sql);
-        const list = items.map(i => cast(this.expression(i, ctx, scopes), i)).join(', ');
-        return `${cast(value, expr.left)} IN (${list})`;
+        const anyCitext = this.isCitextArg(expr.left) || items.some(i => this.isCitextArg(i));
+        const cast = (sql: string, arg: Expression) => (anyCitext && this.isTextArg(arg) && !this.isCitextArg(arg) ? `CAST(${sql} AS citext)` : sql);
+        const value = cast(this.expression(expr.left, ctx, scopes), expr.left);
+        const list = items.map(i => cast(this.expression(i, ctx, scopes), i));
+        if (list.length === 0) return 'FALSE';
+        if (plainIsSafe(items.some(i => this.canBeNull(i)))) return `${value} IN (${list.join(', ')})`;
+        // The value is repeated. That is safe: every Minab expression compiles to SQL with no side
+        // effect and no volatile function (the clock is a bound parameter, D21), so each copy has the
+        // same value, and a bound parameter is one `$n` used again, not a second parameter.
+        return `(${list.map(item => `${value} IS NOT DISTINCT FROM ${item}`).join(' OR ')})`;
+    }
+
+    /**
+     * Whether an operand can be `NULL` at run time. `false` only when that is sure: a literal,
+     * a column of the current row that is not nullable, and arithmetic over those. Anything else
+     * (a parameter, a relation, an aggregate, a `LEFTJOIN` side, a subquery) counts as nullable.
+     */
+    private canBeNull(expr: Expression): boolean {
+        if (isStringLiteral(expr) || isNumberLiteral(expr) || isBooleanLiteral(expr)) return false;
+        if (isUnaryExpression(expr)) return this.canBeNull(expr.operand);
+        if (isBinaryExpression(expr) && ['+', '-', '*', '/', '%', '\\'].includes(expr.operator)) {
+            return this.canBeNull(expr.left) || this.canBeNull(expr.right);
+        }
+        if (isCurrentRecord(expr) && expr.field && this.typeChecker) {
+            try {
+                const inferred = this.typeChecker.inferType(expr);
+                return !(inferred.ok && inferred.type.kind === 'scalar' && !inferred.type.array && !inferred.type.nullable);
+            } catch {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    /** A `JSON` operand reads a JSON `null` as SQL `NULL` (spec §5.6), as the interpreter does. */
+    private jsonNullAsNull(sql: string, expr: Expression): string {
+        return this.baseOf(expr) === 'JSON' ? `NULLIF(${sql}, 'null'::jsonb)` : sql;
     }
 
     /** True when the argument has type `TEXT` or `CITEXT`. */
@@ -1429,16 +1499,6 @@ export class MinabSqlCompiler {
     private identity(row: RowRef): string {
         if (row.kind === 'scope') return `${quoteIdent(row.alias)}.${quoteIdent(this.primaryKey(row.table))}`;
         return row.keyExpr;
-    }
-
-    private inList(right: Expression, ctx: Ctx, scopes: SqlScope[]): string {
-        if (isListLiteral(right)) {
-            return `(${right.items.map(i => this.expression(i, ctx, scopes)).join(', ')})`;
-        }
-        if (isSubquery(right)) {
-            return `(${this.query(right.query, ctx, scopes)})`;
-        }
-        fail('IN is compiled only against a list literal or a subquery');
     }
 
     private unary(expr: UnaryExpression, ctx: Ctx, scopes: SqlScope[]): string {
@@ -1668,7 +1728,7 @@ export class MinabSqlCompiler {
                 table: source.table,
                 named: new Map([[source.alias, { alias: source.alias, table: source.table }]])
             };
-            const predicate = this.expression(expr.filter, ctx, [inner, ...scopes]);
+            const predicate = this.condition(expr.filter, ctx, [inner, ...scopes]);
             return { ...source, predicates: [...source.predicates, predicate] };
         }
         if (isCurrentRecord(expr) || isMemberAccess(expr)) {
@@ -1793,6 +1853,8 @@ class Ctx {
     readonly params: unknown[] = [];
     private aliasCount = 0;
     private groupCount = 0;
+    /** True while the next node compiled sits where `NULL` and `FALSE` keep the same rows (see `condition`). */
+    truthPosition = false;
 
     constructor(
         readonly outer: OuterResolver,

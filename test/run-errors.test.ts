@@ -70,9 +70,9 @@ describe('every error has a code, a message, params and a range', () => {
     });
 
     test('a failure with no special code is eval.failed, and params.reason has the text', async () => {
-        const error = await errorOf('.total > 5', p => p.run({ record: { total: null } }));
+        const error = await errorOf('.total + 5', p => p.run({ record: { total: true } }));
         expect(error.code).toBe('eval.failed');
-        expect(error.message).toContain('against null');
+        expect(error.message).toContain('expected a number');
         expect(error.params).toEqual({ reason: error.message });
         expect(error.range).toBeDefined();
     });

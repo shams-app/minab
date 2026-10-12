@@ -268,14 +268,15 @@ describe('the interpreter implements spec §7.7 in its own idiom (ADR 0001)', ()
         expect(result).toBe(true);
     });
 
-    test('an ordering comparison against null is an error, not false (rule 3)', async () => {
+    test('an ordering comparison with a null value at run time is false (D46); the literal null stays a check error (rule 3)', async () => {
         const executor = new RecordingExecutor();
+        // `check` rejects `.total > null` (null.orderingWithNull, see diagnostic-codes.test.ts). At run time the answer is false, as in SQL.
         const result = await run(`.total > null`, {
             executor,
             record: { id: 'o-1', total: 5 },
             recordTable: 'Order'
         });
-        expect(result).toEqual({ ok: false, reason: expect.stringContaining('null') });
+        expect(result).toEqual({ ok: true, value: false });
     });
 
     test('a CITEXT column compares case-insensitively, matching what SQL would do', async () => {

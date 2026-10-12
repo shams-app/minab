@@ -32,7 +32,17 @@ describe('the differential harness', () => {
     });
 
     test('a knownGap case that really differs passes', async () => {
-        await checkCase(db, { name: 'gap', schema, record: { n: null, a: 4 }, expr: '.n + .a', knownGap: { card: 'C0', note: 'null arithmetic' } });
+        // No real gap is left to use here (C9 fixed the last one), so the database is made to answer wrong.
+        const wrong: TestDatabase = {
+            kind: db.kind,
+            exec: sql => db.exec(sql),
+            query: (text, params) => db.query(text, params),
+            queryResult: (text, params) => db.queryResult(text, params),
+            executor: { execute: async q => (await db.executor.execute(q)).map(row => ({ ...row, v: 99 })) },
+            isolated: (setupSql, fn) => db.isolated(setupSql, fn),
+            close: () => db.close()
+        };
+        await checkCase(wrong, { name: 'gap', schema, record: { a: 2, b: 3 }, expr: '.a + .b', knownGap: { card: 'C0', note: 'a wrong database' } });
     });
 
     test('two errors of the same meaning agree, two of different meaning do not', () => {

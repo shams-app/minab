@@ -384,3 +384,48 @@ describe('FROM a related collection (spec §3.2)', () => {
         expect(result.query.text).toBe('SELECT "_r0"."id" AS "id" FROM "Order" AS "_r0" WHERE "_r0"."customer_id" = $1 AND "_r0"."total" > $2');
     });
 });
+
+describe('a null value: comparisons and IN are never NULL (C9, D46, spec §7.7)', () => {
+    test('in WHERE, a comparison reached only through AND/OR keeps its plain form (an index can answer it)', async () => {
+        const { text } = await compile(`FROM Order WHERE .customer.name < "m" OR .customer.name LIKE "a%" SELECT .id`);
+        expect(text).toBe(
+            'SELECT "Order"."id" FROM "Order" WHERE ((SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id") < $1 OR ' +
+                '(SELECT "_r1"."name" FROM "Customer" AS "_r1" WHERE "_r1"."id" = "Order"."customer_id") LIKE $2)'
+        );
+    });
+
+    test('under NOT, and in SELECT, a comparison on a nullable side is wrapped in COALESCE', async () => {
+        const where = await compile(`FROM Order WHERE NOT (.customer.name < "m") SELECT .id`);
+        expect(where.text).toBe(
+            'SELECT "Order"."id" FROM "Order" WHERE (NOT COALESCE((SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id") < $1, FALSE))'
+        );
+        const select = await compile(`FROM Order SELECT .customer.name LIKE "a%" AS a`);
+        expect(select.text).toBe(
+            'SELECT COALESCE((SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id") LIKE $1, FALSE) AS "a" FROM "Order"'
+        );
+    });
+
+    test('a comparison of two sides that cannot be null stays plain everywhere', async () => {
+        const { text } = await compile(`FROM Order SELECT .total > 5 AS big`);
+        expect(text).toBe('SELECT "Order"."total" > $1 AS "big" FROM "Order"');
+    });
+
+    test('IN a list: plain when no side can be null, IS NOT DISTINCT FROM when one can', async () => {
+        expect((await compile(`FROM Order SELECT .status IN ["a", "b"] AS hit`)).text).toBe('SELECT "Order"."status" IN ($1, $2) AS "hit" FROM "Order"');
+        expect((await compile(`FROM Order SELECT .status IN ["a", null] AS hit`)).text).toBe(
+            'SELECT ("Order"."status" IS NOT DISTINCT FROM $1 OR "Order"."status" IS NOT DISTINCT FROM NULL) AS "hit" FROM "Order"'
+        );
+        // In WHERE, a value that cannot be null keeps the plain form even with a null item.
+        expect((await compile(`FROM Order WHERE .status IN ["a", null] SELECT .id`)).text).toBe(
+            'SELECT "Order"."id" FROM "Order" WHERE "Order"."status" IN ($1, NULL)'
+        );
+    });
+
+    test('IN a subquery: EXISTS with IS NOT DISTINCT FROM when the value can be null', async () => {
+        const { text } = await compile(`FROM Order SELECT .customer.name IN (FROM Customer SELECT .country) AS hit`);
+        expect(text).toBe(
+            'SELECT EXISTS (SELECT 1 FROM (SELECT "Customer"."country" FROM "Customer") AS "_in"("v") WHERE "_in"."v" IS NOT DISTINCT FROM ' +
+                '(SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")) AS "hit" FROM "Order"'
+        );
+    });
+});
