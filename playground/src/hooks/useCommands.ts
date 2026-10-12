@@ -53,25 +53,25 @@ export function useCommands(): Command[] {
             { id: 'theme-system', title: 'Theme: match system', group: 'Actions', run: close(() => setTheme('system')) }
         ];
         const pages: Command[] = [
-            { id: 'page-home', title: 'Home', group: 'Pages', run: close(() => navigate('/')) },
-            { id: 'page-play', title: 'Playground', group: 'Pages', run: close(() => navigate('/play')) },
-            { id: 'page-examples', title: 'Examples', group: 'Pages', run: close(() => navigate('/examples')) },
-            { id: 'page-learn', title: 'Tour', group: 'Pages', keywords: 'learn lessons', run: close(() => navigate('/learn')) },
-            { id: 'page-reference', title: 'Reference', group: 'Pages', keywords: 'cheat sheet', run: close(() => navigate('/reference')) }
+            { id: 'page-home', title: 'Home', group: 'Pages', run: close(() => void navigate('/')) },
+            { id: 'page-play', title: 'Playground', group: 'Pages', run: close(() => void navigate('/play')) },
+            { id: 'page-examples', title: 'Examples', group: 'Pages', run: close(() => void navigate('/examples')) },
+            { id: 'page-learn', title: 'Tour', group: 'Pages', keywords: 'learn lessons', run: close(() => void navigate('/learn')) },
+            { id: 'page-reference', title: 'Reference', group: 'Pages', keywords: 'cheat sheet', run: close(() => void navigate('/reference')) }
         ];
         const exampleCommands: Command[] = examples.map(e => ({
             id: `example-${e.id}`,
             title: e.title,
             group: 'Examples',
             keywords: `${e.id} ${e.summary} ${e.tags.join(' ')}`,
-            run: close(() => navigate(`/play?example=${e.id}`))
+            run: close(() => void navigate(`/play?example=${e.id}`))
         }));
         const lessonCommands: Command[] = lessons.map(l => ({
             id: `lesson-${l.id}`,
             title: `${l.number}. ${l.title}`,
             group: 'Lessons',
             keywords: `${l.id} ${l.summary}`,
-            run: close(() => navigate(`/learn/${l.id}`))
+            run: close(() => void navigate(`/learn/${l.id}`))
         }));
         return [...actions, ...pages, ...exampleCommands, ...lessonCommands];
     }, [navigate, share]);

@@ -6,7 +6,7 @@
  * broken without a failing test saying so.
  */
 
-import type { Row } from '../engine/protocol.js';
+import type { Row, RunReport } from '../engine/protocol.js';
 
 export type ExampleTag =
     | 'query'
@@ -73,7 +73,7 @@ export interface Example {
 
 /** What a lesson's goal check sees: the latest run, and the source that produced it. */
 export interface GoalContext {
-    report: import('../engine/protocol.js').RunReport;
+    report: RunReport;
     source: string;
 }
 

@@ -16,7 +16,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "prelint": "npm run prepare:language",
-    "lint": "oxlint --type-aware src/ui src/monaco test scripts",
+    "lint": "oxlint --type-aware src test scripts",
     "format": "oxfmt -c ../.oxfmtrc.json --write src test scripts",
     "format:check": "oxfmt -c ../.oxfmtrc.json --check src test scripts",
     "test:site": "playwright test",

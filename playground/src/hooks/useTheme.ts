@@ -10,8 +10,17 @@ export interface ThemeView {
     cycle: () => void;
 }
 
-function systemDark(): boolean {
-    return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+/** The CSS shows the light theme only when the OS asks for light; with no preference it shows dark. */
+const LIGHT_QUERY = '(prefers-color-scheme: light)';
+
+/** The theme the page shows for a preference, given the OS media query. */
+export function effectiveTheme(preference: ThemePreference, matchMedia?: (query: string) => { matches: boolean }): 'light' | 'dark' {
+    if (preference !== 'system') return preference;
+    return matchMedia?.(LIGHT_QUERY).matches ? 'light' : 'dark';
+}
+
+function browserMatchMedia(): ((query: string) => MediaQueryList) | undefined {
+    return typeof window === 'undefined' ? undefined : query => window.matchMedia(query);
 }
 
 /** Applies the theme preference to <html data-theme> and reports the effective theme. */
@@ -26,14 +35,14 @@ export function useThemeSync(): void {
 
 export function useTheme(): ThemeView {
     const preference = usePlayground(s => s.theme);
-    const [dark, setDark] = useState(systemDark);
+    const [system, setSystem] = useState(() => effectiveTheme('system', browserMatchMedia()));
     useEffect(() => {
-        const media = window.matchMedia('(prefers-color-scheme: dark)');
-        const listener = () => setDark(media.matches);
+        const media = window.matchMedia(LIGHT_QUERY);
+        const listener = () => setSystem(media.matches ? 'light' : 'dark');
         media.addEventListener('change', listener);
         return () => media.removeEventListener('change', listener);
     }, []);
-    const effective = preference === 'system' ? (dark ? 'dark' : 'light') : preference;
+    const effective = preference === 'system' ? system : preference;
     return {
         preference,
         effective,

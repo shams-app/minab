@@ -30,7 +30,7 @@ export function ExamplesPage() {
                         key={example.id}
                         example={example}
                         href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/play?example=${example.id}`}
-                        onOpen={() => navigate(`/play?example=${example.id}`)}
+                        onOpen={() => void navigate(`/play?example=${example.id}`)}
                     />
                 ))}
             </ExampleGrid>

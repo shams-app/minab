@@ -17,7 +17,7 @@ export function ReferencePage() {
                     </a>
                 }
             />
-            <CheatSheet sections={cheatsheet} specUrl={SPEC_URL} onOpenExample={id => navigate(`/play?example=${id}`)} />
+            <CheatSheet sections={cheatsheet} specUrl={SPEC_URL} onOpenExample={id => void navigate(`/play?example=${id}`)} />
         </div>
     );
 }
