@@ -21,7 +21,11 @@ Small Node scripts for the repository itself (not for users of Minab).
 - `bump-version.mjs` — sets the version of the root package and of the extension,
   with their lockfiles. `bump-version.d.mts` types it for the tests.
 - `next-version.mjs` — prints the version of a `next` prerelease. `next-version.d.mts`
-  types it for the tests. The three release scripts are used by
+  types it for the tests.
+- `release-guard.mjs` — the first step of `release.yml` (Q6). A dry run may run on
+  any ref; a real run only on the tag `v<package.json version>`. Any other run
+  stops with a clear message before it builds. `release-guard.d.mts` types it for
+  the tests. The four release scripts are used by
   `.github/workflows/release.yml` and `next.yml`. Steps for people:
   [`docs/releasing.md`](../docs/releasing.md). Tests: `test/release-scripts.test.ts`.
 
