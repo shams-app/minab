@@ -22,6 +22,7 @@ import {
     type MinabEvent,
     type RunPorts
 } from '../src/runtime/index.js';
+import { ALL_KEYWORDS } from './support/keywords.js';
 import { orderSchema } from './support/runtime.js';
 
 const record = { recordTable: 'Order', isFieldRule: false };
@@ -220,11 +221,91 @@ describe('host functions (D27)', () => {
     });
 });
 
+describe('host function results (ADR 0002 section 4.3)', () => {
+    /** A runtime with one host function `f()` that returns `type`, and a run of `program` where `f` returns `value`. */
+    async function runWith(type: string, value: unknown, program = 'f()') {
+        const minab = createMinab({ schema: orderSchema(), functions: [{ name: 'f', params: [], returns: type }] });
+        const prepared = await minab.prepare(program);
+        expect(prepared.diagnostics).toEqual([]);
+        return prepared.run({}, { hostFunctions: { call: () => value } });
+    }
+
+    test('an INTEGER function that returns "x" is eval.hostFunctionResult, with the name and the expected type', async () => {
+        const result = await runWith('INTEGER', 'x');
+        expect(result).toMatchObject({ ok: false, error: { code: 'eval.hostFunctionResult', params: { name: 'f', expected: 'INTEGER' } } });
+        expect(result.ok ? '' : result.error.message).toBe('the host function "f" returned a value that is not INTEGER');
+    });
+
+    test('a function that is not nullable and returns null (or nothing) is eval.hostFunctionResult', async () => {
+        expect(await runWith('INTEGER', null)).toMatchObject({ ok: false, error: { code: 'eval.hostFunctionResult' } });
+        expect(await runWith('TEXT', undefined)).toMatchObject({ ok: false, error: { code: 'eval.hostFunctionResult' } });
+        // The wrong value never reaches the program: `f() isnot null` would be true.
+        expect(await runWith('INTEGER', null, 'f() + 1 > 0')).toMatchObject({ ok: false, error: { code: 'eval.hostFunctionResult' } });
+    });
+
+    test('a correct result passes, in the form of its type', async () => {
+        expect(await runWith('INTEGER', 4)).toMatchObject({ ok: true, value: 4 });
+        expect(await runWith('INTEGER?', null)).toMatchObject({ ok: true, value: null });
+        expect(await runWith('INTEGER', 5n)).toMatchObject({ ok: true, value: 5 });
+        expect(await runWith('DECIMAL', 1.5)).toMatchObject({ ok: true, value: 1.5 });
+        expect(await runWith('DECIMAL', '0.10', 'f() + 0.2 == 0.3')).toMatchObject({ ok: true, value: true });
+        expect(await runWith('TEXT', 'a')).toMatchObject({ ok: true, value: 'a' });
+        expect(await runWith('BOOLEAN', false)).toMatchObject({ ok: true, value: false });
+        expect(await runWith('DATE', '2026-10-11')).toMatchObject({ ok: true, value: '2026-10-11' });
+        expect(await runWith('TIME', '09:30')).toMatchObject({ ok: true, value: '09:30' });
+        expect(await runWith('DATETIME', '2026-10-11 10:00:00+00')).toMatchObject({ ok: true, value: '2026-10-11T10:00:00.000Z' });
+        expect(await runWith('UUID', '6f1c2c1e-1d2b-4b51-9a4a-0d2f2a0b8c11')).toMatchObject({ ok: true });
+        expect(await runWith('JSON', { a: [1] })).toMatchObject({ ok: true, value: { a: [1] } });
+        expect(await runWith('TEXT?[]', ['a', null])).toMatchObject({ ok: true, value: ['a', null] });
+        expect(await runWith('TEXT[]?', null)).toMatchObject({ ok: true, value: null });
+    });
+
+    test('other wrong values of each type are refused', async () => {
+        const wrong: [string, unknown][] = [
+            ['INTEGER', 1.5],
+            ['INTEGER', 2 ** 60],
+            ['INTEGER', '12'],
+            ['DECIMAL', 'abc'],
+            ['DECIMAL', Number.NaN],
+            ['TEXT', 5],
+            ['CITEXT', true],
+            ['BOOLEAN', 'true'],
+            ['DATE', '2026-02-30'],
+            ['TIME', '25:00'],
+            ['DATETIME', 'yesterday'],
+            ['UUID', 'not-a-uuid'],
+            ['TEXT[]', 'a'],
+            ['TEXT[]', ['a', null]],
+            ['TEXT[]', ['a', 1]],
+            ['TEXT[]', null]
+        ];
+        for (const [type, value] of wrong) {
+            const result = await runWith(type, value);
+            expect(result, `${type} ${String(value)}`).toMatchObject({ ok: false, error: { code: 'eval.hostFunctionResult', params: { expected: type } } });
+        }
+    });
+});
+
 describe('names (D10, D11)', () => {
     test('a host function named RATE is an error at createMinab', () => {
         const declare = () => createMinab({ schema: orderSchema(), functions: [{ name: 'RATE', params: [], returns: 'DECIMAL' }] });
         expect(declare).toThrow(HostDeclarationError);
         expect(declare).toThrow(/lowercase letter/);
+    });
+
+    test('a host input or a host function named like a keyword is an error at createMinab', () => {
+        const input = () => createMinab({ schema: orderSchema(), inputs: { from: 'TEXT' } });
+        expect(input).toThrow(HostDeclarationError);
+        expect(input).toThrow('host input "from": this is a keyword of the language');
+        const fn = () => createMinab({ schema: orderSchema(), functions: [{ name: 'loop', params: [], returns: 'INTEGER' }] });
+        expect(fn).toThrow(HostDeclarationError);
+        expect(fn).toThrow('host function "loop": this is a keyword of the language');
+        // Every word keyword of the grammar, not a hand-written list.
+        for (const keyword of ALL_KEYWORDS.filter(k => /\p{Ll}/u.test(k))) {
+            expect(() => createMinab({ schema: orderSchema(), inputs: { [keyword]: 'TEXT' } }), keyword).toThrow(/keyword of the language/);
+        }
+        // A name that only starts like a keyword is fine.
+        expect(() => createMinab({ schema: orderSchema(), inputs: { fromDate: 'DATE', looping: 'BOOLEAN' } })).not.toThrow();
     });
 
     test('a host input needs a lowercase letter too', () => {

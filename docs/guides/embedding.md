@@ -80,8 +80,15 @@ else console.error(result.error.code); // for example `limit.timeout`
 - `prepare` does **not** throw for a bad program. It returns `diagnostics`.
   `run` does **not** throw for a failed program. It returns `{ ok: false, error }`.
   Both reject only for a bad call (a disposed runtime, source that is not text).
-- `schema.version` names the schema. Two schemas with the same `version` must be
-  the same schema. Change the schema, change the `version`.
+- `schema.version` names the schema. Change the schema, change the `version`.
+  The NestJS module keys its runtimes by the `version` and a hash of the schema's
+  content, so two different schemas never share a runtime there. With `createMinab`
+  you keep the runtimes yourself: keep one for each schema.
+- A host input or a host function may not be named like a keyword of the language
+  (`from`, `loop`, `let`, ...): `createMinab` throws a `HostDeclarationError` that names it.
+- A host function's result must match its declared type (the type, and `null` only
+  with a `?`). A wrong result fails the run with `eval.hostFunctionResult`. The
+  program never sees the wrong value.
 - `ruleContext` says where the program sits: which table a bare `.` means, and
   whether `$` exists (and its type). Give it to `createMinab`, or to each `prepare`.
 - `expect` is optional. It is one of `text`, `number`, `boolean`, `date`,
@@ -250,8 +257,9 @@ default) and Jest work: the package has a CommonJS build for `.`, `/node` and `/
 [`src/schema.ts`](../../examples/nestjs/src/schema.ts) is the schema Minab
 programs may read: tables, columns, `ref` and `collection` relations, and a `version`
 (`shop-1`). It is the **whole read surface**. A program can read every column
-in it and nothing else. Keep it small. When it changes, change the `version`:
-prepared programs are cached by it.
+in it and nothing else. Keep it small. When it changes, change the `version`.
+The module caches a runtime and its prepared programs by the `version` and a hash
+of the schema's content, so a schema with a new content never uses an old runtime.
 
 ### 2. The program store
 
@@ -260,7 +268,7 @@ table `minab_program (id, version, source, language_version)`. The table and two
 programs are made by the migration
 ([`src/migrations/1700000000000-init.ts`](../../examples/nestjs/src/migrations/1700000000000-init.ts)).
 `ProgramStore.get(id, version)` returns the program or `undefined`. The module
-caches the prepared program by schema version, id and version.
+caches the prepared program by schema (version and content), id and version.
 
 ### 3. The module
 
@@ -270,6 +278,7 @@ caches the prepared program by schema version, id and version.
 MinabModule.forRootAsync({
     inject: [DataSource],
     endpointPath: 'minab/run',
+    guards: [AuthGuard], // your app's guard; the example itself has none, to stay short
     useFactory: (dataSource: DataSource) => ({
         schemaLoader: () => schema, // with tenants, pick the schema from the request
         ruleContext: { recordTable: 'Order', isFieldRule: false },
@@ -279,14 +288,22 @@ MinabModule.forRootAsync({
 })
 ```
 
-- `schemaLoader(context)` runs for each request. Its result is cached by `version`.
-  With tenants, choose the schema from the request, and give each schema its own `version`.
+- `schemaLoader(context)` runs for each request. Its runtime is cached by the
+  `version` and a hash of the schema's content, so two tenants never share a
+  runtime, even with the same `version`. The hash is made once for each schema
+  object: return the same object for the same schema, and never change a schema
+  object after you returned it. With tenants, choose the schema from the request.
 - `endpoint.ports` gives the data port of the run endpoint. The **server** decides
   this. The client never does. Use `endpoint.hostInputs` for server-owned values
   such as `currentUser`: they replace a value of the same name from the client.
-- Put a guard on the endpoint (`endpoint.guards`, or the app's global guards).
-  Without one, anyone who can reach the route can run stored programs. The example
-  has no guard, to stay short. Do not copy that.
+- Put a guard on the endpoint. Without one, anyone who can reach the route can run
+  stored programs. The example has no guard, to stay short. Do not copy that.
+  - With `forRootAsync`, the route and its guards are **next to the factory**:
+    `endpointPath` and `guards`. They are fixed before the factory runs. If the
+    factory returns `endpoint.path` or `endpoint.guards`, the app stops at startup
+    with a message that names the fix. A guard is never ignored without a word.
+  - With `forRoot`, they are `endpoint.path` and `endpoint.guards`.
+  - The app's global guards work with both.
 
 ### 4. A rule inside a transaction
 

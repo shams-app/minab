@@ -17,7 +17,11 @@ export interface MinabContext {
     [key: string]: unknown;
 }
 
-/** A schema with the version that caches use. Two schemas with the same version must be the same schema. */
+/**
+ * A schema with a version. The runtime cache keys a schema by its version and a hash of its content, so two
+ * different schemas never share a runtime, even under one version. The hash is made once for each schema object:
+ * do not change a schema object after the loader returned it (return a new object instead).
+ */
 export type VersionedSchema = MinabSchema & { version: string };
 
 /** A program the host keeps (D34). */
@@ -48,7 +52,7 @@ export interface MinabLogOptions {
 
 /** Settings of the run endpoint. The server decides the ports, the host inputs and the guards. The client decides none of them. */
 export interface MinabEndpointOptions {
-    /** The route of `POST`. Default `minab/run`. */
+    /** The route of `POST`. Default `minab/run`. `forRoot` only: with `forRootAsync`, use its `endpointPath` (here it stops the app at startup). */
     path?: string;
     /**
      * Accept `program.source` (program text from the client). For development only (D34).
@@ -59,13 +63,16 @@ export interface MinabEndpointOptions {
     ports?(context: MinabContext): RunPorts | Promise<RunPorts>;
     /** Host inputs from the server's own session (for example `currentUser`). They replace any value of the same name from the client. */
     hostInputs?(context: MinabContext): Record<string, unknown> | Promise<Record<string, unknown>>;
-    /** Guards of the route. Without one, anyone who can reach the route can run stored programs: use the app's guards. */
+    /**
+     * Guards of the route. Without one, anyone who can reach the route can run stored programs: use the app's guards.
+     * `forRoot` only: with `forRootAsync`, use its `guards` (here they stop the app at startup, never ignored).
+     */
     guards?: (CanActivate | (new (...args: never[]) => CanActivate))[];
 }
 
 /** What a host gives to `MinabModule`. */
 export interface MinabModuleOptions {
-    /** The schema for one request (per tenant or application). It is called for each request. Its result is cached by `version`. */
+    /** The schema for one request (per tenant or application). It is called for each request. Its runtime is cached by `version` and content. */
     schemaLoader(context: MinabContext): VersionedSchema | Promise<VersionedSchema>;
     functions?: HostFunctionDeclaration[];
     inputs?: Record<string, HostInputType>;
@@ -81,7 +88,7 @@ export interface MinabModuleOptions {
     endpoint?: MinabEndpointOptions;
     /** Prepared programs kept, least recently used out. Default 500. */
     programCacheSize?: number;
-    /** Runtimes kept (one for each schema version). Default 16. */
+    /** Runtimes kept (one for each schema: its version and content). Default 16. */
     runtimeCacheSize?: number;
 }
 
