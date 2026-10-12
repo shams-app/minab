@@ -224,6 +224,11 @@ export const DIAGNOSTICS = {
         message: p => `the host function "${p.name}" was called, and the host gave no implementation`,
         doc: 'The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run.'
     }),
+    'eval.hostFunctionResult': entry<{ name: string; expected: string }>({
+        severity: error,
+        message: p => `the host function "${p.name}" returned a value that is not ${p.expected}`,
+        doc: 'The host implementation of a host function returned a value of another type, or null where its declared type has no "?". The value is not given to the program. Fix the implementation, or declare the type it really returns.'
+    }),
     'eval.indexNeedsArray': entry({
         severity: error,
         message: () => '".$index" needs an array: the rows of a table have no position',

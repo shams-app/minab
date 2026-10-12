@@ -44,9 +44,12 @@ function, every host input. A host function that returns another user's data giv
 1. **Scope the schema for each tenant or user.** The schema is the whole read surface. Give a program the tables
    (and columns) its author may read, and no more. With the NestJS module, `schemaLoader(context)` runs for every
    request: build the schema from the request's user and tenant.
-2. **Give a schema its own `version`, and change it when the schema changes.** The runtime and the prepared
-   programs are cached by `version`. Two different schemas with one `version` share one cache entry, and one
-   tenant would see the other's tables. Use a version such as `tenant-42:v7`.
+2. **Give a schema its own `version`, and change it when the schema changes.** The NestJS module caches the
+   runtime and the prepared programs by the `version` **and** a hash of the schema's content. So two different
+   schemas never share a runtime, even under one `version`: one tenant never sees the other's tables. The hash is
+   made once for each schema object, so never change a schema object after the loader returned it (return a new
+   one). Without the module, you keep the runtimes yourself: keep one `createMinab` for each schema. Use a version
+   such as `tenant-42:v7`.
 3. **Keep the limits on.** The defaults (decision D36) are safe for most hosts: 64 KB source, nesting 200, 1 s wall
    time, 100 statements, 10,000 rows for each statement, 100,000 loop iterations, call depth 64, 100 log entries,
    100 runs for each request. Lower them for cheap paths. Never set one to a huge number to "make it work". A run can
@@ -56,8 +59,11 @@ function, every host input. A host function that returns another user's data giv
 5. **Run stored programs by id** (decision D34). Store each program as `{ source, languageVersion }` and let the
    client send only the id and the version. Leave `endpoint.allowSource` off. It is for development only. Do not set
    it from `NODE_ENV`.
-6. **Guard the endpoint.** Put an authentication guard on the run endpoint (`endpoint.guards`), and check in your
-   `ProgramStore` that the caller may run that program.
+6. **Guard the endpoint.** Put an authentication guard on the run endpoint, and check in your `ProgramStore` that
+   the caller may run that program. With `forRoot` the guards are `endpoint.guards`. With `forRootAsync` they are
+   `guards`, next to `endpointPath`, because a route and its guards are fixed before the factory runs. If the
+   factory returns `endpoint.guards` (or `endpoint.path`), the app stops at startup with a message that names the
+   fix: a guard is never ignored without a word. The app's global guards work with both.
 7. **Keep logs off in production** (decision D37). The NestJS logger is off by default when `NODE_ENV` is
    `production`. A logged value can hold personal data (an email, a name, an amount). If you turn logs on, do it
    on purpose, keep the cap, and keep the log in a place with the same access rules as the data.
@@ -72,8 +78,11 @@ function, every host input. A host function that returns another user's data giv
     (`SET LOCAL`) in your data port. This is the host's job. Minab does not set it up.
 11. **Write host functions as if their arguments were hostile.** A program chooses the arguments. Check them, keep
     each call cheap, honor the `AbortSignal`, and do not return more than the program should see. Minab stops waiting
-    for a function when the wall time ends, but it cannot stop the function itself.
-12. **Watch what you cache.** A prepared program is safe to share between requests of one schema version. Do not
+    for a function when the wall time ends, but it cannot stop the function itself. Minab checks each result
+    against the declared type (and `null` only with a `?`). A wrong result fails the run with
+    `eval.hostFunctionResult`, and the program never sees it. A host function or input may not be named like a
+    keyword: `createMinab` throws.
+12. **Watch what you cache.** A prepared program is safe to share between requests of one schema. Do not
     share a data port, a transaction or a record between requests.
 
 ## Known limits of the protection
@@ -95,7 +104,7 @@ function, every host input. A host function that returns another user's data giv
 - [ ] Limits are on (the defaults, or tighter).
 - [ ] The server never takes SQL or a schema from a client.
 - [ ] Programs run by id and version. `allowSource` is off.
-- [ ] The run endpoint has a guard.
+- [ ] The run endpoint has a guard (`forRootAsync`: `guards` next to `endpointPath`).
 - [ ] Logs are off in production, or on by a decision.
 - [ ] Errors go through `MinabExceptionFilter`.
 - [ ] Read-only role for read-only programs. Row-level security considered. `statement_timeout` set.

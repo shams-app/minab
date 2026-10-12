@@ -1,14 +1,16 @@
 /**
  * `MinabService`: prepare and run programs with the request's ports (phase H2, ADR 0002 section 8.2).
  *
- * - The schema comes from `schemaLoader(context)`, for each request. One runtime is kept for each schema
- *   version, so two tenants with different schemas get different runtimes.
+ * - The schema comes from `schemaLoader(context)`, for each request. One runtime is kept for each schema:
+ *   the key is the schema's `version` and a hash of its content. So two schemas never share a runtime,
+ *   even when a host gives them the same `version`.
  * - `runStored` finds the program in the `ProgramStore` and keeps the prepared program by
- *   schema version, id and version (D34). A program with an id and a version never changes.
+ *   that schema key, id and version (D34). A program with an id and a version never changes.
  * - Every run gets a `MinabLogger` (off in production, D37).
  */
 
 import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { createMinab } from '../runtime/minab.js';
 import type { EventSink } from '../runtime/ports.js';
 import type { MinabRuleContext } from '../language/schema.js';
@@ -42,6 +44,21 @@ export interface MinabLoadOptions {
 interface RuntimeEntry {
     minab: Minab;
     schema: VersionedSchema;
+    /** The cache key of the schema: its version and the hash of its content. */
+    key: string;
+}
+
+/** The hash of each schema object. A loader that returns the same object every time pays for the hash once. */
+const schemaHashes = new WeakMap<object, string>();
+
+/** A key that two different schemas never share: the version, and a hash of the content. */
+function schemaKey(schema: VersionedSchema): string {
+    let hash = schemaHashes.get(schema);
+    if (hash === undefined) {
+        hash = createHash('sha256').update(JSON.stringify(schema)).digest('base64url');
+        schemaHashes.set(schema, hash);
+    }
+    return JSON.stringify([schema.version, hash]);
 }
 
 /** A least-recently-used map of promises. A failed promise is removed, so a failure is not cached. */
@@ -89,7 +106,7 @@ function both(a: EventSink, b: EventSink): EventSink {
     };
 }
 
-/** Prepares and runs programs inside a NestJS app. It keeps one runtime for each schema version, and one prepared program for each stored program version. */
+/** Prepares and runs programs inside a NestJS app. It keeps one runtime for each schema, and one prepared program for each stored program version. */
 @Injectable()
 export class MinabService implements OnModuleDestroy {
     private readonly runtimes: LruCache<RuntimeEntry>;
@@ -100,16 +117,18 @@ export class MinabService implements OnModuleDestroy {
         this.programs = new LruCache(options.programCacheSize ?? 500);
     }
 
-    /** The runtime for the schema of this request. The loader runs every time. The runtime is cached by schema version. */
+    /** The runtime for the schema of this request. The loader runs every time. The runtime is cached by the schema's version and content. */
     private async runtimeFor(context: MinabContext): Promise<RuntimeEntry> {
         const schema = await this.options.schemaLoader(context);
         if (typeof schema?.version !== 'string' || schema.version === '') {
             throw new TypeError('MinabModule: schemaLoader must return a schema with a non-empty "version"');
         }
-        const cached = this.runtimes.get(schema.version);
+        const key = schemaKey(schema);
+        const cached = this.runtimes.get(key);
         if (cached) return cached;
         const created = Promise.resolve({
             schema,
+            key,
             minab: createMinab({
                 schema,
                 functions: this.options.functions,
@@ -119,7 +138,7 @@ export class MinabService implements OnModuleDestroy {
                 mode: this.options.mode
             })
         });
-        this.runtimes.set(schema.version, created);
+        this.runtimes.set(key, created);
         return created;
     }
 
@@ -151,7 +170,7 @@ export class MinabService implements OnModuleDestroy {
         if (!store) throw new TypeError('MinabModule: this call needs a programStore');
         const context = options.context ?? {};
         const runtime = await this.runtimeFor(context);
-        const key = JSON.stringify([runtime.schema.version, id, version]);
+        const key = JSON.stringify([runtime.key, id, version]);
         let loaded = this.programs.get(key);
         if (!loaded) {
             loaded = (async (): Promise<LoadedProgram> => {

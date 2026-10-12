@@ -130,7 +130,8 @@ import { PortError, type WriteTransaction } from '../runtime/ports.js';
 import type { MinabError, SourceRange, WriteMode } from '../runtime/types.js';
 import { coded } from './diagnostics/codes.js';
 import { JsonArrayError, removeAt, selectIndices, splitSelectors, updateAt, type ElementEvaluator } from './minab-json-writes.js';
-import type { LogicalTypeBase } from './minab-types.js';
+import { formatType, type LogicalTypeBase } from './minab-types.js';
+import { checkHostResult } from './host-declarations.js';
 
 export type MinabValue = unknown;
 
@@ -1108,14 +1109,23 @@ export class MinabInterpreter {
         const values: MinabValue[] = [];
         for (const arg of args) values.push(await this.expression(arg, state));
         budget.check();
+        let result: unknown;
         try {
             // The run stops waiting at its wall time, also when the function ignores the signal.
-            return await budget.race(Promise.resolve().then(() => hostFunctions.call(name, values, { signal: budget.signal })));
+            result = await budget.race(Promise.resolve().then(() => hostFunctions.call(name, values, { signal: budget.signal })));
         } catch (e) {
             if (e instanceof RunStopped) throw e;
             // The text of the host's error stays with the host: it may hold personal data.
             throw new EvalError(coded('eval.hostFunctionFailed', { name }).reason, 'eval.hostFunctionFailed', { name }, e);
         }
+        // ADR 0002 section 4.3: a value that is not of the declared type never reaches the program.
+        const declared = this.schema.getHostFunction(name)!.returns;
+        const checked = checkHostResult(result, declared);
+        if (!checked.ok) {
+            const params = { name, expected: formatType(declared) };
+            fail(coded('eval.hostFunctionResult', params).reason, 'eval.hostFunctionResult', params);
+        }
+        return checked.value as MinabValue;
     }
 
     // ---- built-ins over in-memory collections ---------------------------

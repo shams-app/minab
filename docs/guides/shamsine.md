@@ -219,9 +219,10 @@ Rules:
     `right_id`. Minab has no many-to-many link. Add the join table as a table of its own
     with two `ref` columns, and a `collection` to it from each side. Do this only when a
     rule needs it.
-- **`version`** is a hash of the datasets' fields (D29). Two schemas with the same
-  `version` **must** be the same schema, because services are cached by it. Change
-  the version whenever a field is added, renamed, retyped or removed.
+- **`version`** is a hash of the datasets' fields (D29). Change the version whenever
+  a field is added, renamed, retyped or removed. The NestJS module keys its runtimes
+  by the `version` **and** a hash of the schema's content, so two applications never
+  share a runtime, even when their versions are the same.
 - **Scope the schema.** A program can read every table and column in it. Leave out
   datasets and fields the signed-in user may not read, or give the data port a
   read-only database role with row-level security.
@@ -229,7 +230,7 @@ Rules:
   If Dynodb soft-deletes, add the filter yourself (in the rule, or a database view)
   and check this against the data service before M.7.
 - **Prepared once.** `createMinab` is cheap to call but a service set is not. Keep one
-  `Minab` per schema version (the NestJS module does this for you, `runtimeCacheSize`
+  `Minab` per schema (the NestJS module does this for you, `runtimeCacheSize`
   default 16).
 
 ## 4. Names
@@ -399,13 +400,14 @@ A bad request is 400. An unknown program is `wire.programNotFound`. Details:
         MinabModule.forRootAsync({
             imports: [ViewModule, DynodbModule],
             inject: [ViewMinabStore, MinabSchemaService],
+            // The route and its guards are fixed before the factory runs: they go here, next to each other.
+            endpointPath: 'minab/run',
+            guards: [JwtGuard, WorkspaceGuard],
             useFactory: (store, schemas) => ({
                 schemaLoader: ctx => schemas.forApplication(ctx.applicationId as string), // { version, tables }
                 inputs, limits: { wallTimeMs: 1000, rowsPerStatement: 10_000 },
                 programStore: store, // get(id, version, { signal }) -> StoredProgram | undefined
                 endpoint: {
-                    path: 'minab/run',
-                    guards: [JwtGuard, WorkspaceGuard],
                     ports: ctx => ({ data: dataPortFor(ctx), clock: systemClock(userZone(ctx)) }),
                     hostInputs: ctx => ({ currentUser: userOf(ctx.request) }),
                 },
@@ -417,10 +419,13 @@ export class ExpressionModule {}
 ```
 
 - **Always put guards on the endpoint** (the usual JWT and workspace guards). Without
-  one, anyone who can reach the route can run stored programs.
+  one, anyone who can reach the route can run stored programs. With `forRootAsync`
+  they are `guards` next to `endpointPath`, never in the factory: `endpoint.guards`
+  or `endpoint.path` in the factory's options stop the app at startup.
 - The endpoint runs **stored programs** by id and version. It refuses `program.source`
   unless `endpoint.allowSource` is true. That flag is for development only. Never set it from `NODE_ENV`.
-- `schemaLoader(ctx)` runs on each request and its result is cached by `version`.
+- `schemaLoader(ctx)` runs on each request. Its runtime is cached by `version` and
+  a hash of the schema's content (made once for each schema object).
   Put the application id in `MinabContext` (the context holds any fields you add).
 - A 500 answer never has SQL, a driver message or a stack: only the code.
 - The designer's live preview of an **unsaved** expression can run `local` programs in

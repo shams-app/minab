@@ -9,8 +9,8 @@ database driver. A test checks the imports.
 - `index.ts`: the public exports (the package entry `.`).
 - `minab.ts`: `createMinab({ schema, functions?, inputs?, ruleContext?, limits?, mode?, serviceCacheSize? })`.
   It returns `{ prepare, cacheStats, dispose }`. `functions` and `inputs` are the host's
-  declared functions and inputs (D27). They are checked here: a bad name or type word
-  throws a `HostDeclarationError`.
+  declared functions and inputs (D27). They are checked here: a bad name or type word,
+  or a name that is a keyword of the grammar (`from`, `loop`), throws a `HostDeclarationError`.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
   (one transaction for the writes of a run, X5), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
@@ -90,12 +90,14 @@ record. It does not look at other tables: a rule that reads data may change when
   five-character `code`. The driver's own message is not copied. SQLSTATE `22012` is
   `eval.divisionByZero`, and `22P02` and `22003` are `eval.castFailed`, so both runtimes give the same code.
 - A host function that throws is `eval.hostFunctionFailed`. Its message is not copied either.
+- A host function result that does not match the declared type (or `null` without a `?`) is
+  `eval.hostFunctionResult`, with `name` and `expected`. The program never sees the value (ADR 0002 §4.3).
 - A failure with no special code is `eval.failed` (`params.reason` has the text). A refusal of the
   compiler with no special code is `compile.notSql`.
 
 | Area | Codes | Meaning |
 |---|---|---|
-| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `writesNotSupported`, `cannotCreateRecord`, `programInvalid`, `failed` | The program failed while it ran |
+| `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `hostFunctionResult`, `writesNotSupported`, `cannotCreateRecord`, `programInvalid`, `failed` | The program failed while it ran |
 | `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
 | `limit.*` | see below | A limit stopped the program |
 | `data.*` | `error`, `noPort` | The data port failed or is missing |
