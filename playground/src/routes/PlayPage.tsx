@@ -32,14 +32,14 @@ export function PlayPage() {
                 toast(decoded.error, 'error');
                 openExample(exampleById(DEFAULT_EXAMPLE)!);
             }
-            navigate('/play', { replace: true });
+            void navigate('/play', { replace: true });
             return;
         }
         if (exampleParam) {
             const example = exampleById(exampleParam);
             if (example) openExample(example);
             else toast(`There is no example called “${exampleParam}”.`, 'error');
-            navigate('/play', { replace: true });
+            void navigate('/play', { replace: true });
             return;
         }
         const saved = load<Workspace>('workspace:play');

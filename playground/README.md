@@ -35,7 +35,7 @@ The `predev`, `prebuild` and `pretest` scripts run `scripts/prepare.mjs`, which 
 | `npm test` | Vitest (Node): the engine against in-process PGlite, every example, every lesson, the tokenizer, share links |
 | `npm run build` | `tsc -b`, then a production bundle in `dist/` (plus a `404.html` copy for SPA hosting) |
 | `npm run preview` | Serve `dist/` locally |
-| `npm run test:site` | Playwright on `vite preview` (build first): axe on every route in light and dark, and a smoke test. See `tests/README.md` |
+| `npm run test:site` | Playwright on `vite preview` (build first): axe on every route in light and dark, a smoke test, the TV demo and the Data panel. See `tests/README.md` |
 | `npm run lighthouse` | Lighthouse CI on `vite preview` (build first). Budgets are in `lighthouserc.json` |
 | `PLAYGROUND_BASE=/sub/path/ npm run build` | Build for hosting under a path (GitHub Pages, a portfolio sub-path) |
 
@@ -75,7 +75,7 @@ public/       favicon, apple-touch icon, OG image, and the self-hosted fonts in 
 ```
 
 **Things worth knowing:**
-- **Lint.** `npm run lint` runs `oxlint` (type-aware) on `src/ui`, `src/monaco`, `test` and `scripts`. The rest of `src/` (engine, hooks, routes, content) has findings that are not fixed yet.
+- **Lint.** `npm run lint` runs `oxlint` (type-aware) on all of `src`, `test` and `scripts`. It has no findings: keep it that way.
 - **Console (`LOG`).** The runtime sends a `log` event for each `LOG(value, label?)` (`src/runtime/ports.ts`). The engine collects them in `RunReport.logs`, and `ui/output/ConsoleView.tsx` lists them in order. Hovering a line highlights the `LOG` call; clicking selects it.
 - **Hybrid execution, made visible.** The runtime sends a `statement` event, with the source range, just before each statement reaches the data port (`src/runtime/ports.ts`). The engine keeps each range, so the Execution tab can highlight exactly which span of the program became which SQL.
 - **One parse serves everything.**
@@ -92,6 +92,8 @@ public/       favicon, apple-touch icon, OG image, and the self-hosted fonts in 
   - `test/tokens.test.ts` fails if the grammar gains a keyword the highlighter doesn't know.
   - `test/design-tokens.test.ts` fails if the two light blocks of `tokens.css` differ, if light and dark define different tokens, or if a syntax color falls below AA against the editor background.
   - `test/content.test.ts` runs every example, preset and lesson, and checks the starter doesn't already pass and the solution does.
+  - `test/theme.test.ts` checks the theme `useTheme` reports: with no OS preference the CSS shows dark, so it says dark.
+- **The Data panel follows the open example.** It shows the active table while the dataset has it, else the dataset's first table, and loads it again when the dataset changes. Its database calls (`previewTable`, `runSql`, `resetDatabase` in `state/controller.ts`) wait until the engine has the current host. `tests/data-panel.spec.ts` checks it.
 
 ## Adding content
 

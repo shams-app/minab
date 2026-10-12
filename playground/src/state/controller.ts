@@ -11,7 +11,7 @@
 
 import { engineClient } from '../client/engine-client.js';
 import type { Example, Lesson, RecordPreset } from '../content/types.js';
-import type { Range } from '../engine/protocol.js';
+import type { Range, SqlConsoleResult, TablePreview } from '../engine/protocol.js';
 import { remove, save } from './persistence.js';
 import { getState, setState, type HostTab, type OutputTab, type Scope, type ThemePreference } from './store.js';
 import { hostSettings, workspaceFromExample, type Workspace, type WorkspaceHost } from './workspace.js';
@@ -25,6 +25,7 @@ let analyzeSeq = 0;
 let runSeq = 0;
 let runAbort: AbortController | undefined;
 let appliedHostKey: string | undefined;
+let appliedHost: Promise<void> = Promise.resolve();
 let toastSeq = 0;
 let connected = false;
 
@@ -51,14 +52,35 @@ function persist(): void {
     save(storageKey(scope), workspace);
 }
 
-async function applyHost(): Promise<void> {
+/** Sends the workspace's host to the engine. A call for a host already sent waits until the engine has it. */
+function applyHost(): Promise<void> {
     const host = getState().workspace.host;
     const key = JSON.stringify(host);
-    if (key === appliedHostKey) return;
+    if (key === appliedHostKey) return appliedHost;
     appliedHostKey = key;
-    const result = await engine().call('setHost', hostSettings(host));
-    if (JSON.stringify(getState().workspace.host) !== key) return;
-    setState(result.ok ? { hostError: undefined, hostTables: result.tables } : { hostError: result.error, hostTables: [] });
+    appliedHost = engine()
+        .call('setHost', hostSettings(host))
+        .then(result => {
+            if (JSON.stringify(getState().workspace.host) !== key) return;
+            setState(result.ok ? { hostError: undefined, hostTables: result.tables } : { hostError: result.error, hostTables: [] });
+        });
+    return appliedHost;
+}
+
+/** The database calls of the Data panel. Each one waits for the current host, so it never reads the previous example's tables. */
+export async function previewTable(table: string, limit: number): Promise<TablePreview> {
+    await applyHost();
+    return engine().call('tablePreview', table, limit);
+}
+
+export async function runSql(text: string): Promise<SqlConsoleResult> {
+    await applyHost();
+    return engine().call('sql', text);
+}
+
+export async function resetDatabase(): Promise<void> {
+    await applyHost();
+    return engine().call('resetDatabase');
 }
 
 export async function analyzeNow(): Promise<void> {

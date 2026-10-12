@@ -1,7 +1,9 @@
 # Publishes a release when a `v*` tag is pushed (see docs/releasing.md):
 #   npm package, VS Code extension (Marketplace and Open VSX), GitHub release.
 # Run it by hand with `dry-run` (the default) to test everything except the
-# publishing steps.
+# publishing steps. A real run (dry-run off) is allowed only on the tag
+# `v<package.json version>`: `scripts/release-guard.mjs` stops any other run
+# before it builds anything (Q6).
 #
 # Secrets (each one is optional; a missing one is skipped with a message):
 #   - npm: trusted publishing for this repository on npmjs.com (no token);
@@ -52,6 +54,11 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      # First: stop a real run that is not on the tag v<version> (Q6).
+      - name: Check the ref, the version and dry-run
+        run: |
+          node scripts/release-guard.mjs
+          echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -62,20 +69,6 @@ jobs:
       # Trusted publishing needs npm 11.5.1 or newer.
       - name: Update npm
         run: npm install -g npm@^11.5.1
-
-      - name: Read the version and check the tag
-        run: |
-          version=$(node -p "require('./package.json').version")
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-              echo "::error::The tag $GITHUB_REF_NAME does not match package.json version $version (expected v$version)."
-              exit 1
-            fi
-          else
-            echo "Not a tag run ($GITHUB_REF): the tag check is skipped."
-          fi
-          echo "dry run: $DRY_RUN"
 
       - run: npm ci
       - run: npm run build
@@ -104,6 +97,14 @@ jobs:
             echo "The repository is private: publishing without provenance (D04)."
           fi
           if [ "$DRY_RUN" = "true" ]; then
+            # npm refuses even a dry-run publish of a version that is already on npm.
+            # Between a release and the next version bump, check the package only.
+            name=$(node -p "require('./package.json').name")
+            if npm view "$name@$VERSION" version > /dev/null 2>&1; then
+              echo "dry run: $name@$VERSION is already on npm; checking the package with npm pack --dry-run."
+              npm pack --dry-run
+              exit 0
+            fi
             args="$args --dry-run"
           fi
           npm publish $args
@@ -116,7 +117,8 @@ jobs:
           node scripts/changelog.mjs --notes "$VERSION" > release-notes.md
           prerelease=""
           case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" vscode-extension/*.vsix --title "$GITHUB_REF_NAME" --notes-file release-notes.md $prerelease
+          # --verify-tag: use the existing tag v$VERSION, never create one.
+          gh release create "v$VERSION" vscode-extension/*.vsix --verify-tag --title "v$VERSION" --notes-file release-notes.md $prerelease
       - name: Show the release notes (dry run)
         if: env.DRY_RUN == 'true'
         run: |

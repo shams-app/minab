@@ -249,6 +249,13 @@ discount
 5 / 0    // evaluation error: eval.divisionByZero
 ```
 
+**A `null` value at run time** — arithmetic with a `null` operand gives `null`; `<`, `<=`, `>`, `>=` and `LIKE` give `false`. Use `COALESCE` before arithmetic when `null` should count as a number. (§7.7, §5.1)
+
+```
+.discount_rate * 100                // null, if .discount_rate is null
+COALESCE(.discount_rate, 0) * 100   // 0, if .discount_rate is null
+```
+
 ---
 
 ## 8. Tuples

@@ -84,6 +84,14 @@ export const cases: QueryCase[] = [
         expectRows: [{ id: 1 }]
     },
     {
+        // The same for a null test: C9 reads a JSON `null` as SQL `NULL` with `NULLIF(x, 'null'::jsonb)`.
+        name: 'a JSON string from a local in a null test is bound as jsonb',
+        schema,
+        rows,
+        program: 'let theme: JSON = CAST("\\"dark\\"" AS JSON);\nFROM Item WHERE theme isnot null AND .id == 1 SELECT .id',
+        expectRows: [{ id: 1 }]
+    },
+    {
         name: 'a JSON column kind test in WHERE',
         schema,
         rows,

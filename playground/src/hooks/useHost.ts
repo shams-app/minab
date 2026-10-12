@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from 'react';
-import { engineClient } from '../client/engine-client.js';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { datasetById, datasets, type Dataset } from '../content/datasets/index.js';
 import { exampleById } from '../content/examples/index.js';
 import { lessonById } from '../content/tour/index.js';
 import type { RecordPreset } from '../content/types.js';
 import type { Row, SqlConsoleResult, TablePreview } from '../engine/protocol.js';
-import { applyPreset, setHostOpen, setHostTab, updateHost } from '../state/controller.js';
+import { applyPreset, previewTable, resetDatabase, runSql, setHostOpen, setHostTab, updateHost } from '../state/controller.js';
 import { usePlayground, type HostTab } from '../state/store.js';
 import { hostContents, type WorkspaceHost } from '../state/workspace.js';
 
@@ -29,6 +28,8 @@ export interface HostView {
     dataset?: Dataset;
     datasets: Dataset[];
     tables: TableView[];
+    /** Changes when the tables or their rows change (another example, another dataset, an edited schema). */
+    dataKey: string;
     /** What the rule context says this program is. */
     ruleKind: 'none' | 'record' | 'field';
     recordTable?: string;
@@ -96,6 +97,7 @@ export function useHost(): HostView {
 
     const { schema, seed } = useMemo(() => hostContents(host), [host]);
     const tables = useMemo(() => tableViews(schema, seed), [schema, seed]);
+    const dataKey = useMemo(() => JSON.stringify([host.dataset, host.schema ?? null, host.seed ?? null]), [host.dataset, host.schema, host.seed]);
 
     const setSchemaJson = useCallback(
         (text: string): string | undefined => {
@@ -130,6 +132,7 @@ export function useHost(): HostView {
         dataset: host.dataset ? datasetById(host.dataset) : undefined,
         datasets,
         tables,
+        dataKey,
         ruleKind: host.rule.fieldType ? 'field' : host.rule.recordTable ? 'record' : 'none',
         recordTable: host.rule.recordTable,
         fieldType: host.rule.fieldType,
@@ -145,23 +148,26 @@ export function useHost(): HostView {
         setSchemaJson,
         resetSchema: () => updateHost({ schema: undefined, seed: undefined }),
         schemaEdited: host.schema !== undefined && host.dataset !== null,
-        preview: (table, limit = 50) => engineClient().call('tablePreview', table, limit),
-        runSql: text => engineClient().call('sql', text),
-        resetDatabase: () => engineClient().call('resetDatabase')
+        preview: (table, limit = 50) => previewTable(table, limit),
+        runSql,
+        resetDatabase
     };
 }
 
 /** Local UI state for a table browser: which table, its rows, loading. */
 export function useTablePreview(preview: HostView['preview']) {
     const [state, setState] = useState<{ table?: string; data?: TablePreview; loading: boolean; error?: string }>({ loading: false });
+    // Only the latest load may set the state: an older answer (for the previous example's table) is dropped.
+    const seq = useRef(0);
     const load = useCallback(
         async (table: string) => {
-            setState(s => ({ ...s, table, loading: true, error: undefined }));
+            const mine = ++seq.current;
+            setState(s => ({ table, data: s.data?.table === table ? s.data : undefined, loading: true }));
             try {
                 const data = await preview(table);
-                setState({ table, data, loading: false });
+                if (mine === seq.current) setState({ table, data, loading: false });
             } catch (e) {
-                setState({ table, loading: false, error: (e as Error).message });
+                if (mine === seq.current) setState({ table, loading: false, error: (e as Error).message });
             }
         },
         [preview]

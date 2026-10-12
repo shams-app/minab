@@ -85,7 +85,7 @@ export function Root() {
                     specUrl={SPEC_URL}
                     onOpenExample={id => {
                         setReferenceOpen(false);
-                        navigate(`/play?example=${id}`);
+                        void navigate(`/play?example=${id}`);
                     }}
                 />
             </Drawer>

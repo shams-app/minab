@@ -87,7 +87,7 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
             <Toolbar
                 example={wb.example}
                 examples={examples}
-                onPickExample={id => navigate(`/play?example=${id}`)}
+                onPickExample={id => void navigate(`/play?example=${id}`)}
                 onResetExample={wb.example ? () => openExample(wb.example!) : undefined}
                 engine={engine}
                 running={wb.running}
@@ -222,6 +222,7 @@ export function Workbench({ variant, aside, editorPath }: WorkbenchProps) {
                 return (
                     <DataView
                         tables={host.tables.map(t => t.name)}
+                        dataKey={host.dataKey}
                         active={tables.table}
                         preview={tables.data}
                         loading={tables.loading}
