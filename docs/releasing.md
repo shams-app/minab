@@ -69,7 +69,9 @@ run the release again after you add the secret.
 7. **Open a pull request** titled `[V…] Release X.Y.Z`. Merge it when CI is green.
 8. **Test the release without publishing.** In the Actions tab, run
    **Release** on `main` with `dry-run` on (the default). It builds, tests with
-   Postgres, builds the `.vsix`, and runs `npm publish --dry-run`.
+   Postgres, builds the `.vsix`, and runs `npm publish --dry-run`. (If the
+   version in `package.json` is already on npm, npm refuses even a dry-run
+   publish. Then the step runs `npm pack --dry-run` instead.)
 9. **Push the tag** (the owner, or a session the owner told to):
    `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must be `v` plus the
    `package.json` version, or the workflow stops.

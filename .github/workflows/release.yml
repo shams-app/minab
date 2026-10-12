@@ -97,6 +97,14 @@ jobs:
             echo "The repository is private: publishing without provenance (D04)."
           fi
           if [ "$DRY_RUN" = "true" ]; then
+            # npm refuses even a dry-run publish of a version that is already on npm.
+            # Between a release and the next version bump, check the package only.
+            name=$(node -p "require('./package.json').name")
+            if npm view "$name@$VERSION" version > /dev/null 2>&1; then
+              echo "dry run: $name@$VERSION is already on npm; checking the package with npm pack --dry-run."
+              npm pack --dry-run
+              exit 0
+            fi
             args="$args --dry-run"
           fi
           npm publish $args
