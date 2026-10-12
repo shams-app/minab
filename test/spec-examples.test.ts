@@ -93,6 +93,7 @@ const NOT_PROGRAMS: Record<string, string> = {
     'spec §5.6 #1': 'is/isnot template',
     'spec §6.3 #1': 'excerpt of the grammar; the tests for §11 below check it',
     'spec §5.6 #2': 'uses { ... } as a placeholder',
+    'spec §5.6 #3': 'shows a wrong line with a ✗ note (the error is tested in test/kind-tests.test.ts)',
     'spec §7.1 #1': 'declaration template',
     'spec §7.6 #1': 'tuple type template',
     'spec §7.7 #1': 'shows wrong lines with ✗ notes',

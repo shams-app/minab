@@ -76,6 +76,7 @@ import {
     type TupleLiteral,
     type Type,
     type TypeRef,
+    type TypeTestExpression,
     type UnaryExpression
 } from './generated/ast.js';
 import { coded, type CodedMessage, type DiagnosticCode, type ParamsArgs } from './diagnostics/codes.js';
@@ -179,7 +180,7 @@ export class MinabTypeChecker {
         if (isFilterAccess(node)) return this.inferFilterAccess(node);
         if (isCallExpression(node)) return this.inferCallExpression(node);
         if (isCastExpr(node)) return ok(typeRefToMinabType(node.targetType));
-        if (isTypeTestExpression(node)) return ok(scalarType('BOOLEAN'));
+        if (isTypeTestExpression(node)) return this.inferTypeTest(node);
         if (isBinaryExpression(node)) return this.inferBinaryExpression(node);
         if (isUnaryExpression(node)) return this.inferUnaryExpression(node);
         if (isListLiteral(node)) return this.inferListLiteral(node);
@@ -724,6 +725,30 @@ export class MinabTypeChecker {
         }
         if (!isTextual(left.type) || !isTextual(right.type)) {
             return err('type.likeNeedsText', { left: formatType(left.type), right: formatType(right.type) });
+        }
+        return ok(scalarType('BOOLEAN'));
+    }
+
+    /**
+     * `x is array` (and `object`, `string`, `number`, `boolean`) tests the kind of a `JSON` value (D47).
+     * On an operand of another known type it is an error: the answer is known before the run.
+     * `is null` works on every type. An operand whose type cannot be inferred keeps the run-time
+     * test; its own failure is reported where it starts.
+     */
+    private inferTypeTest(node: TypeTestExpression): TypeResult {
+        if (isNullLiteral(node.test)) return ok(scalarType('BOOLEAN'));
+        const operand = this.inferType(node.value);
+        if (operand.ok) {
+            const t = operand.type;
+            const isJson = t.kind === 'null' || (t.kind === 'scalar' && !t.array && t.base === 'JSON');
+            if (!isJson) {
+                return err('type.kindTestNeedsJson', {
+                    operator: node.operator,
+                    kind: node.test.$cstNode?.text ?? node.test.$type,
+                    operand: node.value.$cstNode?.text ?? 'the value',
+                    actual: formatType(t)
+                });
+            }
         }
         return ok(scalarType('BOOLEAN'));
     }

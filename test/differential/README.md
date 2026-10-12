@@ -47,7 +47,7 @@ export const cases: DifferentialCase[] = [
 
 - Both runtimes must agree. `DECIMAL` is compared by exact value, dates as text, `null` equals `null`.
   Two errors agree when they mean the same (for example division by zero).
-- Do not use only literals (`1 + 2`): the compiler binds them untyped and Postgres refuses `$1 + $2`.
-  Use columns.
+- Literal-only parts (`1 + 2`) are fine: since C10 the compiler gives two bare parameters their type
+  (`$1::bigint + $2::bigint`).
 - Cases run one after another. Each case gets its own schema, so rows never leak.
 - The database is PGlite. Set `MINAB_TEST_DATABASE_URL` to use a real Postgres.

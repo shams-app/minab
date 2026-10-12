@@ -288,6 +288,18 @@ const SQL_TYPES: Record<LogicalTypeBase, string> = {
     JSON: 'jsonb'
 };
 
+/**
+ * The type a bare parameter gets when Postgres has nothing to infer it from (`$1 + $2`, `-$1`).
+ * The `CAST` names, except `INTEGER`: a column is `bigint` (`src/host/ddl.ts`), and an `INTEGER`
+ * value may be as large as the interpreter's safe range, which `integer` cannot hold.
+ */
+const PARAM_TYPES: Record<LogicalTypeBase, string> = { ...SQL_TYPES, INTEGER: 'bigint' };
+
+/** True for SQL that is one bound parameter, `$n`: Postgres sees no type there. */
+function isBareParam(sql: string): boolean {
+    return /^\$\d+$/.test(sql);
+}
+
 const COMPARISONS: Record<string, string> = {
     '==': 'IS NOT DISTINCT FROM',
     '!=': 'IS DISTINCT FROM',
@@ -1165,7 +1177,9 @@ export class MinabSqlCompiler {
         if (isNullLiteral(expr.test)) return `(${value} IS ${is ? '' : 'NOT '}NULL)`;
         const kind = JSON_KINDS[expr.test.$type];
         if (!kind) fail(`"${expr.test.$type}" is not a JSON kind`);
-        return `(jsonb_typeof(${value}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
+        // A `JSON` value the caller holds (a `let`, a parameter) is bound as `jsonb`, as JSON text (D47).
+        const json = isBareParam(value) ? `${ctx.rebindAsJson(value)}::jsonb` : value;
+        return `(jsonb_typeof(${json}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
     }
 
     private jsonObject(expr: JsonObjectLiteral, ctx: Ctx, scopes: SqlScope[]): string {
@@ -1362,7 +1376,8 @@ export class MinabSqlCompiler {
         if (op === '+' && this.isTextSum(expr)) return `(${left()} || ${right()})`;
         const arithmetic = ARITHMETIC[op];
         if (arithmetic) {
-            return `(${left()} ${arithmetic} ${right()})`;
+            const [a, b] = this.typedSides(expr.left, expr.right, left(), right());
+            return `(${a} ${arithmetic} ${b})`;
         }
         fail(`operator "${op}" has no SQL form`);
     }
@@ -1373,12 +1388,31 @@ export class MinabSqlCompiler {
      * `citext = text` as plain text otherwise (D15).
      */
     private textFamilySides(left: Expression, right: Expression, ctx: Ctx, scopes: SqlScope[]): [string, string] {
-        const l = this.expression(left, ctx, scopes);
-        const r = this.expression(right, ctx, scopes);
+        const [l, r] = this.typedSides(left, right, this.expression(left, ctx, scopes), this.expression(right, ctx, scopes));
         const [lc, rc] = [this.isCitextArg(left), this.isCitextArg(right)];
         if (lc === rc) return [l, r];
         const cast = (sql: string, isText: boolean) => (isText ? `CAST(${sql} AS citext)` : sql);
         return [cast(l, this.isTextArg(left) && !lc), cast(r, this.isTextArg(right) && !rc)];
+    }
+
+    /**
+     * `$1 + $2` or `$1 < $2`: Postgres cannot choose an operator for two parameters with no type
+     * ("operator is not unique"), or it compares them as text (`10 < 9` is true). So when both
+     * sides are bare parameters, each one gets its Minab type. A side Postgres can type stays as it is.
+     */
+    private typedSides(left: Expression, right: Expression, l: string, r: string): [string, string] {
+        if (!isBareParam(l) || !isBareParam(r)) return [l, r];
+        return [this.typedParam(left, l), this.typedParam(right, r)];
+    }
+
+    /** A bare parameter with its type: `$1::bigint`. Without a known type, it stays as it is. */
+    private typedParam(expr: Expression, sql: string): string {
+        const literal = isUnaryExpression(expr) && !expr.negated && expr.operator === '-' ? expr.operand : expr;
+        let base: LogicalTypeBase | undefined;
+        if (isNumberLiteral(literal)) base = typeof this.numberLiteralValue(literal) === 'string' ? 'DECIMAL' : 'INTEGER';
+        else if (isStringLiteral(literal)) base = 'TEXT';
+        else base = this.baseOf(expr) as LogicalTypeBase | undefined;
+        return base && PARAM_TYPES[base] ? `${sql}::${PARAM_TYPES[base]}` : sql;
     }
 
     /** `IN`: with a `CITEXT` side, the `TEXT` side (value or list items) is cast to `citext`. */
@@ -1449,7 +1483,8 @@ export class MinabSqlCompiler {
         }
         const operand = this.expression(expr.operand, ctx, scopes);
         if (expr.negated) return `(NOT ${operand})`;
-        return `(${expr.operator}${operand})`;
+        // `-x` with `x` a bound value: `-$1` has no type, so the parameter gets one.
+        return `(${expr.operator}${isBareParam(operand) ? this.typedParam(expr.operand, operand) : operand})`;
     }
 
     // ---- built-in functions (spec §5.3.1) -------------------------------
@@ -1812,9 +1847,20 @@ class Ctx {
         zone: () => `${this.bind(this.clock.timeZone)}::text`
     };
 
+    /** The values as the caller gave them, before `sqlParameter`, by position. */
+    private readonly raw: unknown[] = [];
+
     bind(value: unknown): string {
         this.params.push(sqlParameter(value));
+        this.raw.push(value);
         return `$${this.params.length}`;
+    }
+
+    /** Makes the bound parameter `$n` hold its value as JSON text, for a `::jsonb` cast. */
+    rebindAsJson(param: string): string {
+        const i = Number(param.slice(1)) - 1;
+        this.params[i] = jsonText(this.raw[i]);
+        return param;
     }
 
     freshGroupAlias(): string {
@@ -1832,6 +1878,7 @@ class Ctx {
     /** Undo the parameters/aliases a speculative compilation consumed, so an abandoned attempt doesn't leave gaps in `$n` numbering. */
     reset(mark: { params: number; aliases: number }): void {
         this.params.length = mark.params;
+        this.raw.length = mark.params;
         this.aliasCount = mark.aliases;
     }
 }
