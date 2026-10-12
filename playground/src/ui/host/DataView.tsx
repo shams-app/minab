@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SqlConsoleResult, TablePreview } from '../../engine/protocol.js';
 import { RowsTable } from '../output/ResultView.js';
 import { Button, Callout, EmptyState, Spinner } from '../primitives/primitives.js';
 
 export interface DataViewProps {
     tables: string[];
+    /** Changes when the tables or their rows change: the panel then loads its table again. */
+    dataKey: string;
     active?: string;
     preview?: TablePreview;
     loading: boolean;
@@ -14,11 +16,18 @@ export interface DataViewProps {
     onRunSql: (text: string) => Promise<SqlConsoleResult>;
 }
 
-export function DataView({ tables, active, preview, loading, error, onSelect, onReset, onRunSql }: DataViewProps) {
+export function DataView({ tables, dataKey, active, preview, loading, error, onSelect, onReset, onRunSql }: DataViewProps) {
     const [consoleOpen, setConsoleOpen] = useState(false);
+    // Follow the open example: keep the active table while the dataset has it, else take the dataset's first table.
+    // A new dataKey loads the table again, since another dataset can have a table with the same name.
+    const loadedKey = useRef<string>(undefined);
+    const known = active !== undefined && tables.includes(active);
+    const first = tables[0];
     useEffect(() => {
-        if (!active && tables.length > 0) onSelect(tables[0]);
-    }, [active, tables, onSelect]);
+        if (first === undefined || (known && loadedKey.current === dataKey)) return;
+        loadedKey.current = dataKey;
+        onSelect(known ? active : first);
+    }, [active, known, first, dataKey, onSelect]);
     if (tables.length === 0)
         return (
             <EmptyState icon="database" title="No tables">
@@ -52,7 +61,7 @@ export function DataView({ tables, active, preview, loading, error, onSelect, on
                     </Button>
                 </div>
             </div>
-            {consoleOpen && <SqlConsole onRun={onRunSql} onDone={() => active && onSelect(active)} />}
+            {consoleOpen && <SqlConsole key={dataKey} table={known ? active : first} onRun={onRunSql} onDone={() => active && onSelect(active)} />}
             {error ? (
                 <Callout tone="danger" icon="alert">
                     {error}
@@ -74,8 +83,13 @@ export function DataView({ tables, active, preview, loading, error, onSelect, on
     );
 }
 
-export function SqlConsole({ onRun, onDone }: { onRun: (text: string) => Promise<SqlConsoleResult>; onDone?: () => void }) {
-    const [text, setText] = useState('SELECT name, country FROM "Customer" ORDER BY name;');
+/** The first query of the SQL console: it reads a table the dataset has. */
+export function starterSql(table: string): string {
+    return `SELECT * FROM "${table.replace(/"/g, '""')}" LIMIT 10;`;
+}
+
+export function SqlConsole({ table, onRun, onDone }: { table: string; onRun: (text: string) => Promise<SqlConsoleResult>; onDone?: () => void }) {
+    const [text, setText] = useState(() => starterSql(table));
     const [result, setResult] = useState<SqlConsoleResult>();
     const [busy, setBusy] = useState(false);
     const submit = async () => {

@@ -7,6 +7,7 @@ The unit tests are in `../test` (Vitest).
 - `routes.ts` — the list of routes the checks visit.
 - `accessibility.spec.ts` — axe checks on every route, in light and dark.
 - `smoke.spec.ts` — the landing page loads, an example runs, a tour goal can be met.
+- `data-panel.spec.ts` — the Data panel follows the open example (W6): demo → Persian → English, a direct load of `/play?example=persian-names` with no `unknown table` error, and the SQL console's first query.
 - `tv-demo.spec.ts` — the TV demo (`/?demo=tv`): it is ready in under 10 seconds, and the whole script in `design/tv-demo.md` runs twice in a row with the network off.
 
 Rules:
