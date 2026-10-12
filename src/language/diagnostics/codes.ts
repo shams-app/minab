@@ -580,6 +580,11 @@ export const DIAGNOSTICS = {
         message: () => '"[...]" needs a BOOLEAN filter or an INTEGER index',
         doc: 'Inside "[...]", write a BOOLEAN condition to filter, or an INTEGER to pick a position.'
     }),
+    'type.kindTestNeedsJson': entry<{ operator: string; kind: string; operand: string; actual: string }>({
+        severity: error,
+        message: p => `"${p.operator} ${p.kind}" tests the kind of a JSON value, but ${p.operand} is ${p.actual}`,
+        doc: 'The kinds array, object, string, number and boolean describe a JSON value (D47). On another type the answer is known before the run. Test a JSON value, or use "is null" / "isnot null", which work on every type.'
+    }),
     'type.likeNeedsText': entry<{ left: string; right: string }>({
         severity: error,
         message: p => `"LIKE" requires TEXT/CITEXT operands, got ${p.left} and ${p.right}`,

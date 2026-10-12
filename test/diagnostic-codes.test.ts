@@ -207,6 +207,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.indexOnNonTuple': { via: 'validator', program: '.id[0]' },
     'type.initializerMismatch': { via: 'validator', program: 'let t: TEXT = 1;' },
     'type.invalidFilter': { via: 'validator', program: '.id["x"]' },
+    'type.kindTestNeedsJson': { via: 'validator', program: '.total is number' },
     'type.likeNeedsText': { via: 'validator', program: '.total LIKE .total' },
     'type.listElementNotScalar': { via: 'validator', program: '[[1], 2] == [1]' },
     'type.listElementsMixed': { via: 'validator', program: '[1, "a"] == [1]' },

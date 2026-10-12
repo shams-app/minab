@@ -2,12 +2,13 @@
  * Two small rules about queries that the checker and the SQL compiler must share:
  *
  *  - the name of a `GROUPBY` key (spec §4.1, D22): `AS name`, else the last field of a plain path;
- *  - when a user `fn` can be inlined into a query (spec §8, D23).
+ *  - when a user `fn` can be inlined into a query (spec §8, D23, C10).
  */
 import { AstUtils, type AstNode } from 'langium';
 import {
     isCallExpression,
     isCurrentRecord,
+    isFilterAccess,
     isFunctionDecl,
     isMemberAccess,
     isModel,
@@ -58,6 +59,8 @@ function blockerOf(decl: FunctionDecl, isHost: (name: string) => boolean, stack:
     const path = [...stack, decl];
     for (const node of [decl.tail, ...AstUtils.streamAllContents(decl.tail)]) {
         if (isQuery(node) || isSubquery(node)) return 'it contains a query';
+        const sigil = recordSigil(node, decl.tail);
+        if (sigil) return `it reads ${sigil}, which inside a query would mean the query's row, not the record the function sees`;
         if (!isCallExpression(node) || !isNameRef(node.callee)) continue;
         const name = node.callee.name;
         if (isBuiltinName(name)) continue;
@@ -69,4 +72,22 @@ function blockerOf(decl: FunctionDecl, isHost: (name: string) => boolean, stack:
         if (inner) return `it calls "${name}", and ${inner}`;
     }
     return undefined;
+}
+
+/**
+ * The record sigil a function body reads, if any: `.`, `^` or `#alias`. Inside a query, a copied
+ * body would read the query's row there, so its meaning would change (C10). A `.` inside a
+ * `[...]` filter of the body is that filter's element, and a `^` inside two filters is the outer
+ * filter's element: those stay. A `#alias` always names a scope outside the body.
+ */
+function recordSigil(node: AstNode, tail: Expression): string | undefined {
+    if (isNamedScope(node)) return `"#${node.name}"`;
+    if (!isCurrentRecord(node) && !isParentRecord(node)) return undefined;
+    let filters = 0;
+    for (let child: AstNode = node; child !== tail && child.$container; child = child.$container) {
+        const parent = child.$container;
+        if (isFilterAccess(parent) && parent.receiver !== child) filters++;
+    }
+    if (isCurrentRecord(node)) return filters === 0 ? '"."' : undefined;
+    return filters <= 1 ? '"^"' : undefined;
 }

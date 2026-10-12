@@ -12,6 +12,9 @@
  *    lowercase letter; a `fn` may not share a name with a table, `let` or
  *    parameter), and the `FunctionDecl` rule from §8.6 (a `Query`-tailed
  *    function's return type must be `JSON`).
+ *  - C10: a kind test (`is array`, ...) on an operand that is not `JSON` (D47,
+ *    in `minab-type-checker.ts`), and a user function in a query whose body
+ *    reads `.`, `^` or `#alias` (`minab-query-inlining.ts`).
  *
  * The first three are thin wrappers around `MinabScopeResolver` (Phase 2),
  * which already does the scope-stack walking and produces a human-readable
@@ -73,6 +76,7 @@ import {
     type SwitchExpr,
     type Subquery,
     type TupleAccess,
+    type TypeTestExpression,
     type UnaryExpression,
     type UpdateStatement,
     type VariableDecl,
@@ -111,6 +115,7 @@ export function registerValidationChecks(services: MinabServices): void {
         ListLiteral: validator.checkExpressionTypeChecks,
         IfExpr: validator.checkExpressionTypeChecks,
         SwitchExpr: validator.checkExpressionTypeChecks,
+        TypeTestExpression: validator.checkExpressionTypeChecks,
         CurrentRecord: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         ParentRecord: validator.checkExpressionTypeChecks,
         NameRef: validator.checkNameRefTypeChecks,
@@ -178,6 +183,7 @@ export class MinabValidator {
             | ListLiteral
             | IfExpr
             | SwitchExpr
+            | TypeTestExpression
             | CurrentRecord
             | ParentRecord
             | NameRef

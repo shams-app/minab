@@ -491,7 +491,17 @@ Deliberately lowercase and unrelated to `TypeRef` (§7.2) — `is object`/`is ar
 
 A JSON `null` is `null`. `CAST("null" AS JSON) is null` is `true`, and so is `CAST("null" AS JSON) == null`. The two runtimes give the same answer: the SQL form reads a JSON `null` as SQL `NULL` before it tests or compares a `JSON` value.
 
-`is`/`isnot` are grammatically valid on **any** expression, not only `JSON`-typed ones — `.total isnot null` works exactly like `x isnot null` would. But only the `null`/`not null` check is meaningful outside `JSON` — applying `is array` or `is boolean` to something whose declared type is already, say, `DECIMAL` is always statically decidable (always false) rather than an actual runtime test — the grammar doesn't stop you from writing it, but it's not doing anything a JSON-shape test is meant to do. The five non-null kinds only really earn their keep against a `JSON` value (or, once JSON path traversal exists, an untyped value pulled out of one).
+`is null`/`isnot null` work on **any** expression — `.total isnot null` works exactly like `x isnot null` would. The five other kinds (`array`, `object`, `string`, `number`, `boolean`) test a `JSON` value: a `JSON` column, a `JSON` local or parameter, or a JSON object literal. On an operand whose type is known and is not `JSON`, the answer is known before the program runs, so it is the check error `type.kindTestNeedsJson` (D47):
+
+```
+let config: JSON = { theme: "dark" };
+config is object         // true (a run-time test)
+.metadata isnot array    // fine: .metadata is JSON
+.total is number         // ✗ check error: .total is DECIMAL, not JSON
+.total isnot null        // fine: a null test works on every type
+```
+
+A list literal such as `[1, 2]` has an array type (`INTEGER[]`), not `JSON`, so `[1, 2] is array` is the same check error. When the type of the operand cannot be known, the test runs at run time.
 
 ---
 
@@ -858,7 +868,7 @@ discountedTotal(.id, .discount_rate) <= .total
 
 `name(...)` is a `CallExpression` (§11), so it chains with the ordinary postfix operators like anything else — `getPrimaryContact(.id).email`, `recentOrders(.id)[.status == "shipped"]`, and so on.
 
-**Inside a query.** A query is one SQL statement, so a user function called in a query clause (`WHERE`, `SELECT`, `GROUPBY`, `HAVING`, `ORDERBY`, `ON`) is copied into the SQL: its body is compiled in place, and each parameter is replaced by the argument. This works for a **simple function**: a body that is one expression, with no statements (no `let`), no recursion (direct or through other functions), no host function (§8.7) and no query. For example, `fn net(t: DECIMAL): DECIMAL { t * 0.9 }` in `WHERE net(.total) > 100` becomes `WHERE ("Order"."total" * 0.9) > 100`. Any other user function in a query clause is the check error `query.functionNotInlinable`, which names the reason. Call such a function outside the query, or simplify its body. A call outside a query is not affected: the interpreter runs the function.
+**Inside a query.** A query is one SQL statement, so a user function called in a query clause (`WHERE`, `SELECT`, `GROUPBY`, `HAVING`, `ORDERBY`, `ON`) is copied into the SQL: its body is compiled in place, and each parameter is replaced by the argument. This works for a **simple function**: a body that is one expression, with no statements (no `let`), no recursion (direct or through other functions), no host function (§8.7), no query, and no read of the record: no `.`, `^` or `#alias` (inside a query, `.` would mean the query's row, so the function's meaning would change). A `.` inside a `[...]` filter of the body is that filter's element, so it is fine. For example, `fn net(t: DECIMAL): DECIMAL { t * 0.9 }` in `WHERE net(.total) > 100` becomes `WHERE ("Order"."total" * 0.9) > 100`. Any other user function in a query clause is the check error `query.functionNotInlinable`, which names the reason. Call such a function outside the query, or simplify its body. A call outside a query is not affected: the interpreter runs the function.
 
 A function may also call itself or another function in the same way, including **recursively**, and regardless of where the other function is declared in the file (so mutual recursion between two functions is allowed too).
 
