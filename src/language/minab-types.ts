@@ -52,6 +52,10 @@ export interface NullType {
 
 export type MinabType = ScalarType | TupleType | RecordType | CollectionType | NullType;
 
+/**
+ * The type of a scalar column or value: a base type, and whether it may be `null` and whether it is an array.
+ * A host uses it to build a schema, for example `{ kind: 'scalar', type: scalarType('TEXT', { nullable: true }) }`.
+ */
 export function scalarType(base: LogicalTypeBase, options: { nullable?: boolean; array?: boolean; arrayNullable?: boolean } = {}): ScalarType {
     return {
         kind: 'scalar',
