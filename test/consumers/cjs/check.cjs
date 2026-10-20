@@ -1,10 +1,13 @@
 // A CommonJS Node project: require the package and `./node`, prepare and run rules.
 const assert = require('node:assert/strict');
-const { createMinab } = require('@shamsine/minab');
+const { createMinab, scalarType } = require('@shamsine/minab');
 const { queryFunctionDataPort, systemClock } = require('@shamsine/minab/node');
 
 (async () => {
-    const scalar = base => ({ kind: 'scalar', type: { kind: 'scalar', base, nullable: false, array: false, arrayNullable: false } });
+    // `scalarType` builds the type of a scalar column, so a host does not write the object by hand.
+    assert.deepEqual(scalarType('UUID'), { kind: 'scalar', base: 'UUID', nullable: false, array: false, arrayNullable: false });
+    assert.deepEqual(scalarType('TEXT', { nullable: true, array: true }), { kind: 'scalar', base: 'TEXT', nullable: true, array: true, arrayNullable: false });
+    const scalar = base => ({ kind: 'scalar', type: scalarType(base) });
     const schema = {
         version: 'v1',
         tables: [

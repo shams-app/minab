@@ -190,9 +190,9 @@ const schema = {
 };
 ```
 
-`scalar(base, { array, nullable })` is a small helper you write in the monorepo. The type
-object is `{ kind: 'scalar', type: { kind: 'scalar', base, nullable, array, arrayNullable } }`
-(see [section 13](#13-limits-you-will-meet-in-030): Minab does not export a helper yet).
+`scalar(base, options)` stands for `{ kind: 'scalar', type: scalarType(base, options) }`.
+`scalarType(base, { nullable, array, arrayNullable })` is exported from `@shamsine/minab`
+(from the release after 0.3.0; in 0.3.0 write the type object by hand).
 
 Rules:
 
@@ -852,8 +852,13 @@ the status file of phase G2 (`docs/production/status/G2.md`) for the owner.
   `attachment`, `lookup`, `formula`, …) can be tested for null or shape, not read by key.
 - **`numberRange` and `timeline` are not usable.** Their columns are Postgres range
   types. Keep them out of the schema until Minab has a range type.
-- **No `scalarType` helper in the public entry.** Write the small `scalar()` helper in
-  the monorepo (section 3).
+- **`scalarType` is exported only after 0.3.0.** In 0.3.0 write the type object by hand
+  (section 3).
+- **In 0.3.0 a read through a link ignores the key in the record.** `.customer.vip`,
+  `.customer.orders` and `^.customer` read the key from the stored row, so a new record
+  got `null` and an edited link was not followed. From the release after 0.3.0 they use
+  the key column the record carries (section 3, the `customer_id` column); a record that
+  does not carry it is read from the stored row as before.
 - **`languageVersion` is not enforced** until phase Q5.
 - **No many-to-many link** and no write statements yet (writes come in phase X5; a run
   with no write port fails with `eval.writesNotSupported`).

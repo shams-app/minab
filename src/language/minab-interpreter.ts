@@ -1442,7 +1442,7 @@ export class MinabInterpreter {
     private recordKey(record: Row, table: string): OuterRecord {
         const primaryKey = this.schema.getTable(table)?.primaryKey;
         if (!primaryKey) fail(`the schema does not say which column identifies a row of "${table}" (set primaryKey)`);
-        return { table, key: this.readField(record, primaryKey) };
+        return { table, key: this.readField(record, primaryKey), held: column => record[column] };
     }
 
     /**

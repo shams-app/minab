@@ -110,6 +110,12 @@ export type SqlResult =
 export interface OuterRecord {
     table?: string;
     key: unknown;
+    /**
+     * What the record in hand says about one of its columns, by schema column name: its value (`null` included),
+     * or `undefined` when the record does not carry the column. A read through a link (`.customer.vip`) uses the
+     * link's key column from here, so a new or edited record is followed by the key it holds, not by the stored row.
+     */
+    held?(column: string): unknown;
 }
 
 /**
@@ -187,7 +193,7 @@ interface SqlScope {
 type RowRef =
     | { kind: 'scope'; alias: string; table: string }
     | { kind: 'key'; table: string; keyExpr: string }
-    | { kind: 'outer'; table: string | undefined; keyExpr: string };
+    | { kind: 'outer'; table: string | undefined; keyExpr: string; held?: (column: string) => unknown };
 
 /** A table to read rows from, plus every predicate that narrows it — the shape every aggregate/`EXISTS` subquery is built from. */
 interface CollectionSource {
@@ -1284,7 +1290,7 @@ export class MinabSqlCompiler {
             // A path assignment may start at a loop variable that holds a row (`customer.doctor.id = 1;`).
             if (ctx.pathRoots && ctx.outer.resolveNamedRecord) {
                 const named = ctx.outer.resolveNamedRecord(expr.name);
-                if (named.found) return { kind: 'outer', table: named.record.table, keyExpr: ctx.bind(named.record.key) };
+                if (named.found) return this.heldRow(named.record, ctx);
             }
             return undefined;
         }
@@ -1339,7 +1345,22 @@ export class MinabSqlCompiler {
         if (row.kind === 'scope') {
             return `${quoteIdent(row.alias)}.${quoteIdent(name)}`;
         }
-        return this.refSubquery({ table, keyExpr: row.keyExpr }, name, ctx);
+        const held = schema.type.kind === 'ref' ? this.heldKey(row, table, name, ctx) : undefined;
+        return held ?? this.refSubquery({ table, keyExpr: row.keyExpr }, name, ctx);
+    }
+
+    /**
+     * The key of a link, taken from the record the caller holds, bound as a parameter. That record may be new (it
+     * has no row yet) or edited (its row still holds the old key), so it wins over the stored row. `undefined` when
+     * the row is not one the caller holds, the schema has no column for the key, or the record does not carry it:
+     * the key is then read from the stored row.
+     */
+    private heldKey(row: RowRef, table: string, foreignKey: string, ctx: Ctx): string | undefined {
+        // A path assignment changes the links it walks while the run goes on, so the record in hand is out of date there: the stored row is read.
+        if (row.kind !== 'outer' || !row.held || ctx.pathRoots) return undefined;
+        const column = this.table(table).columns.find(c => c.type.kind === 'scalar' && (c.sqlName ?? c.name) === foreignKey);
+        const value = column && row.held(column.name);
+        return value === undefined ? undefined : ctx.bind(value);
     }
 
     private tableOf(row: RowRef): string {
@@ -1877,10 +1898,19 @@ export class MinabSqlCompiler {
     private outerRow(frameIndex: number, ctx: Ctx): RowRef {
         const resolved = ctx.outer.resolveRecord(frameIndex);
         if (!resolved.found) fail(resolved.reason);
+        return this.heldRow(resolved.record, ctx);
+    }
+
+    /** A row the caller holds. Its key is bound the first time the SQL needs it: a read that follows one of its links by the key it holds never does. */
+    private heldRow(record: OuterRecord, ctx: Ctx): RowRef {
+        let param: string | undefined;
         return {
             kind: 'outer',
-            table: resolved.record.table,
-            keyExpr: ctx.bind(resolved.record.key)
+            table: record.table,
+            get keyExpr() {
+                return (param ??= ctx.bind(record.key));
+            },
+            held: record.held
         };
     }
 }
