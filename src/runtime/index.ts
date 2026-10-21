@@ -24,6 +24,7 @@ export type {
     WriteStatement
 } from './types.js';
 export type { ColumnType, MinabColumnSchema, MinabRuleContext, MinabSchema, MinabTableSchema } from '../language/schema.js';
+export { scalarType } from '../language/schema.js';
 export type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';
 export type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
 export { LANGUAGE_VERSION, MIGRATIONS, migrate } from './migrate.js';

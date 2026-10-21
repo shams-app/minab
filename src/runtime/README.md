@@ -150,6 +150,9 @@ to its driver. The timer is cleared when the run ends.
 
 - A run gets its inputs (`record`, `fieldValue`, `hostInputs`) and its ports (`data`, `write`,
   `hostFunctions`, `clock`, `events`). Inputs are given. Ports are asked.
+- A read through a link follows the key the `record` carries in the link's key column (a scalar column
+  with the same database name as the `ref` column's `foreignKey`), not the key of the stored row. A record
+  without that column is read from the stored row, by primary key.
 - A `statement` event goes out just before each data call. The duration comes in the
   `timing` event (`phase: 'data'`) after it. The whole run ends with `timing` `run`. A sink
   must not throw: the runtime drops a throw.

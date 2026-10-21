@@ -88,6 +88,12 @@ export interface PrepareOptions {
 
 /** Given, never asked: the record under validation, `$`, and the values of the declared host inputs. */
 export interface RunInputs {
+    /**
+     * The record under validation, by column name. A read through a link (`.customer.vip`, `.customer.orders`,
+     * `^.customer`) follows the key the record carries in the link's key column (`customer_id`), so a new
+     * record, or one with an edited link, is read as it is now. A key the record leaves out is read from the
+     * stored row (by primary key); a key that is `null` means the link is empty.
+     */
     record?: Record<string, unknown>;
     fieldValue?: unknown;
     /** One value for each declared input. A missing one is the run error `eval.missingInput`. */

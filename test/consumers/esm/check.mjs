@@ -1,9 +1,12 @@
 // An ES-module Node project: import the package and `./node`, prepare and run rules.
 import assert from 'node:assert/strict';
-import { createMinab } from '@shamsine/minab';
+import { createMinab, scalarType } from '@shamsine/minab';
 import { queryFunctionDataPort, systemClock } from '@shamsine/minab/node';
 
-const scalar = base => ({ kind: 'scalar', type: { kind: 'scalar', base, nullable: false, array: false, arrayNullable: false } });
+// `scalarType` builds the type of a scalar column, so a host does not write the object by hand.
+assert.deepEqual(scalarType('UUID'), { kind: 'scalar', base: 'UUID', nullable: false, array: false, arrayNullable: false });
+assert.deepEqual(scalarType('TEXT', { nullable: true, array: true }), { kind: 'scalar', base: 'TEXT', nullable: true, array: true, arrayNullable: false });
+const scalar = base => ({ kind: 'scalar', type: scalarType(base) });
 const schema = {
     version: 'v1',
     tables: [
