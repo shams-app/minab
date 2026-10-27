@@ -310,6 +310,14 @@ WHERE .$index == 2
 SELECT .
 ```
 
+**Keys of a `JSON` value** — `.key` reads a key, `["key"]` reads a text key, `[n]` a position. A key is `JSON?`; a missing key is `null`; `CAST` it to compare. (§7.3.1)
+```
+CAST(.metadata.lat AS DECIMAL) > 35.7
+CAST(.metadata["file name"] AS TEXT) == "plan.pdf"
+COUNT(.tags) > 0
+.metadata.sessions[0].userId isnot null
+```
+
 ---
 
 ## 10. Functions

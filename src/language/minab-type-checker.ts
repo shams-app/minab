@@ -124,6 +124,16 @@ function failWith(failure: CodedMessage): TypeResult {
     return { ok: false, code: failure.code, params: failure.params, reason: failure.reason };
 }
 
+/** A single `JSON` value: keys of it can be read (spec §7.3.1). */
+function isJsonValue(t: MinabType): boolean {
+    return t.kind === 'scalar' && t.base === 'JSON' && !t.array;
+}
+
+/** Is the node inside a query with a `GROUPBY`? There an aggregate reads the group. */
+function isInGroupedQuery(node: AstNode): boolean {
+    return !!AstUtils.getContainerOfType(node, isQuery)?.groupByClause;
+}
+
 export function typeRefToMinabType(t: TypeRef): ScalarType {
     return scalarType(t.base as LogicalTypeBase, { nullable: t.nullable, array: t.array, arrayNullable: t.arrayNullable });
 }
@@ -350,6 +360,8 @@ export class MinabTypeChecker {
         const t = receiver.type;
         if (t.kind === 'record') return this.lookupColumn(t.table, node.member);
         if (t.kind === 'collection') return this.lookupBroadcastColumn(t.table, node.member);
+        // A key of a `JSON` value (spec §7.3.1): the shape is not known, so the answer is `JSON`, and a missing key is `null`.
+        if (isJsonValue(t)) return ok(scalarType('JSON', { nullable: true }));
         return err('type.memberOnNonRecord', { member: node.member, actual: formatType(t) });
     }
 
@@ -399,6 +411,10 @@ export class MinabTypeChecker {
         if (receiver.type.kind === 'scalar' && receiver.type.base === 'JSON' && !receiver.type.array) {
             if (this.isBoolean(filter.type)) return ok(receiver.type);
             if (isNumeric(filter.type) && filter.type.kind === 'scalar' && filter.type.base === 'INTEGER') {
+                return ok(scalarType('JSON', { nullable: true }));
+            }
+            // A text in `[ ]` is a key (spec §7.3.1): `.attachment["name"]`.
+            if (filter.type.kind === 'scalar' && !filter.type.array && (filter.type.base === 'TEXT' || filter.type.base === 'CITEXT')) {
                 return ok(scalarType('JSON', { nullable: true }));
             }
             return err('type.invalidFilter');
@@ -454,6 +470,10 @@ export class MinabTypeChecker {
             const argType = this.inferType(arg);
             if (!argType.ok) return argType;
             argTypes.push(argType.type);
+        }
+        // `COUNT` of a `JSON` value counts the elements of a `JSON` array (spec §5.3.1). In a grouped query it stays the group's count.
+        if (builtin.name === 'COUNT' && argTypes.length === 1 && isJsonValue(argTypes[0]) && !isInGroupedQuery(node)) {
+            return ok(scalarType('INTEGER'));
         }
         const result = checkBuiltin(builtin, argTypes);
         if (result.ok) return this.checkDateUnit(node, builtin, argTypes) ?? ok(result.type);

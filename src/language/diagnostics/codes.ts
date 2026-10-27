@@ -582,8 +582,8 @@ export const DIAGNOSTICS = {
     }),
     'type.invalidFilter': entry({
         severity: error,
-        message: () => '"[...]" needs a BOOLEAN filter or an INTEGER index',
-        doc: 'Inside "[...]", write a BOOLEAN condition to filter, or an INTEGER to pick a position.'
+        message: () => '"[...]" needs a BOOLEAN filter, an INTEGER index or, on a JSON value, a TEXT key',
+        doc: 'Inside "[...]", write a BOOLEAN condition to filter, an INTEGER to pick a position, or a TEXT to read a key of a JSON value.'
     }),
     'type.kindTestNeedsJson': entry<{ operator: string; kind: string; operand: string; actual: string }>({
         severity: error,
@@ -617,7 +617,7 @@ export const DIAGNOSTICS = {
     'type.memberOnNonRecord': entry<{ member: string; actual: string }>({
         severity: error,
         message: p => `"${p.member}" accessed on a non-record value (${p.actual})`,
-        doc: 'A ".name" access needs a record or a collection on the left. The left side is a plain value.'
+        doc: 'A ".name" access needs a record, a collection or a JSON value on the left. The left side is a plain value. To read a key of a JSON value, the value must have type JSON: use CAST(... AS JSON) on a text that holds JSON.'
     }),
     'type.mergeAssignTarget': entry<{ actual: string }>({
         severity: error,

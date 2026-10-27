@@ -230,6 +230,17 @@ interface Frame {
 }
 
 /**
+ * A key of a `JSON` value (spec §7.3.1). Only an object has keys, and only its own: a missing key, a value that is
+ * not an object (a number, a text, an array, `null`) and a key such as `constructor` that the object does not hold give `null`.
+ */
+function readJsonKey(value: MinabValue, key: string): MinabValue {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+    if (!Object.prototype.hasOwnProperty.call(value, key)) return null;
+    const found = (value as Record<string, MinabValue>)[key];
+    return found === undefined ? null : found;
+}
+
+/**
  * The Postgres `LIKE` matcher, on arrays of characters. It has no recursion and no regular
  * expression: it keeps the place of the last `%` and, when a character does not match, tries
  * again one text character later. It never overflows the stack, and its time is at most the
@@ -534,6 +545,18 @@ export class MinabInterpreter {
         }
     }
 
+    /** Is the expression a single `JSON` value, by its inferred type? Its keys are read with `readJsonKey`. */
+    private isJsonValue(expr: Expression): boolean {
+        const type = this.staticScalar(expr);
+        return type?.base === 'JSON' && !type.array;
+    }
+
+    /** Is the expression a single `TEXT` or `CITEXT` value, by its inferred type? */
+    private isTextValue(expr: Expression): boolean {
+        const type = this.staticScalar(expr);
+        return (type?.base === 'TEXT' || type?.base === 'CITEXT') && !type.array;
+    }
+
     /** A value that SQL computed: read by the static type of the expression, so a `numeric` (text from the driver) becomes an exact decimal. */
     private readPushed(expr: Expression, value: MinabValue): MinabValue {
         if (!this.typeChecker || value === null || value === undefined) return value;
@@ -618,6 +641,8 @@ export class MinabInterpreter {
         }
         if (isMemberAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
+            // A key of a `JSON` value: a missing key, or a value that is not an object, gives `null` (spec §7.3.1).
+            if (this.isJsonValue(expr.receiver)) return readJsonKey(receiver, expr.member);
             return this.readField(receiver, expr.member);
         }
         if (isNameRef(expr)) return state.lookup(expr.name);
@@ -675,11 +700,19 @@ export class MinabInterpreter {
         }
         if (isTupleAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
-            if (!Array.isArray(receiver)) fail('a positional index needs an array (spec §3.5)');
+            if (!Array.isArray(receiver)) {
+                if (this.isJsonValue(expr.receiver)) return null;
+                fail('a positional index needs an array (spec §3.5)');
+            }
             return receiver[expr.index] ?? null;
         }
         if (isFilterAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
+            // A text in `[ ]` on a `JSON` value is a key, read in the scope around it (spec §7.3.1).
+            if (this.isJsonValue(expr.receiver) && this.isTextValue(expr.filter)) {
+                const key = await this.expression(expr.filter, state);
+                return key === null || key === undefined ? null : readJsonKey(receiver, String(key));
+            }
             if (!Array.isArray(receiver)) fail('a filter needs a collection');
             // The rows of a table have no position (spec §3.5): only an array source sets `.$index`.
             return await this.filterArray(receiver, expr.filter, state, !this.isRelational(expr.receiver, state));
@@ -1143,6 +1176,8 @@ export class MinabInterpreter {
         if (builtin.kind !== 'scalar') {
             if (expr.args.length !== 1) fail(`${builtin.name} takes one argument`);
             const values = await this.expression(expr.args[0], state);
+            // `COUNT` of a `JSON` value counts the elements of an array, and is 0 for anything else (spec §5.3.1).
+            if (builtin.name === 'COUNT' && this.isJsonValue(expr.args[0])) return Array.isArray(values) ? values.length : 0;
             const items = Array.isArray(values) ? values : values === null ? [] : [values];
             return this.runBuiltin(builtin, [items], [], state);
         }

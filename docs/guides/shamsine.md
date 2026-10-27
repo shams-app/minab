@@ -155,11 +155,14 @@ Count: 47 rows, one for each enum value, in enum order. 43 map to a Minab scalar
 unsupported for now (`numberRange` and `timeline`). The `JSON` rows are `timeTracking`,
 `lookup`, `formula`, `attachment`, `icon`, `canvas`, `location`, `address` and `kanbanHistory`.
 
-**`JSON` types are weak in 0.3.0.** You can test the shape (`is object`,
-`is array`, `is null`, `isnot null`) and `CAST` a JSON number or boolean. You
-**cannot** read a key (`.location.lat` fails with `type.memberOnNonRecord`), index by
-a text key, or compare a `JSON` value with `==` to a text or a number. Treat the
-`JSON` fields as "can be tested for null, not read" until a richer type exists.
+**Keys of a `JSON` value can be read** (Shamsine card M.1b, spec §7.3.1). `.location.lat`,
+`.attachment["name"]` and `.timeTracking.sessions[0]` check and run; every key has the
+type `JSON?`, a missing key is `null`, and you `CAST` it to compare:
+`CAST(.location.lat AS DECIMAL) > 35.7`, `CAST(.address.text AS TEXT) == "Tehran"`,
+`COUNT(.timeTracking.sessions) > 0`. You can still test the shape (`is object`,
+`is array`, `is null`, `isnot null`). A `JSON` value cannot be compared with `==` to a
+text or a number without a `CAST`. Builds before the one that carries M.1b (0.3.0 and
+`0.4.0-next.55`) fail a key with `type.memberOnNonRecord`.
 
 **Read-only** only matters for writes (phase X5). Expressions read all of these.
 
@@ -304,10 +307,13 @@ createMinab({
   The **server** fills it from the session. The run endpoint ignores a client value of
   the same name (`endpoint.hostInputs`). The browser fills it from the signed-in
   user, for `local` programs only.
-- **`url` as `JSON` does not work in 0.3.0.** `url.tab` on a `JSON` input fails with
-  `type.memberOnNonRecord`. Declare `url` as a typed record **per page**, from the
-  page's own parameters: `{ tab: 'TEXT?', page: 'INTEGER?' }`. `?` means it may be
-  null. Then `url.tab == "open"` and `url.tab is null` both check and run.
+- **`url` as `JSON`** works from the build that carries M.1b: `CAST(url.tab AS TEXT) == "open"`
+  and `url.tab is null` check and run, and a missing key is `null`. Builds before it
+  (0.3.0, `0.4.0-next.55`) fail `url.tab` on a `JSON` input with `type.memberOnNonRecord`;
+  there, declare `url` as a typed record **per page**, from the page's own parameters:
+  `{ tab: 'TEXT?', page: 'INTEGER?' }`. `?` means it may be null. Then `url.tab == "open"`
+  and `url.tab is null` both check and run, with no `CAST`. A typed record is still the
+  better choice when the keys are known.
 - **`record`** is the form's record. It is `inputs.record` (keys are the field names).
   Tell Minab which table `.` means with `ruleContext.recordTable` (the dataset name).
   A field rule also sets `isFieldRule: true` and `fieldType`, and `inputs.fieldValue`
