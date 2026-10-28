@@ -10,6 +10,8 @@ break a limit.
   programs from the spec, the showcase and the examples.
 - `run.test.ts`: random well-typed expressions run on PGlite with tight limits. Every run ends with a value or a
   coded error, and not later than the wall time plus 50 ms.
+- `json-keys.test.ts`: random paths of keys, text keys and positions over random `JSON` values, then left as they are, cast,
+  counted or kind-tested (Shamsine card M.1b). Every program checks, and every run is a value or `eval.castFailed`.
 
 ## Rules
 

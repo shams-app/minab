@@ -179,6 +179,8 @@ The postfix `[...]` from §3.2 has **two readings**, disambiguated by the type o
 .orders[2]                        ✗ invalid — .orders is a relational collection(Order); no stable position
 ```
 
+A **text** expression inside `[...]` on a `JSON` value is a third reading: a key (§7.3.1).
+
 The index expression doesn't have to be a literal — `.tags[i]` is fine for a variable `i: INTEGER` — because every element of an array shares one element type, so there's nothing type-inference needs the literal value *for* (contrast this with `TupleAccess`, §7.6, where the index must be a literal precisely because a tuple's positions each have their own, possibly different, type — a variable index into a tuple couldn't be resolved to a single type at all).
 
 `.$index` (§2) is the companion to this: inside a `[...]` filter, or a `WHERE` clause, over an array-like source, `.$index` gives the current element's position — so `.customers[2]` and `FROM .customers WHERE .$index == 2 SELECT .` describe the same thing two ways. Same legality rule as the integer-index form above: meaningful only against `JSON`/`T[]` sources, a semantic error against a relational collection.
@@ -350,7 +352,7 @@ Built-ins are table-driven (`src/language/minab-builtins.ts`): each has a name, 
 
 | Function | Signature | Notes |
 |---|---|---|
-| `COUNT` | `(collection<T>) -> INTEGER` | Any `T`. Counts elements. |
+| `COUNT` | `(collection<T>) -> INTEGER` | Any `T`. Counts elements. `COUNT` also takes a `JSON` value, `(JSON) -> INTEGER`: the number of elements of a `JSON` array, and `0` for any other value, a missing key and `null` (§7.3.1). In a grouped query, `COUNT(.column)` of a `JSON` column stays the count of the group. |
 | `SUM` | `(collection<N>) -> N` | `N` is `INTEGER` or `DECIMAL` — preserves the numeric type, no auto-widening. |
 | `AVG` | `(collection<N>) -> DECIMAL` | `N` is `INTEGER` or `DECIMAL`; the average is always fractional regardless of the input type. |
 | `MIN` | `(collection<T>) -> T` | `T` must be orderable: `INTEGER`, `DECIMAL`, `TEXT`, `CITEXT`, `DATE`, `TIME`, or `DATETIME` — not `UUID`, `BOOLEAN`, or `JSON` (§7.2). |
@@ -466,10 +468,12 @@ The interpreter and the compiled SQL give the same answer for every cast below (
 | `DATE`, `TIME`, `DATETIME`, `UUID` | `TEXT`/`CITEXT` | The value as text (a `DATETIME` is `2026-10-02 08:30:00`). |
 | `TEXT`/`CITEXT` | `JSON` | The text is parsed as JSON: `"{\"a\": 1}"` → an object. Text that is not JSON fails. |
 | `JSON` | `JSON` | Unchanged. |
-| `JSON` | `INTEGER`, `DECIMAL`, `BOOLEAN` | Only a JSON number or a JSON boolean converts (a number as above). |
+| `JSON` | `INTEGER`, `DECIMAL` | Only a JSON number converts (a number as above). |
+| `JSON` | `BOOLEAN` | Only a JSON boolean converts. |
+| `JSON` | `TEXT`/`CITEXT` | Only a JSON string converts, and the result is the text without the quotes: `"plan.pdf"` → `plan.pdf`. A JSON number, boolean, object or array does not convert. |
 | any type | the same type | Unchanged. |
 
-Every other pair fails with `eval.castFailed` when the value is converted, for example a `JSON` object to `INTEGER`, or `BOOLEAN` to `DECIMAL`. An array converts item by item, to an array type. Postgres accepts more text than the table lists (`"tomorrow"` as a `DATE`, a `UUID` without hyphens); do not rely on that: only the forms in the table are the same in both runtimes. `JSON` to `TEXT` is not covered yet: it fails in the interpreter.
+Every other pair fails with `eval.castFailed` when the value is converted, for example a `JSON` object to `INTEGER`, a `JSON` number to `TEXT`, or `BOOLEAN` to `DECIMAL`. A `JSON` `null` converts to `null` for every target. An array converts item by item, to an array type. Postgres accepts more text than the table lists (`"tomorrow"` as a `DATE`, a `UUID` without hyphens); do not rely on that: only the forms in the table are the same in both runtimes. A `JSON` value never converts to `DATE`, `TIME`, `DATETIME` or `UUID` (convert its text: `CAST(CAST(.created AS TEXT) AS DATE)`).
 
 ### 5.6 `is` / `isnot` — JSON shape testing
 
@@ -685,6 +689,31 @@ Since a `JSON` value's shape isn't known statically, check it with `is`/`isnot` 
 ```
 if config is object { config } else { {} }
 ```
+
+### 7.3.1 Keys of a `JSON` value
+
+A `JSON` value can be read, not only tested. This is how a program reads a field such as a location, an address or an attachment, which a host stores as `JSON`. Here `metadata` and `tags` are `JSON` columns:
+
+```
+CAST(.metadata.lat AS DECIMAL) > 35.7
+CAST(.metadata.attachment.size AS INTEGER) < 5000000
+CAST(.metadata["file name"] AS TEXT) == "plan.pdf"
+COUNT(.metadata.sessions) > 0
+.metadata.sessions[0].userId isnot null
+.tags[0] is string
+```
+
+A `JSON` host input has keys too: with `url: JSON`, `CAST(url.tab AS TEXT) == "details"` checks and runs.
+
+- **A key** is `.name`, the same syntax as a column. It works on a `JSON` column, a `JSON` variable or parameter, a `JSON` host input (so `url.tab` works) and on the result of another key (`.location.address.city`). A name with a space or a symbol is written in backticks (§2.3).
+- **A text key** is a `TEXT` or `CITEXT` expression inside `[...]`: `.attachment["file name"]`. The text can be a literal, a `let` name, a host input, or an expression made of those. Inside `[...]` a bare `.` is the element (§3.2), not the record, so `.attachment[.label]` is the error `type.columnNeedsTable`.
+- **A position** is `[n]` (§3.5): `.timeTracking.sessions[0].userId`. Only an array has positions. `[n]` on an object, a number, a text or a missing value is `null`.
+- **The type** of every key access is `JSON?`, whatever is stored under it. To compare it, convert it with `CAST` (§5.5): `.location.lat > 35` is an error (`JSON` is not orderable), and so is `.location.lat == 35` (`type.implicitCoercion`). `is` / `isnot` (§5.6) work on a key without a cast.
+- **The null rule.** A key that is not there, a key of a value that is not an object (a number, a text, an array, `null`), a position past the end, and a JSON `null` are all `null`. Reading never fails at run time. Only the key itself is looked up: `.attachment["constructor"]` is `null` when the object has no such key.
+- **Count.** `COUNT(x)` of a `JSON` value is the number of elements of an array, and `0` for anything else, including a missing key and `null` (§5.3.1).
+- **Cast.** `CAST(key AS ...)` follows §5.5: the kind in the `JSON` value must fit the target, or the run fails with `eval.castFailed`. A missing key or a `JSON` `null` casts to `null`.
+- **Both runtimes agree.** The interpreter reads the value in memory; in SQL a key is the `jsonb` operator `->` (a JSON `null` is read as SQL `NULL`), and a cast checks `jsonb_typeof` first, so the same program gives the same answer.
+- **What is not here.** Writing into a `JSON` value by key is §9.3 and §10 (`|=`, `:|`, `JSON` arrays); a key cannot be assigned. The shape of a `JSON` value is still not declared in the schema: no key is checked against a list of known keys.
 
 ### 7.4 Using variables
 

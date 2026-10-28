@@ -89,6 +89,7 @@ import { jsonNumber, sqlParameter } from './values.js';
 import type { LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
+import { AstUtils } from 'langium';
 import Big from 'big.js';
 
 export type WriteStatementNode = InsertStatement | UpdateStatement | DeleteStatement;
@@ -302,6 +303,11 @@ const SQL_TYPES: Record<LogicalTypeBase, string> = {
 const PARAM_TYPES: Record<LogicalTypeBase, string> = { ...SQL_TYPES, INTEGER: 'bigint' };
 
 /** True for SQL that is one bound parameter, `$n`: Postgres sees no type there. */
+/** A JSON `null` answers SQL `NULL` (spec §5.6). A value that already did is not wrapped again. */
+function asNullFreeJson(sql: string): string {
+    return sql.startsWith('NULLIF(') && sql.endsWith(", 'null'::jsonb)") ? sql : `NULLIF(${sql}, 'null'::jsonb)`;
+}
+
 function isBareParam(sql: string): boolean {
     return /^\$\d+$/.test(sql);
 }
@@ -1094,6 +1100,9 @@ export class MinabSqlCompiler {
         if (isCallExpression(expr)) return this.call(expr, ctx, scopes);
         if (isCastExpr(expr)) {
             const operand = this.expression(expr.value, ctx, scopes);
+            // A `JSON` value converts only when its kind fits the target; otherwise `eval.castFailed`, as in the interpreter (spec §5.5).
+            if (!expr.targetType.array && this.baseOf(expr.value) === 'JSON')
+                return this.jsonCast(isBareParam(operand) ? `${ctx.rebindAsJson(operand)}::jsonb` : operand, expr.targetType);
             // A decimal as text has no trailing zeros (D16): `2.50` is "2.5", like the interpreter.
             const trimmed = this.isDecimalToText(expr) ? `trim_scale(${operand})` : operand;
             // A `DATETIME` becomes a `DATE` or a `TIME` in the run's time zone, not the session's (D21).
@@ -1123,6 +1132,8 @@ export class MinabSqlCompiler {
         // `$` (spec §6.2) is always the host's, never a column: the value
         // of the field under validation, bound as a parameter.
         if (isFieldValue(expr)) return this.outerScalar(expr, ctx, scopes.length);
+        const jsonKey = this.jsonKey(expr, ctx, scopes);
+        if (jsonKey) return jsonKey;
         if (isCurrentRecord(expr) || isMemberAccess(expr) || isGroupKeyRef(expr) || isNameRef(expr)) {
             return this.fieldOrOuter(expr, ctx, scopes);
         }
@@ -1518,7 +1529,7 @@ export class MinabSqlCompiler {
 
     /** A `JSON` operand reads a JSON `null` as SQL `NULL` (spec §5.6), as the interpreter does. */
     private jsonNullAsNull(sql: string, expr: Expression): string {
-        return this.baseOf(expr) === 'JSON' ? `NULLIF(${sql}, 'null'::jsonb)` : sql;
+        return this.baseOf(expr) === 'JSON' ? asNullFreeJson(sql) : sql;
     }
 
     /** True when the argument has type `TEXT` or `CITEXT`. */
@@ -1596,6 +1607,12 @@ export class MinabSqlCompiler {
         const name = builtin.name;
         const arg = expr.args[0];
         if (!arg || expr.args.length !== 1) fail(`${name} takes one argument`);
+
+        // `COUNT` of a `JSON` value counts the elements of an array, and is 0 for anything else (spec §5.3.1). In a grouped query it stays the group's count.
+        if (name === 'COUNT' && this.baseOf(arg) === 'JSON' && !AstUtils.getContainerOfType(expr, isQuery)?.groupByClause) {
+            const value = this.jsonOperand(arg, ctx, scopes);
+            return `(CASE jsonb_typeof(${value}) WHEN 'array' THEN jsonb_array_length(${value}) ELSE 0 END)`;
+        }
 
         const source = this.tryCollectionSource(arg, ctx, scopes);
         if (source) {
@@ -1871,6 +1888,57 @@ export class MinabSqlCompiler {
             if (entry) return entry;
         }
         return undefined;
+    }
+
+    /** A `JSON` operand as SQL: a value the caller holds is bound as JSON text and cast to `jsonb` (D47). */
+    private jsonOperand(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
+        const compiled = this.expression(expr, ctx, scopes);
+        return isBareParam(compiled) ? `${ctx.rebindAsJson(compiled)}::jsonb` : compiled;
+    }
+
+    /**
+     * A key of a `JSON` value (`.location.lat`), a text key (`.attachment["name"]`) or a position (`.sessions[0]`),
+     * as the `jsonb` operator `->` (spec §7.3.1). A JSON `null` answers SQL `NULL`; so do a missing key and a value that is
+     * not an object (an array for a position), because `->` gives `NULL` there. `undefined` when `expr` is none of these.
+     */
+    private jsonKey(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string | undefined {
+        let receiver: Expression;
+        let key: (() => string) | undefined;
+        if (isMemberAccess(expr)) {
+            receiver = expr.receiver;
+            key = () => `${ctx.bind(expr.member)}::text`;
+        } else if (isTupleAccess(expr)) {
+            receiver = expr.receiver;
+            // A position that is not a whole number is no element (the interpreter reads `array[1.5]` as missing).
+            key = () => (Number.isInteger(expr.index) ? `${ctx.bind(expr.index)}::int` : 'NULL::int');
+        } else if (isFilterAccess(expr) && (this.baseOf(expr.filter) === 'TEXT' || this.baseOf(expr.filter) === 'CITEXT')) {
+            receiver = expr.receiver;
+            key = () => `CAST(${this.expression(expr.filter, ctx, scopes)} AS text)`;
+        } else {
+            return undefined;
+        }
+        if (this.baseOf(receiver) !== 'JSON') return undefined;
+        const value = this.jsonOperand(receiver, ctx, scopes);
+        // Postgres reads a scalar as an array of one element, so `-> 0` would answer the scalar: only an array has positions.
+        if (isTupleAccess(expr)) return asNullFreeJson(`(CASE WHEN jsonb_typeof(${value}) = 'array' THEN ${value} -> ${key()} END)`);
+        return asNullFreeJson(`${value} -> ${key()}`);
+    }
+
+    /**
+     * A `JSON` value cast to a scalar. Only the kind that fits converts (a number to `INTEGER` or `DECIMAL`, a boolean to
+     * `BOOLEAN`, a text to `TEXT` or `CITEXT`); any other kind fails with SQLSTATE 22P02, which is `eval.castFailed` in
+     * both runtimes. A `jsonb` cast would fail with 22023, which a host reports as `data.error`.
+     * The failing arm reads the value, so Postgres cannot fold it away while planning, and it goes through `text` so it is valid for every target type.
+     */
+    private jsonCast(operand: string, target: TypeRef): string {
+        const value = asNullFreeJson(operand);
+        const kinds: Partial<Record<LogicalTypeBase, string>> = { INTEGER: 'number', DECIMAL: 'number', BOOLEAN: 'boolean', TEXT: 'string', CITEXT: 'string' };
+        const kind = kinds[target.base as LogicalTypeBase];
+        const type = this.sqlType(target);
+        const fails = `CAST(CAST(CAST('cannot cast a JSON ' || jsonb_typeof(${value}) AS integer) AS text) AS ${type})`;
+        if (!kind) return `(CASE WHEN ${value} IS NULL THEN NULL ELSE ${fails} END)`;
+        const converted = kind === 'string' ? `CAST((${value} #>> '{}') AS ${type})` : `CAST(${value} AS ${type})`;
+        return `(CASE WHEN ${value} IS NULL THEN NULL WHEN jsonb_typeof(${value}) = '${kind}' THEN ${converted} ELSE ${fails} END)`;
     }
 
     private isDecimalToText(expr: CastExpr): boolean {

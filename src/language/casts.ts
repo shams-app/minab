@@ -169,7 +169,11 @@ function castOne(value: unknown, from: Kind, to: Kind, zone: string): unknown {
             if (from === 'DECIMAL') return decimalText(value as Big);
             if (from === 'INTEGER') return String(value);
             if (from === 'BOOLEAN') return String(value);
-            if (from === 'JSON') throw fail();
+            // Only a JSON text converts, and it is the text without the quotes (spec §5.5).
+            if (from === 'JSON') {
+                if (typeof value === 'string') return value;
+                throw fail();
+            }
             if (from === 'DATETIME') {
                 const parts = text === undefined ? undefined : parseDateTime(text);
                 if (!parts) throw fail();

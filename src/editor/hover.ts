@@ -82,12 +82,16 @@ function describeNode(doc: EditorDocument, node: AstNode): string | undefined {
         return typed('.' + node.field, columnWhat(doc, node), typeOf(doc, node));
     }
     if (isMemberAccess(node)) {
-        const owner = tableOfType(doc, typeOf(doc, node.receiver));
+        const receiverType = typeOf(doc, node.receiver);
+        const owner = tableOfType(doc, receiverType);
         const column = owner?.columns.find(c => c.name === node.member);
+        const isJsonKey = receiverType?.kind === 'scalar' && receiverType.base === 'JSON' && !receiverType.array;
         const what =
             column && owner
                 ? `column of ${code(owner.name)}${column.type.kind !== 'scalar' ? ` (${describeColumn(column)})` : ''}${sqlNameNote(column.sqlName, column.name)}`
-                : 'member access';
+                : isJsonKey
+                  ? `key of a JSON value — a missing key is null (spec §7.3.1)`
+                  : 'member access';
         return typed(node.$cstNode?.text.trim() ?? node.member, what, typeOf(doc, node));
     }
     if (isParentRecord(node)) {

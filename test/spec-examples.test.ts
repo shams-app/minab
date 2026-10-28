@@ -114,11 +114,13 @@ const NOT_PROGRAMS: Record<string, string> = {
 const PIECES: Record<string, 'lines' | 'paragraphs'> = {
     'spec §5.3 #1': 'lines',
     'spec §5.5 #2': 'lines',
+    'spec §7.3.1 #1': 'lines',
     'spec §7.6 #3': 'lines',
     'showcase §7 #6': 'lines',
     'showcase §7 #16': 'lines',
     'showcase §9 #3': 'lines',
     'showcase §9 #4': 'paragraphs',
+    'showcase §9 #5': 'lines',
     'showcase §10 #4': 'lines',
     'showcase §17 #1': 'lines',
     'showcase §17 #2': 'lines',
@@ -171,6 +173,7 @@ const HOST_NAMES = 'uses a host input and a host function, which the host declar
 const CHECK: Record<string, CheckSetup> = {
     'spec §5.5 #2': { prelude: () => RAW_ID },
     'spec §7.3 #3': { prelude: () => 'let config: JSON = {};' },
+    'spec §7.3.1 #1': { context: 'customer' },
     'spec §7.6 #3': { prelude: () => 'let point: (INTEGER, INTEGER) = (3, 4);' },
     'spec §9.1.1 #2': {
         prelude: () => 'let v: INTEGER = 0;\nlet seen: INTEGER = 0;\nlet threshold: INTEGER = 0;\nlet result: INTEGER = 0;'
@@ -178,6 +181,7 @@ const CHECK: Record<string, CheckSetup> = {
     'spec §9.1.1 #3': { parseOnly: NO_RECORD_VARIABLE },
     'showcase §7 #1': { prelude: () => RAW_ID },
     'showcase §9 #3': { prelude: () => 'let tags: JSON = ["alpha", "beta", "gamma"];' },
+    'showcase §9 #5': { context: 'customer' },
     'showcase §18 #2': { context: 'booking' },
     'showcase §18 #3': { context: 'booking' },
     'spec §3.1 #1': { context: 'customer' },
