@@ -39,6 +39,10 @@ export const cases: DifferentialCase[] = [
   Without `schema`, the case has one table `One` and no record.
 - `clock`: `{ now, timeZone }` (an ISO 8601 instant and an IANA name). Both runtimes get the same clock.
 - `expect`: the answer both runtimes must give. For an error use `{ error: 'division-by-zero' } or { error: 'cast-failed' }`.
+- `group: { rows, sets }` (P2): a group expression. `expr` runs over the rows of the table. Postgres runs its
+  `compileGroupExpression` fragment once, with `GROUP BY GROUPING SETS` (`sets`, default `[[]]`, the grand total);
+  the interpreter runs `expr` on the rows of each group. `expect` is then one answer for each group, by label:
+  `''` (grand total), `'Region=North'`, `'Region=North,Month=1'`. See `cases/p2-group-expression.cases.ts`.
 - `knownGap: { card, note }`: a bug we know. The test asserts the two answers **differ**.
   The card that fixes the bug removes `knownGap` and adds `expect`.
   When a gap case starts to agree, the test fails with "gap fixed? remove knownGap".

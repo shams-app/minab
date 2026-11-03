@@ -371,6 +371,48 @@ function quoteIdent(name: string): string {
     return `"${name.replace(/"/g, '""')}"`;
 }
 
+// ---- group expression fragments (P2) ----------------------------------
+
+/** The alias of the group row while a group expression compiles. It never reaches the fragment: its columns are holes. */
+const GROUP_ALIAS = '_group';
+
+/** What `compileGroupExpression` answers: one SQL expression, or why there is none. */
+export type GroupExpressionSql = { ok: true; sql: string } | { ok: false; reason: string; code: DiagnosticCode; params: DiagnosticParams };
+
+/**
+ * Text a fragment must never hold before the host's columns go in: a statement, a subquery, a comment, a statement
+ * end or a quoted name. User text is not in the SQL at this point (literals are still `$n`), so a match is always
+ * the compiler's own SQL, for something the fragment cannot have.
+ */
+const STATEMENT_TEXT = /\bSELECT\b|;|--|\/\*|"/i;
+
+/** A hole for the host's SQL of one column: `\u0001<index>\u0001`. The marks are no SQL, and user text is not in the SQL yet. */
+const HOLE = (index: number) => `\u0001${index}\u0001`;
+
+/** A number literal as SQL: exact decimal text. A negative number is in parentheses, so `a - -1` never reads as a comment. */
+function numberSql(value: unknown): string {
+    const text = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '') : String(value);
+    if (!/^-?\d+(\.\d+)?$/.test(text)) fail(`the number ${text} has no exact SQL form`);
+    return text.startsWith('-') ? `(${text})` : text;
+}
+
+/**
+ * A value as a SQL literal. Text is quoted with `'` doubled. Text with `\` uses the `E'...'` form with `\` doubled
+ * too, which reads the same whatever `standard_conforming_strings` says. A literal like this has the type "unknown"
+ * in Postgres until its place gives it one, just like a parameter.
+ */
+function literalSql(value: unknown, numberLiteral: boolean): string {
+    if (value === null || value === undefined) return 'NULL';
+    if (numberLiteral) return numberSql(value);
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+    if (typeof value === 'number') return `'${numberSql(value).replace(/[()]/g, '')}'`;
+    if (typeof value !== 'string') fail('a value of this kind has no SQL literal');
+    // Postgres text cannot hold a NUL character, and a NUL would end the statement text early.
+    if (value.includes('\u0000')) fail('text with a NUL character has no SQL literal');
+    const quoted = value.replace(/'/g, "''");
+    return value.includes('\\') ? `E'${quoted.replace(/\\/g, '\\\\')}'` : `'${quoted}'`;
+}
+
 export class MinabSqlCompiler {
     constructor(
         private readonly schema: SchemaProvider,
@@ -427,6 +469,44 @@ export class MinabSqlCompiler {
             clock
         );
         return result.ok ? { ...result, table } : result;
+    }
+
+    /**
+     * Compile a group expression (P1) to one SQL expression for the host's own `SELECT … GROUP BY …` (P2).
+     * `column` gives the host's SQL for one column of the group row, by schema name; it is called once for each
+     * column the expression reads, and its answer goes in parentheses. Literals are written into the text (no `$n`),
+     * a zero divisor gives `NULL`, and the fragment never holds a statement, a subquery or a comment.
+     * A number answer is `numeric`; a `COUNT` alone is `bigint`.
+     */
+    compileGroupExpression(expr: Expression, groupTable: string, column: (name: string) => string, clock?: BuiltinClock): GroupExpressionSql {
+        const holes: string[] = [];
+        const compiled = this.run(
+            ctx => {
+                ctx.group = {
+                    column: name => {
+                        const at = holes.indexOf(name);
+                        return HOLE(at >= 0 ? at : holes.push(name) - 1);
+                    }
+                };
+                const scope: SqlScope = { alias: GROUP_ALIAS, table: this.table(groupTable).name, named: new Map() };
+                const sql = this.expression(expr, ctx, [scope]);
+                if (STATEMENT_TEXT.test(sql)) fail('this part needs a subquery or a table, and a group expression reads only the rows of its group');
+                // A number answer is `numeric`: exact, never a float. A `COUNT` alone keeps Postgres's `bigint`. An
+                // `INTEGER` answer is `numeric` too, because a whole-number type could cut a decimal branch of an `if`.
+                const base = this.baseOf(expr);
+                const count = isCallExpression(expr) && isNameRef(expr.callee) && expr.callee.name === 'COUNT';
+                const typed = (base === 'DECIMAL' || base === 'INTEGER') && !count ? `CAST(${sql} AS numeric)` : sql;
+                const literals = ctx.params.map((value, i) => literalSql(value, ctx.numeric.has(i)));
+                const columns = holes.map(name => `(${column(name)})`);
+                // One pass, so the host's text and the literals are never read again.
+                return typed.replace(/\$(\d+)|\u0001(\d+)\u0001/g, (_match, param: string | undefined, hole: string | undefined) =>
+                    param !== undefined ? literals[Number(param) - 1] : columns[Number(hole)]
+                );
+            },
+            NO_OUTER_SCOPE,
+            clock
+        );
+        return compiled.ok ? { ok: true, sql: compiled.query.text } : compiled;
     }
 
     /**
@@ -1093,7 +1173,7 @@ export class MinabSqlCompiler {
         ctx.truthPosition = false;
         if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes, truth);
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
-        if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr));
+        if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr), true);
         if (isBooleanLiteral(expr)) return expr.value === 'true' ? 'TRUE' : 'FALSE';
         if (isNullLiteral(expr)) return 'NULL';
         if (isUnaryExpression(expr)) return this.unary(expr, ctx, scopes);
@@ -1197,7 +1277,7 @@ export class MinabSqlCompiler {
     /** Text and number literals carry their type; everything else compiles as usual. */
     private typedValue(expr: Expression, ctx: Ctx, scopes: SqlScope[]): string {
         if (isStringLiteral(expr)) return `${ctx.bind(expr.value)}::text`;
-        if (isNumberLiteral(expr)) return `${ctx.bind(expr.value)}::numeric`;
+        if (isNumberLiteral(expr)) return `${ctx.bind(expr.value, true)}::numeric`;
         return this.expression(expr, ctx, scopes);
     }
 
@@ -1349,6 +1429,11 @@ export class MinabSqlCompiler {
     private column(row: RowRef, field: string, ctx: Ctx): string {
         const table = this.tableOf(row);
         const schema = this.columnSchema(table, field);
+        if (ctx.group && row.kind === 'scope' && row.alias === GROUP_ALIAS) {
+            // The host writes the SQL of a column of the group row. A link has no column the host can give.
+            if (schema.type.kind !== 'scalar') fail(`"${field}" is a link, and a group expression reads only plain columns of its table in SQL`);
+            return ctx.group.column(schema.name);
+        }
         if (schema.type.kind === 'collection') {
             fail(`"${field}" is a collection — use it inside an aggregate, EXISTS, or a filter (spec §3.4)`);
         }
@@ -1423,16 +1508,21 @@ export class MinabSqlCompiler {
         }
         const left = () => this.expression(expr.left, ctx, scopes);
         const right = () => this.expression(expr.right, ctx, scopes);
+        // In a group expression a zero divisor gives `NULL`, as in the interpreter (P1): the statement must not fail for one cell.
+        const divisor = (b: string) => (ctx.group ? `NULLIF(${b}, 0)` : b);
         if (op === '/') {
             const [a, b] = [left(), right()];
-            return divisionSql(a, b);
+            return divisionSql(a, divisor(b));
         }
-        if (op === '\\') return wholeDivisionSql(left(), right());
+        if (op === '\\') {
+            const a = left();
+            return wholeDivisionSql(a, divisor(right()));
+        }
         if (op === '+' && this.isTextSum(expr)) return `(${left()} || ${right()})`;
         const arithmetic = ARITHMETIC[op];
         if (arithmetic) {
             const [a, b] = this.typedSides(expr.left, expr.right, left(), right());
-            return `(${a} ${arithmetic} ${b})`;
+            return `(${a} ${arithmetic} ${op === '%' ? divisor(b) : b})`;
         }
         fail(`operator "${op}" has no SQL form`);
     }
@@ -1573,7 +1663,7 @@ export class MinabSqlCompiler {
         // `-5` binds as one number: Postgres cannot apply `-` to an untyped parameter (`-$1`).
         if (!expr.negated && expr.operator === '-' && isNumberLiteral(expr.operand)) {
             const value = this.numberLiteralValue(expr.operand);
-            return ctx.bind(typeof value === 'string' ? `-${value}` : -value);
+            return ctx.bind(typeof value === 'string' ? `-${value}` : -value, true);
         }
         const operand = this.expression(expr.operand, ctx, scopes);
         if (expr.negated) return `(NOT ${operand})`;
@@ -1609,7 +1699,7 @@ export class MinabSqlCompiler {
         if (!arg || expr.args.length !== 1) fail(`${name} takes one argument`);
 
         // `COUNT` of a `JSON` value counts the elements of an array, and is 0 for anything else (spec §5.3.1). In a grouped query it stays the group's count.
-        if (name === 'COUNT' && this.baseOf(arg) === 'JSON' && !AstUtils.getContainerOfType(expr, isQuery)?.groupByClause) {
+        if (!ctx.group && name === 'COUNT' && this.baseOf(arg) === 'JSON' && !AstUtils.getContainerOfType(expr, isQuery)?.groupByClause) {
             const value = this.jsonOperand(arg, ctx, scopes);
             return `(CASE jsonb_typeof(${value}) WHEN 'array' THEN jsonb_array_length(${value}) ELSE 0 END)`;
         }
@@ -1636,6 +1726,9 @@ export class MinabSqlCompiler {
         }
         // An ordinary grouped aggregate over the current query scope.
         const inner = isCurrentRecord(arg) && !arg.field ? '*' : this.expression(arg, ctx, scopes);
+        // A group expression must give the interpreter's answer to the last digit: its `AVG` is the sum divided by the
+        // count with the `/` rule (D14). Postgres `AVG` keeps a different number of decimals. No rows: `SUM` is `NULL`.
+        if (ctx.group && name === 'AVG') return divisionSql(`SUM(${inner})`, `COUNT(${inner})`);
         return `${name}(${inner})`;
     }
 
@@ -1990,6 +2083,10 @@ class Ctx {
     private groupCount = 0;
     /** True while the next node compiled sits where `NULL` and `FALSE` keep the same rows (see `condition`). */
     truthPosition = false;
+    /** Set while a group expression compiles to a fragment (P2): its columns are holes, and a zero divisor gives `NULL`. */
+    group?: { column(name: string): string };
+    /** The positions (0-based) of parameters that hold a number literal. A fragment writes them as numbers. */
+    readonly numeric = new Set<number>();
 
     constructor(
         readonly outer: OuterResolver,
@@ -2012,7 +2109,8 @@ class Ctx {
     /** The values as the caller gave them, before `sqlParameter`, by position. */
     private readonly raw: unknown[] = [];
 
-    bind(value: unknown): string {
+    bind(value: unknown, numberLiteral = false): string {
+        if (numberLiteral) this.numeric.add(this.params.length);
         this.params.push(sqlParameter(value));
         this.raw.push(value);
         return `$${this.params.length}`;
@@ -2039,6 +2137,7 @@ class Ctx {
 
     /** Undo the parameters/aliases a speculative compilation consumed, so an abandoned attempt doesn't leave gaps in `$n` numbering. */
     reset(mark: { params: number; aliases: number }): void {
+        for (const i of [...this.numeric]) if (i >= mark.params) this.numeric.delete(i);
         this.params.length = mark.params;
         this.raw.length = mark.params;
         this.aliasCount = mark.aliases;

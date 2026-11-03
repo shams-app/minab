@@ -3,6 +3,8 @@
 export { createMinab } from './minab.js';
 export type {
     CacheStats,
+    CompileExpressionOptions,
+    CompileExpressionResult,
     CompileResult,
     ExpectedType,
     Minab,

@@ -21,6 +21,8 @@ import { PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK, type DataPort, type Event
 import { classifyProgram, type ProgramKind } from './program-kind.js';
 import type { ServiceSet } from './service-cache.js';
 import type {
+    CompileExpressionOptions,
+    CompileExpressionResult,
     CompileResult,
     ExpectedType,
     MinabDiagnostic,
@@ -108,6 +110,19 @@ class Prepared implements PreparedProgram {
         if (!tail) return { ok: false, error: runError('compile.nothingToCompile', undefined) };
         const compiled = isQuery(tail) ? this.compiler.compileQuery(tail) : this.compiler.compileValue(tail);
         if (compiled.ok) return { ok: true, sql: compiled.query };
+        const range = tail.$cstNode?.range;
+        if (compiled.code === 'compile.notSql') return { ok: false, error: runError('compile.notSql', range, { reason: compiled.reason }) };
+        return { ok: false, error: { code: compiled.code, message: compiled.reason, ...(range ? { range } : {}), params: compiled.params } };
+    }
+
+    compileGroupExpression(options: CompileExpressionOptions): CompileExpressionResult {
+        if (this.kind !== 'group-expression' || !this.groupTable) return { ok: false, error: runError('compile.notGroupExpression', undefined) };
+        if (!this.ok) return { ok: false, error: runError('compile.programHasErrors', undefined) };
+        const tail = this.model?.tail;
+        // P1's checks already refuse statements and declarations in a group expression.
+        if (!tail || !isExpression(tail)) return { ok: false, error: runError('compile.nothingToCompile', undefined) };
+        const compiled = this.compiler.compileGroupExpression(tail, this.groupTable, options.column);
+        if (compiled.ok) return { ok: true, sql: compiled.sql };
         const range = tail.$cstNode?.range;
         if (compiled.code === 'compile.notSql') return { ok: false, error: runError('compile.notSql', range, { reason: compiled.reason }) };
         return { ok: false, error: { code: compiled.code, message: compiled.reason, ...(range ? { range } : {}), params: compiled.params } };

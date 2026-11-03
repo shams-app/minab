@@ -145,6 +145,7 @@ A program cannot become SQL.
 | --- | --- | --- | --- | --- |
 | `compile.blockInQuery` | error | a block with statements cannot run inside a query (a statement cannot become SQL) | none | A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query. |
 | `compile.hostFunctionInSql` | error | "{name}" is a host function — it runs in the host, never in SQL | `name` | A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query. |
+| `compile.notGroupExpression` | error | this program is not a group expression, so it has no SQL fragment for a group | none | compileGroupExpression works only for a program prepared with ruleContext.groupTable. Use compile for any other program. |
 | `compile.notSql` | error | this program does not compile to SQL on its own: {reason} | `reason` | Part of the program has no SQL form (for example a user function or a statement). The interpreter runs it; use run instead of compile. |
 | `compile.nothingToCompile` | error | nothing to compile: the program has no query or expression | none | A program with only declarations has no value to turn into SQL. Add a query or an expression at the end. |
 | `compile.programHasErrors` | error | the program has errors, so it cannot be compiled | none | Fix the diagnostics of the program first. A program with errors is never compiled. |

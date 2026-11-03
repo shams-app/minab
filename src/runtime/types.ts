@@ -190,6 +190,23 @@ export type RunResult =
 /** What `compile` answers: the program as one SQL statement, or the reason it is not one. */
 export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 
+/** Options of `compileGroupExpression` (P2). */
+export interface CompileExpressionOptions {
+    /**
+     * The host's SQL for one column of the group row, for example `b.v_3` or `(b.price)::numeric`. `name` is a column
+     * name of `groupTable` from the schema (never anything else), and Minab puts the answer in parentheses. Minab never
+     * writes a table or column name itself. This text is trusted: it goes into the fragment as it is.
+     */
+    column: (name: string) => string;
+}
+
+/**
+ * What `compileGroupExpression` answers: one SQL expression for the host's `SELECT … GROUP BY …`, or why there is none.
+ * The fragment has no `$n` parameters, no statement, no subquery and no comment. A number answer is `numeric` (exact,
+ * never a float, never rounded); a `COUNT(…)` alone is `bigint`. A zero divisor gives `NULL`.
+ */
+export type CompileExpressionResult = { ok: true; sql: string } | { ok: false; error: MinabError };
+
 /**
  * What a program touches, found before it runs (ADR 0002, section 7).
  * It is conservative: when unsure it says `needsData` and tier `data`.
@@ -241,6 +258,11 @@ export interface PreparedProgram {
     dependsOn(field: string): boolean;
     /** The whole program as one SQL statement, or the reason it is not one. */
     compile(): CompileResult;
+    /**
+     * A group expression (`ruleContext.groupTable`) as one SQL expression, to put inside the host's own
+     * `SELECT … GROUP BY …` (P2). Any other program: `compile.notGroupExpression`.
+     */
+    compileGroupExpression(options: CompileExpressionOptions): CompileExpressionResult;
     /** Never throws for a failed program: the answer says `ok: false`. */
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
 }

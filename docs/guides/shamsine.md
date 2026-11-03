@@ -783,7 +783,54 @@ const cell = await profit.run({ groupRows: rowsOfThisCell }); // { ok: true, val
 - **Limits of the host.** Use `analysis.aggregates` to say "at most 5 calculated values" or "only SUM and AVG", and `analysis.groupColumns` to plan the query.
 - **Names of other calculated values.** The host expands them before it calls `prepare`.
 - **Editor.** Pass the same `ruleContext` to `complete`, `hover` and the Monaco client. After `.` the editor lists the columns of the group table, numbers first inside an aggregate.
-- **Not here yet.** `groupRows` does not travel over the worker bridge (wire format v1): run a group expression in the process that prepared it. SQL for the same expression is phase P2.
+- **Not here yet.** `groupRows` does not travel over the worker bridge (wire format v1): run a group expression in the process that prepared it.
+
+#### The same calculated value in SQL
+
+The pivot builds one `GROUPING SETS` statement for the whole table. Put the calculated value into that statement, so the database computes it for every cell, subtotal and the grand total, each on its own rows. `compileGroupExpression` gives one SQL expression (API: [`docs/reference/compile-group-expression.md`](../reference/compile-group-expression.md)):
+
+```ts
+const fragment = profit.compileGroupExpression({
+    // Your SQL for one column of the group row. Minab asks only for columns of `groupTable`.
+    column: name => ({ Revenue: 'b.v_3', Cost: 'b.v_4' })[name]!
+});
+if (!fragment.ok) return fragment.error; // { code, message }
+fragment.sql; // CAST((SUM((b.v_3)) - SUM((b.v_4))) AS numeric)
+```
+
+```sql
+SELECT b.region, b.month, CAST((SUM((b.v_3)) - SUM((b.v_4))) AS numeric) AS profit
+FROM   sales_view b
+WHERE  b.tenant_id = $1 AND b.year = $2
+GROUP BY GROUPING SETS ((), (b.region), (b.region, b.month))
+```
+
+For these three rows:
+
+| region | month | Revenue | Cost |
+|---|---|---|---|
+| North | 1 | 20 | 5 |
+| North | 2 | 20 | 8 |
+| South | 1 | 8 | 10 |
+
+the statement gives:
+
+| region | month | profit |
+|---|---|---|
+| North | 1 | 15 |
+| North | 2 | 12 |
+| South | 1 | -2 |
+| North | (subtotal) | 27 |
+| South | (subtotal) | -2 |
+| (grand total) | | 25 |
+
+These are the same answers as `profit.run({ groupRows })` on the rows of each group (a differential test checks it).
+
+- **No parameters.** Literals are written into the fragment (`1000`, `'it''s'`), so it never uses `$1` and never clashes with your own parameters.
+- **Types.** A number answer is `numeric` (exact, never a float, never rounded). A `COUNT(…)` alone is `bigint`. `pg` gives both as strings. Round or cast in your own `SELECT` if you need to: `ROUND(<fragment>, 2)`.
+- **Empty cells.** A zero divisor gives `NULL` (`a / NULLIF(b, 0)`), and so do `SUM`, `AVG`, `MIN` and `MAX` of no rows. `COUNT` of no rows is `0`.
+- **Refused.** A program that is not a group expression is `compile.notGroupExpression`. A group expression with errors is `compile.programHasErrors`. A group expression that reads a host input (`currentUser`) is `compile.notSql`: there is no value for it when the SQL is built. Run it in the interpreter instead.
+- **Safety.** User text cannot change your statement. Your `column()` text is trusted as it is: build it from your query plan, never from user input ([`docs/security.md`](../security.md), host rule 13).
 
 ## 11. Jest, CommonJS and Bun
 

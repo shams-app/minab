@@ -84,6 +84,12 @@ function, every host input. A host function that returns another user's data giv
     keyword: `createMinab` throws.
 12. **Watch what you cache.** A prepared program is safe to share between requests of one schema. Do not
     share a data port, a transaction or a record between requests.
+13. **Treat the `column()` of `compileGroupExpression` as your own SQL.** A group expression becomes one SQL
+    expression for your pivot statement (P2). Minab writes the program's literals into it with every `'` doubled
+    (and `E'…'` for a backslash), and it checks that the fragment has no statement, subquery, comment or `;`, so a
+    user's text cannot change the shape of your statement. But the text your `column(name)` returns goes in as it is:
+    Minab trusts it. Build it from your own query plan (for example `b.v_3`), never from a request or from user text.
+    Minab calls it only with column names of `groupTable` from your schema.
 
 ## Known limits of the protection
 
@@ -108,3 +114,4 @@ function, every host input. A host function that returns another user's data giv
 - [ ] Logs are off in production, or on by a decision.
 - [ ] Errors go through `MinabExceptionFilter`.
 - [ ] Read-only role for read-only programs. Row-level security considered. `statement_timeout` set.
+- [ ] `compileGroupExpression`: `column()` returns SQL from your own query plan, never from user text.
