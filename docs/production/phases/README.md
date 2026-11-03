@@ -42,7 +42,7 @@ The picture shows lanes only. The exact order is the Depends column below.
 
 ## Phase list
 
-66 phases. Kinds: **Design**, **Mechanical**, **Mixed**, **Owner** (see [card format](../README.md#card-format)).
+68 phases. Kinds: **Design**, **Mechanical**, **Mixed**, **Owner** (see [card format](../README.md#card-format)).
 
 ### A — Start
 
@@ -160,6 +160,13 @@ The picture shows lanes only. The exact order is the Depends column below.
 | [W5](W5.md) | Launch kit and the TV demo | Owner | M | [W4](W4.md), [V2](V2.md) |
 | [W6](W6.md) | Playground fixes: the Data panel follows the open example | Mechanical | S | [W4](W4.md) |
 
+### P — Shamsine pivot
+
+| ID | Phase | Kind | Size | Depends |
+| --- | --- | --- | --- | --- |
+| [P1](P1.md) | Group expressions: aggregates over the rows of a group | Design → Mechanical | M | [R5](R5.md), [X2](X2.md), [C9](C9.md), [E5](E5.md) |
+| [P2](P2.md) | Compile a group expression to a SQL fragment | Mechanical | M | [P1](P1.md), [C10](C10.md), [Q3](Q3.md) |
+
 ### V — Releases and the 1.0 gate
 
 | ID | Phase | Kind | Size | Depends |
@@ -200,6 +207,7 @@ Shamsine's forms plan (`shams-app/monorepo`, `docs/forms/phases/M.*.md`) has a M
 | M.10 Remote evaluation | Remote client, batching, routing by tier | H5 |
 | M.11–M.13 Expression editor | Monaco language, markers, completion, hover | E1, E5 |
 | M.14–M.16 Designer and conditional behavior | Nothing new; performance numbers | Q4 |
+| PX.4 (pivot plan) Calculated values | Aggregate expressions over the rows of a group, as SQL inside the pivot statement | P1, P2 |
 
 G2 lists the changes the monorepo plan needs (for example: M.1–M.3 point here; `TODO.md` says the package is published, which was not true on 2026-10-01). The owner applies them in the monorepo; phases here never change it.
 

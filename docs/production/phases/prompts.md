@@ -450,6 +450,20 @@ Read CLAUDE.md, docs/production/README.md and docs/production/phases/W5.md, then
 Read CLAUDE.md, docs/production/README.md and docs/production/phases/W6.md, then do phase W6 exactly as its card says. Its Depends: W4. Before anything else, check that docs/production/status/ has a file with "Status: done" for each of them; if one is missing or not done, stop and tell me. Follow "Rules for every phase" in docs/production/README.md: the start and end checklists, the size budget, the split rule (never create a new card), the protected files, and when to stop and ask. Do not start any other phase. At the end: run every check the rules list, write docs/production/status/W6.md (and changes/W6.md if users can see the change), then commit, push your branch and open a pull request titled "[W6] Playground fixes: the Data panel follows the open example". Do not edit another phase's status file or a protected file your card does not allow.
 ```
 
+## P — Shamsine pivot
+
+### P1 Group expressions: aggregates over the rows of a group
+
+```text
+Read CLAUDE.md, docs/production/README.md and docs/production/phases/P1.md, then do phase P1 exactly as its card says. Its Depends: R5, X2, C9, E5. Before anything else, check that docs/production/status/ has a file with "Status: done" for each of them; if one is missing or not done, stop and tell me. The card has "Ask first" questions: ask me all of them in one message and wait for my answers before you start the work. Follow "Rules for every phase" in docs/production/README.md: the start and end checklists, the size budget, the split rule (never create a new card), the protected files, and when to stop and ask. Do not start any other phase. At the end: run every check the rules list, write docs/production/status/P1.md (and changes/P1.md if users can see the change), then commit, push your branch and open a pull request titled "[P1] Group expressions: aggregates over the rows of a group". Do not edit another phase's status file or a protected file your card does not allow.
+```
+
+### P2 Compile a group expression to a SQL fragment
+
+```text
+Read CLAUDE.md, docs/production/README.md and docs/production/phases/P2.md, then do phase P2 exactly as its card says. Its Depends: P1, C10, Q3. Before anything else, check that docs/production/status/ has a file with "Status: done" for each of them; if one is missing or not done, stop and tell me. The card has "Ask first" questions: ask me all of them in one message and wait for my answers before you start the work. Follow "Rules for every phase" in docs/production/README.md: the start and end checklists, the size budget, the split rule (never create a new card), the protected files, and when to stop and ask. Do not start any other phase. At the end: run every check the rules list, write docs/production/status/P2.md (and changes/P2.md if users can see the change), then commit, push your branch and open a pull request titled "[P2] Compile a group expression to a SQL fragment". Do not edit another phase's status file or a protected file your card does not allow.
+```
+
 ## V — Releases and the 1.0 gate
 
 ### V1 Release 0.2.0: the first public release
