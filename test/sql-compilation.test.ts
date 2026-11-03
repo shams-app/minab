@@ -6,6 +6,7 @@ import { isQuery } from '../src/language/generated/ast.js';
 import { createMinabServices } from '../src/language/minab-module.js';
 import type { MinabSqlCompiler } from '../src/language/minab-sql-compiler.js';
 import { scalarType, type MinabSchema } from '../src/language/schema.js';
+import { createMinab } from '../src/runtime/index.js';
 
 /**
  * Phase 5's SQL codegen, checked the way `docs/roadmap.md` Phase 5 asks
@@ -427,5 +428,129 @@ describe('a null value: comparisons and IN are never NULL (C9, D46, spec §7.7)'
             'SELECT EXISTS (SELECT 1 FROM (SELECT "Customer"."country" FROM "Customer") AS "_in"("v") WHERE "_in"."v" IS NOT DISTINCT FROM ' +
                 '(SELECT "_r0"."name" FROM "Customer" AS "_r0" WHERE "_r0"."id" = "Order"."customer_id")) AS "hit" FROM "Order"'
         );
+    });
+});
+
+// ---- P2: a group expression as one SQL expression -------------------------
+
+describe('a group expression as a SQL fragment (P2)', () => {
+    const groupSchema: MinabSchema = {
+        version: 'p2-fragment',
+        tables: [
+            {
+                name: 'Sale',
+                primaryKey: 'id',
+                columns: [
+                    { name: 'id', type: { kind: 'scalar', type: scalarType('UUID') } },
+                    { name: 'Revenue', type: { kind: 'scalar', type: scalarType('DECIMAL', { nullable: true }) } },
+                    { name: 'Cost', type: { kind: 'scalar', type: scalarType('DECIMAL', { nullable: true }) } },
+                    { name: 'Units', type: { kind: 'scalar', type: scalarType('INTEGER') } },
+                    { name: 'Region', type: { kind: 'scalar', type: scalarType('TEXT') } },
+                    { name: 'Total cost', type: { kind: 'scalar', type: scalarType('DECIMAL', { nullable: true }) } }
+                ]
+            }
+        ]
+    };
+    const minab = createMinab({ schema: groupSchema, inputs: { currentUser: { id: 'UUID' } } });
+    const group = { isFieldRule: false, groupTable: 'Sale' };
+    const lower = (name: string) => 'b.' + name.toLowerCase();
+
+    async function fragment(source: string, column: (name: string) => string = lower) {
+        const prepared = await minab.prepare(source, { ruleContext: group });
+        expect(prepared.diagnostics.filter(d => d.severity === 'error')).toEqual([]);
+        return prepared.compileGroupExpression({ column });
+    }
+
+    async function sqlOf(source: string, column?: (name: string) => string): Promise<string> {
+        const result = await fragment(source, column);
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+        return result.sql;
+    }
+
+    /** The fragment without its text literals, which may hold anything. */
+    const outsideLiterals = (sql: string) => sql.replace(/E?'(?:[^']|'')*'/g, "'…'");
+
+    test('SUM(.Revenue) - SUM(.Cost) uses the host columns, in parentheses, and is numeric', async () => {
+        expect(await sqlOf('SUM(.Revenue) - SUM(.Cost)')).toBe('CAST((SUM((b.revenue)) - SUM((b.cost))) AS numeric)');
+    });
+
+    test('COUNT(.) is COUNT(*), and a COUNT alone keeps its bigint type', async () => {
+        expect(await sqlOf('COUNT(.)')).toBe('COUNT(*)');
+        expect(await sqlOf('COUNT(.Revenue)')).toBe('COUNT((b.revenue))');
+    });
+
+    test('column() is called once for each column the expression reads, with its schema name', async () => {
+        const asked: string[] = [];
+        const sql = await sqlOf('SUM(.Revenue) / SUM(.`Total cost`) + SUM(.Revenue)', name => {
+            asked.push(name);
+            return `(b.v_${asked.length})::numeric`;
+        });
+        expect(asked).toEqual(['Revenue', 'Total cost']);
+        expect(sql).toContain('SUM(((b.v_1)::numeric))');
+        expect(sql).toContain('SUM(((b.v_2)::numeric))');
+    });
+
+    test('a divisor is NULLIF(…, 0), so a zero denominator gives NULL', async () => {
+        expect(await sqlOf('SUM(.Revenue) / SUM(.Cost)')).toContain('NULLIF(SUM((b.cost)), 0)');
+        expect(await sqlOf('SUM(.Units) % 2')).toBe('CAST((SUM((b.units)) % NULLIF(2, 0)) AS numeric)');
+        expect(await sqlOf('SUM(.Units) \\ COUNT(.)')).toContain('NULLIF(COUNT(*), 0)');
+    });
+
+    test('literals are written in the text: exact numbers, quoted text, no parameters', async () => {
+        expect(await sqlOf('SUM(.Revenue * 1.25) - -3')).toBe('CAST((SUM(((b.revenue) * 1.25)) - (-3)) AS numeric)');
+        expect(await sqlOf('if SUM(.Revenue) > 1000 { "big" } else { "small" }')).toBe(
+            "CASE WHEN COALESCE(SUM((b.revenue)) > 1000, FALSE) THEN 'big'::text ELSE 'small'::text END"
+        );
+    });
+
+    test('a quote, a semicolon and a comment stay inside the text literal', async () => {
+        const sql = await sqlOf('if COUNT(.) > 1 { "it\'s; -- x /* y" } else { "a\\\\b" }');
+        expect(sql).toContain("'it''s; -- x /* y'::text");
+        // A backslash uses the E'…' form, which reads the same whatever standard_conforming_strings says.
+        expect(sql).toContain("E'a\\\\b'::text");
+        expect(outsideLiterals(sql)).not.toMatch(/;|--|\/\*/);
+    });
+
+    test.each([
+        'SUM(.Revenue) - SUM(.Cost)',
+        'AVG(.Units)',
+        'MIN(.Revenue) + MAX(.Cost)',
+        'COUNT(.) * 2',
+        'if COUNT(.) == 0 { 0 } else { SUM(.Revenue) / COUNT(.) }',
+        'switch COUNT(.) { 1 => "one", _ => "many; --" }',
+        'SUM(.Revenue) / SUM(.Cost)',
+        'SUM(.Units) \\ 3',
+        'MAX(.Region) == "North"'
+    ])('%s has no statement text', async source => {
+        const sql = outsideLiterals(await sqlOf(source));
+        expect(sql).not.toMatch(/\bSELECT\b/i);
+        expect(sql).not.toMatch(/(?<!DISTINCT )\bFROM\b/i);
+        expect(sql).not.toMatch(/;|--|\/\*/);
+        expect(sql).not.toMatch(/\$\d/);
+    });
+
+    test('a normal program is compile.notGroupExpression', async () => {
+        const prepared = await minab.prepare('1 + 2');
+        expect(prepared.compileGroupExpression({ column: lower })).toMatchObject({ ok: false, error: { code: 'compile.notGroupExpression' } });
+        const rule = await minab.prepare('.Units > 0', { ruleContext: { isFieldRule: false, recordTable: 'Sale' } });
+        expect(rule.compileGroupExpression({ column: lower })).toMatchObject({ ok: false, error: { code: 'compile.notGroupExpression' } });
+    });
+
+    test("a group expression that fails P1's checks is refused", async () => {
+        for (const source of ['.Revenue * 2', 'SUM(SUM(.Revenue))', 'COUNT(#Sale)']) {
+            const prepared = await minab.prepare(source, { ruleContext: group });
+            expect(prepared.ok).toBe(false);
+            expect(prepared.compileGroupExpression({ column: lower }), source).toMatchObject({ ok: false, error: { code: 'compile.programHasErrors' } });
+        }
+    });
+
+    test('a host input has no value at compile time: compile.notSql, and column() is never asked', async () => {
+        const asked: string[] = [];
+        const result = await fragment('if currentUser.id == currentUser.id { SUM(.Revenue) } else { 0 }', name => {
+            asked.push(name);
+            return lower(name);
+        });
+        expect(result).toMatchObject({ ok: false, error: { code: 'compile.notSql' } });
+        expect(asked).toEqual([]);
     });
 });

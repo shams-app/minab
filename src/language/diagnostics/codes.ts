@@ -154,6 +154,11 @@ export const DIAGNOSTICS = {
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
         doc: "A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query."
     }),
+    'compile.notGroupExpression': entry({
+        severity: error,
+        message: () => 'this program is not a group expression, so it has no SQL fragment for a group',
+        doc: 'compileGroupExpression works only for a program prepared with ruleContext.groupTable. Use compile for any other program.'
+    }),
     'compile.notSql': entry<{ reason: string }>({
         severity: error,
         message: p => `this program does not compile to SQL on its own: ${p.reason}`,

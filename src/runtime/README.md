@@ -18,7 +18,7 @@ database driver. A test checks the imports.
 - `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
 - `errors.ts`: builds run errors from the registry, and maps a data port failure to a code.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
-  `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `run()`. Also the `expect` check.
+  `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `compileGroupExpression()` (P2), `run()`. Also the `expect` check.
 - `migrate.ts`: `LANGUAGE_VERSION`, the list of `MIGRATIONS` (empty today) and `migrate(source, from, to)`. `prepare`
   takes `languageVersion` (Q5). See `docs/compatibility.md`.
 - `analyze.ts`: program analysis (R5). `analyzeProgram` builds `PreparedProgram.analysis`
@@ -79,6 +79,10 @@ record. It does not look at other tables: a rule that reads data may change when
 // compile
 { ok: true, sql: { text, params } }
 { ok: false, error: { code, message, range?, params } }
+
+// compileGroupExpression({ column }): one SQL expression, no parameters (docs/reference/compile-group-expression.md)
+{ ok: true, sql: string }
+{ ok: false, error: { code, message, range?, params } }
 ```
 
 - `code` is stable and is in the registry (`docs/reference/diagnostics.md`). A host maps by code and
@@ -100,7 +104,7 @@ record. It does not look at other tables: a rule that reads data may change when
 | Area | Codes | Meaning |
 |---|---|---|
 | `eval.*` | `divisionByZero`, `castFailed`, `integerOutOfRange`, `missingInput`, `hostFunctionMissing`, `hostFunctionFailed`, `hostFunctionResult`, `writesNotSupported`, `cannotCreateRecord`, `programInvalid`, `failed` | The program failed while it ran |
-| `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
+| `compile.*` | `programHasErrors`, `nothingToCompile`, `notSql`, `notGroupExpression`, `hostFunctionInSql`, `blockInQuery` | The program cannot become SQL |
 | `limit.*` | see below | A limit stopped the program |
 | `data.*` | `error`, `noPort` | The data port failed or is missing |
 | `cancelled` | | The host aborted the run |

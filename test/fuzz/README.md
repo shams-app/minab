@@ -13,6 +13,7 @@ break a limit.
 - `json-keys.test.ts`: random paths of keys, text keys and positions over random `JSON` values, then left as they are, cast,
   counted or kind-tested (Shamsine card M.1b). Every program checks, and every run is a value or `eval.castFailed`.
 - `group-expression.test.ts`: random group expressions over random rows (P1). Every program checks, and every run is a value, `null` or `eval.integerOutOfRange`.
+- `group-fragment.test.ts`: random group expressions with hostile text literals (`'`, `\`, `--`, `;`, `/*`, Unicode), compiled with `compileGroupExpression` (P2) and run on PGlite inside `SELECT <fragment> FROM (VALUES …) GROUP BY ()`. Every statement gives one row (or the compile answer is a coded error), and a text answer is one of the program's own literals.
 
 ## Rules
 

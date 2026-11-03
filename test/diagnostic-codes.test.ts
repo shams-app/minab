@@ -109,6 +109,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'compat.newerLanguage': { via: 'runtime' }, // test/compat/compat.test.ts
     'compat.noMigration': { via: 'runtime' }, // test/compat/compat.test.ts
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'compile.notGroupExpression': { via: 'runtime' }, // test/sql-compilation.test.ts (P2)
     'compile.nothingToCompile': { via: 'runtime' }, // test/runtime.test.ts
     'compile.notSql': { via: 'runtime' }, // test/run-errors.test.ts
     'compile.programHasErrors': { via: 'runtime' }, // test/runtime.test.ts
