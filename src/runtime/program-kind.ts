@@ -8,8 +8,11 @@ import { isQuery } from '../language/generated/ast.js';
 import type { MinabServices } from '../language/minab-module.js';
 import { formatType, type MinabType } from '../language/minab-types.js';
 
-/** What a program is: `query` (a pipeline), `record-rule` or `field-rule` (a validation rule), `value` (an expression), or `empty`. */
-export type ProgramKind = 'query' | 'record-rule' | 'field-rule' | 'value' | 'empty';
+/**
+ * What a program is: `query` (a pipeline), `record-rule` or `field-rule` (a validation rule), `group-expression`
+ * (one expression over the rows of a group, P1), `value` (an expression), or `empty`.
+ */
+export type ProgramKind = 'query' | 'record-rule' | 'field-rule' | 'group-expression' | 'value' | 'empty';
 
 export interface ProgramClass {
     kind: ProgramKind;
@@ -26,6 +29,7 @@ export function classifyProgram(model: Model, services: Pick<MinabServices, 'rul
     let kind: ProgramKind;
     if (!tail) kind = model.declarations.length === 0 ? 'empty' : 'value';
     else if (isQuery(tail)) kind = 'query';
+    else if (ruleContext.groupTable) kind = 'group-expression';
     else if (ruleContext.isFieldRule) kind = 'field-rule';
     else if (ruleContext.recordTable) kind = 'record-rule';
     else kind = 'value';

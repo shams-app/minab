@@ -10,6 +10,8 @@
 import { AstUtils, CstUtils, type AstNode } from 'langium';
 import {
     isBlock,
+    isCallExpression,
+    isNameRef,
     isFunctionDecl,
     isCurrentRecord,
     isLoopStatement,
@@ -19,9 +21,9 @@ import {
     isVariableDecl,
     type VariableDecl
 } from '../language/generated/ast.js';
-import { builtinNames } from '../language/minab-builtins.js';
+import { builtinNames, getBuiltin } from '../language/minab-builtins.js';
 import { formatType } from '../language/minab-types.js';
-import type { MinabTableSchema } from '../language/schema.js';
+import { rootTableOf, type MinabTableSchema } from '../language/schema.js';
 import { BUILTIN_DOCS } from './builtin-docs.js';
 import { code, describeColumn, hostFunctionDoc, hostFunctionSignature, nameText, tableSummary } from './describe.js';
 import { parseDocument, positionAt, sourceOf, type EditorDocument } from './document.js';
@@ -92,11 +94,14 @@ function insert(name: string): { insertText?: string } {
 function memberCompletions(doc: EditorDocument, text: string): CompletionItem[] {
     const probe = parseDocument(doc.services, text);
     let table: MinabTableSchema | undefined;
+    let numbersFirst = false;
     for (const node of AstUtils.streamAst(probe.document.parseResult.value)) {
         if (isCurrentRecord(node) && node.field === PLACEHOLDER) {
+            // In a group expression, inside an aggregate: `SUM(.` and `AVG(.` read numbers, so those columns come first.
+            numbersFirst = !!doc.services.ruleContext.groupTable && insideAggregate(node);
             const base = doc.services.scopeResolver.resolveCurrentRecordBase(node);
             if (base.found) {
-                const name = base.scope.tableName ?? (isModel(base.scope.owner) ? doc.services.ruleContext.recordTable : undefined);
+                const name = base.scope.tableName ?? (isModel(base.scope.owner) ? rootTableOf(doc.services.ruleContext) : undefined);
                 table = name ? doc.services.schema.getTable(name) : undefined;
             }
             break;
@@ -108,14 +113,26 @@ function memberCompletions(doc: EditorDocument, text: string): CompletionItem[] 
     }
     if (!table) return [];
     const owner = table;
-    return owner.columns.map((column, index) => ({
+    const isNumber = (column: MinabTableSchema['columns'][number]) =>
+        column.type.kind === 'scalar' && !column.type.type.array && ['INTEGER', 'DECIMAL'].includes(column.type.type.base);
+    const ordered = numbersFirst ? [...owner.columns.filter(isNumber), ...owner.columns.filter(c => !isNumber(c))] : owner.columns;
+    const group = !!doc.services.ruleContext.groupTable;
+    return ordered.map((column, index) => ({
         label: column.name,
         kind: 'column',
         detail: describeColumn(column),
-        documentation: `column of ${code(owner.name)}`,
+        documentation: group ? `column of the group (${code(owner.name)})` : `column of ${code(owner.name)}`,
         ...insert(column.name),
         rank: index
     }));
+}
+
+/** Is the node an argument of an aggregate (`SUM`, `AVG`, `MIN`, `MAX`, `COUNT`)? */
+function insideAggregate(node: AstNode): boolean {
+    for (let current: AstNode | undefined = node.$container; current; current = current.$container) {
+        if (isCallExpression(current) && isNameRef(current.callee) && getBuiltin(current.callee.name)?.kind === 'aggregate') return true;
+    }
+    return false;
 }
 
 async function generalCompletions(doc: EditorDocument, offset: number, withPlaceholder: string): Promise<CompletionItem[]> {

@@ -35,6 +35,13 @@
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
     isBlock,
+    isFieldValue,
+    isGroupKeyRef,
+    isIndexRef,
+    isNamedScope,
+    isParentRecord,
+    isSubquery,
+    isTableRef,
     isCurrentRecord,
     isFilterAccess,
     isInsertStatement,
@@ -68,6 +75,7 @@ import {
     type InsertStatement,
     type ListLiteral,
     type MemberAccess,
+    type Model,
     type MinabAstType,
     type NamedScope,
     type NameRef,
@@ -85,6 +93,7 @@ import {
 import { coded, DIAGNOSTICS, type CodedMessage } from './diagnostics/codes.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { splitSelectors } from './minab-json-writes.js';
+import { getBuiltin } from './minab-builtins.js';
 import { astTypeToMinabType } from './minab-type-checker.js';
 import { formatType, isAssignableTo, isNullable } from './minab-types.js';
 import type { MinabServices } from './minab-module.js';
@@ -102,6 +111,7 @@ export function registerValidationChecks(services: MinabServices): void {
     const registry = services.validation.ValidationRegistry;
     const validator = new MinabValidator(services);
     const checks: ValidationChecks<MinabAstType> = {
+        Model: validator.checkGroupExpression,
         FieldValue: validator.checkFieldValueInFieldRule,
         GroupKeyRef: validator.checkGroupKeyRefScope,
         NamedScope: validator.checkNamedScopeResolves,
@@ -325,6 +335,74 @@ export class MinabValidator {
         if (!siblings) return;
         const earlier = siblings.slice(0, siblings.indexOf(node)).some(s => isVariableDecl(s) && s.name === node.name);
         if (earlier) report(accept, coded('scope.duplicateLet', { name: node.name }), { node, property: 'name' });
+    }
+
+    // ---- group expressions (P1, spec §4.2.1) ---------------------------------
+
+    /**
+     * A group expression is one expression over the rows of a group of `groupTable`. Every
+     * `.Column` sits inside an aggregate, aggregates do not nest, and nothing reads data other
+     * than the rows of the group.
+     */
+    checkGroupExpression(model: Model, accept: ValidationAcceptor): void {
+        const groupTable = this.services.ruleContext.groupTable;
+        if (groupTable === undefined) return;
+        for (const declaration of model.declarations) {
+            const construct = isFunctionDecl(declaration) ? 'a function declaration' : 'a statement';
+            report(accept, coded('groupExpression.unsupported', { construct }), { node: declaration });
+        }
+        const tail = model.tail;
+        if (!tail) return;
+        if (isQuery(tail)) {
+            report(accept, coded('groupExpression.unsupported', { construct: 'a FROM query' }), { node: tail });
+            return;
+        }
+        this.walkGroupExpression(tail, 0, groupTable, accept);
+    }
+
+    private unsupported(node: AstNode, construct: string, accept: ValidationAcceptor): void {
+        report(accept, coded('groupExpression.unsupported', { construct }), { node });
+    }
+
+    private walkGroupExpression(node: AstNode, aggregateDepth: number, groupTable: string, accept: ValidationAcceptor): void {
+        const schema = this.services.schema;
+        if (isQuery(node) || isSubquery(node)) return this.unsupported(node, 'a query', accept);
+        // The branches of `if` and `switch` are blocks. A block with only a value is fine; one with statements is not.
+        if (isBlock(node) && node.statements.length > 0) return this.unsupported(node.statements[0], 'a statement', accept);
+        if (isFieldValue(node)) return this.unsupported(node, '"$"', accept);
+        if (isParentRecord(node)) return this.unsupported(node, '"^"', accept);
+        if (isNamedScope(node) || isTableRef(node)) return this.unsupported(node, `the table reference "${node.name}"`, accept);
+        if (isGroupKeyRef(node)) return this.unsupported(node, 'KEY', accept);
+        if (isIndexRef(node)) return this.unsupported(node, '".$index"', accept);
+        if (isFilterAccess(node)) return this.unsupported(node, 'a filter', accept);
+        if (isNameRef(node)) {
+            // `currentUser` is a host input, not data of the group. Any other name is an input, or unknown (the checker says so).
+            if (node.name !== 'currentUser' && schema.getHostInput(node.name)) this.unsupported(node, `the input "${node.name}"`, accept);
+            return;
+        }
+        let depth = aggregateDepth;
+        if (isCallExpression(node) && isNameRef(node.callee)) {
+            const name = node.callee.name;
+            const builtin = getBuiltin(name);
+            if (!builtin) {
+                const kind = schema.getHostFunction(name) ? 'the host function' : 'the user function';
+                this.unsupported(node, `${kind} "${name}"`, accept);
+                return;
+            }
+            if (builtin.kind !== 'scalar') {
+                if (aggregateDepth > 0) report(accept, coded('aggregate.nested', { name }), { node });
+                depth = aggregateDepth + 1;
+            }
+            for (const arg of node.args) this.walkGroupExpression(arg, depth, groupTable, accept);
+            return;
+        }
+        if (isCurrentRecord(node) && node.field) {
+            const column = schema.getColumn(groupTable, node.field);
+            if (column && column.type.kind !== 'scalar') return this.unsupported(node, `the relation ".${node.field}"`, accept);
+            if (aggregateDepth === 0) report(accept, coded('aggregate.fieldOutsideAggregate', { name: node.field }), { node });
+            return;
+        }
+        for (const child of AstUtils.streamContents(node)) this.walkGroupExpression(child, depth, groupTable, accept);
     }
 
     // ---- writes (X5, D26) ---------------------------------------------------

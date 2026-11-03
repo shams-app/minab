@@ -113,6 +113,18 @@ export interface MinabRuleContext {
      * `isFieldRule`" pattern as `fieldType` above.
      */
     recordTable?: string;
+    /**
+     * Makes the program a group expression (P1, spec §4.2.1): one expression over the rows of a
+     * group of this table, like the `SELECT` part of a `GROUPBY` query. `.Column` is a row of the
+     * group, so it must sit inside an aggregate. It cannot be combined with `recordTable` or
+     * `isFieldRule`.
+     */
+    groupTable?: string;
+}
+
+/** The table a top-level `.` means: the record under validation, or a row of the group. */
+export function rootTableOf(context: MinabRuleContext): string | undefined {
+    return context.recordTable ?? context.groupTable;
 }
 
 export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };

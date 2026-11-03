@@ -43,6 +43,23 @@ A name, table, column or sigil cannot be found.
 | `scope.unknownName` | error | unknown name "{name}" | `name` | No variable, parameter, loop variable or alias has this name in scope. Declare it first, or fix the name. |
 | `scope.unknownTable` | error | unknown table "{name}" | `name` | The schema has no table with this name. Fix the name, or ask the host to add the table. |
 
+## aggregate
+
+An aggregate is used in a way a group expression does not allow (P1).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `aggregate.fieldOutsideAggregate` | error | a group expression cannot read the column "{name}" on its own: wrap {name} in SUM, AVG, MIN, MAX or COUNT | `name` | A group expression has one value for a whole group of rows, so a column must go into an aggregate. Wrap the column in SUM, AVG, MIN, MAX or COUNT. |
+| `aggregate.nested` | error | {name} is inside another aggregate: an aggregate cannot be nested | `name` | An aggregate reduces the rows of a group to one value, so it cannot be an argument of another aggregate. Move the inner aggregate out of the outer one. |
+
+## groupExpression
+
+A group expression contains something it cannot hold (P1).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `groupExpression.unsupported` | error | {construct} is not allowed in a group expression | `construct` | A group expression reads only the columns of the rows of its group. Remove statements, queries, user and host functions, "$", relations and inputs. |
+
 ## type
 
 A type rule is broken. Minab never converts types by itself (spec §5.5).
@@ -154,7 +171,7 @@ A program fails while it runs.
 | --- | --- | --- | --- | --- |
 | `eval.cannotCreateRecord` | error | cannot create the missing "{table}" record: the column "{column}" needs a value and has no default | `table`, `column` | A "!" in a path assignment creates the missing related record with default values. The table needs a value that has no default. Create the record with INSERT and give the value, then assign. |
 | `eval.castFailed` | error | cannot cast {value} to {to} | `value`, `to` | The value has no valid form in the target type (for example "12a" as INTEGER, or a decimal too big for INTEGER). Check the value first, or cast a different value. |
-| `eval.divisionByZero` | error | division by zero | none | "/" and "%" fail when the right side is zero. Check the divisor first, for example with "if". |
+| `eval.divisionByZero` | error | division by zero | none | "/", "%" and "\" fail when the right side is zero. Check the divisor first, for example with "if". In a group expression the result is null instead. |
 | `eval.failed` | error | {reason} | `reason` | The program failed while it ran. params.reason has the English reason. Specific failures have their own code. |
 | `eval.hostFunctionFailed` | error | the host function "{name}" failed | `name` | The host function threw an error. The text of that error is not copied here. The host can log it. |
 | `eval.hostFunctionMissing` | error | the host function "{name}" was called, and the host gave no implementation | `name` | The program calls a host function that was declared, but run got no implementation of it. Give it in the ports of run. |

@@ -31,6 +31,7 @@ and tell the owner (see [section 12](#12-monorepo-follow-ups)).
 8. [The data port, per application](#8-the-data-port-per-application)
 9. [Messages in fa, ar and tr](#9-messages-in-fa-ar-and-tr)
 10. [Stored expressions](#10-stored-expressions)
+    - [Calculated values for a pivot](#calculated-values-for-a-pivot)
 11. [Jest, CommonJS and Bun](#11-jest-commonjs-and-bun)
 12. [Monorepo follow-ups](#12-monorepo-follow-ups)
 13. [Limits you will meet in 0.3.0](#13-limits-you-will-meet-in-030)
@@ -757,6 +758,32 @@ A bound expression is part of a view, so Shamsine stores it. For each expression
 - When an expression stops checking later (a field was deleted), a run gives the same
   diagnostics as `eval.programInvalid`. Re-validate stored expressions when a dataset
   changes (the schema `version` changes).
+
+### Calculated values for a pivot
+
+A pivot table can let a user add a "calculated value". Each cell, each subtotal and the grand total must compute the formula **on its own rows**, never on a column of results. Use a group expression (spec §4.2.1): the formula is evaluated for the rows of one group of one table.
+
+```ts
+const minab = createMinab({ schema });
+const profit = await minab.prepare('SUM(.Revenue) - SUM(.Cost)', {
+    ruleContext: { isFieldRule: false, groupTable: 'Sale' }
+});
+if (!profit.ok) return profit.diagnostics; // for example aggregate.fieldOutsideAggregate
+
+profit.kind;                      // 'group-expression'
+profit.resultType;                // 'DECIMAL?'
+profit.analysis.groupColumns;     // ['Revenue', 'Cost']: columns to put in your query
+profit.analysis.aggregates;       // [{ fn: 'SUM', columns: ['Revenue'] }, { fn: 'SUM', columns: ['Cost'] }]
+
+const cell = await profit.run({ groupRows: rowsOfThisCell }); // { ok: true, value: '25' }
+```
+
+- **Spelling.** Write columns as in a `GROUPBY` query: `.Revenue`, and quoted names for names with spaces or Persian letters (``.`Total cost` ``). Your editor may show names without the dot, but store the Minab text and turn the names back before `prepare`.
+- **Empty cell.** A division by zero gives `null`, and so does an empty group, so a cell with no revenue is empty and the table still shows. `COUNT` of no rows is `0`.
+- **Limits of the host.** Use `analysis.aggregates` to say "at most 5 calculated values" or "only SUM and AVG", and `analysis.groupColumns` to plan the query.
+- **Names of other calculated values.** The host expands them before it calls `prepare`.
+- **Editor.** Pass the same `ruleContext` to `complete`, `hover` and the Monaco client. After `.` the editor lists the columns of the group table, numbers first inside an aggregate.
+- **Not here yet.** `groupRows` does not travel over the worker bridge (wire format v1): run a group expression in the process that prepared it. SQL for the same expression is phase P2.
 
 ## 11. Jest, CommonJS and Bun
 

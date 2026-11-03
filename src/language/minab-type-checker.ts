@@ -99,7 +99,7 @@ import {
     type ScalarType
 } from './minab-types.js';
 import type { ResolvedHostFunction } from './host-declarations.js';
-import type { MinabRuleContext, SchemaProvider } from './schema.js';
+import { rootTableOf, type MinabRuleContext, type SchemaProvider } from './schema.js';
 
 /**
  * `origin` is the AST node whose own inference first produced the failure —
@@ -127,6 +127,12 @@ function failWith(failure: CodedMessage): TypeResult {
 /** A single `JSON` value: keys of it can be read (spec §7.3.1). */
 function isJsonValue(t: MinabType): boolean {
     return t.kind === 'scalar' && t.base === 'JSON' && !t.array;
+}
+
+/** `SUM`, `AVG`, `MIN` and `MAX` of an empty group are `null` in a group expression (spec §4.2.1). */
+function emptyGroupType(name: string, type: MinabType): MinabType {
+    if (type.kind !== 'scalar' || !['SUM', 'AVG', 'MIN', 'MAX'].includes(name)) return type;
+    return scalarType(type.base, { nullable: true, array: type.array, arrayNullable: type.arrayNullable });
 }
 
 /** Is the node inside a query with a `GROUPBY`? There an aggregate reads the group. */
@@ -227,7 +233,7 @@ export class MinabTypeChecker {
      * "assume `recordTable` whenever we're stuck."
      */
     private rootFallbackTable(owner: AstNode): string | undefined {
-        return isModel(owner) ? this.ruleContext.recordTable : undefined;
+        return isModel(owner) ? rootTableOf(this.ruleContext) : undefined;
     }
 
     /**
@@ -472,7 +478,7 @@ export class MinabTypeChecker {
             argTypes.push(argType.type);
         }
         // `COUNT` of a `JSON` value counts the elements of a `JSON` array (spec §5.3.1). In a grouped query it stays the group's count.
-        if (builtin.name === 'COUNT' && argTypes.length === 1 && isJsonValue(argTypes[0]) && !isInGroupedQuery(node)) {
+        if (builtin.name === 'COUNT' && argTypes.length === 1 && isJsonValue(argTypes[0]) && !isInGroupedQuery(node) && !this.ruleContext.groupTable) {
             return ok(scalarType('INTEGER'));
         }
         const result = checkBuiltin(builtin, argTypes);
@@ -481,7 +487,7 @@ export class MinabTypeChecker {
         const promoted = builtin.kind === 'scalar' || argTypes.length !== 1 ? undefined : this.promoteForGroupedAggregate(node, argTypes[0]);
         if (promoted) {
             const retried = checkBuiltin(builtin, [promoted]);
-            if (retried.ok) return ok(retried.type);
+            if (retried.ok) return ok(this.ruleContext.groupTable ? emptyGroupType(builtin.name, retried.type) : retried.type);
         }
         return failWith(result);
     }
@@ -533,7 +539,8 @@ export class MinabTypeChecker {
      */
     private promoteForGroupedAggregate(node: AstNode, t: MinabType): MinabType | undefined {
         const query = AstUtils.getContainerOfType(node, isQuery);
-        if (!query?.groupByClause) return undefined;
+        // In a group expression there is no query: the rows of the group are the rows of `groupTable`.
+        if (!query?.groupByClause && !this.ruleContext.groupTable) return undefined;
         if (t.kind === 'scalar' && !t.array) return scalarType(t.base, { nullable: t.nullable, array: true });
         if (t.kind === 'record') return { kind: 'collection', table: t.table };
         return undefined;
@@ -638,9 +645,11 @@ export class MinabTypeChecker {
         }
         // `/` always gives a DECIMAL, even for two INTEGERs. `\` always gives an INTEGER, even for DECIMALs (D14).
         const nullable = (left.type as ScalarType).nullable || (right.type as ScalarType).nullable;
-        if (node.operator === '\\') return ok(scalarType('INTEGER', { nullable }));
+        if (node.operator === '\\') return ok(scalarType('INTEGER', { nullable: nullable || !!this.ruleContext.groupTable }));
         const base = node.operator === '/' ? 'DECIMAL' : widenNumeric((left.type as ScalarType).base, (right.type as ScalarType).base);
-        return ok(scalarType(base, { nullable }));
+        // In a group expression a division by zero gives `null` (spec §4.2.1), so `/`, `%` and `\` may be null.
+        const divides = node.operator === '/' || node.operator === '%' || node.operator === '\\';
+        return ok(scalarType(base, { nullable: nullable || (divides && !!this.ruleContext.groupTable) }));
     }
 
     private inferEquality(node: BinaryExpression): TypeResult {

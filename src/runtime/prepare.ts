@@ -90,7 +90,8 @@ class Prepared implements PreparedProgram {
         private readonly interpreter: MinabInterpreter,
         private readonly compiler: MinabSqlCompiler,
         private readonly recordTable: string | undefined,
-        private readonly hostLimits: Limits
+        private readonly hostLimits: Limits,
+        private readonly groupTable?: string
     ) {}
 
     dependsOn(field: string): boolean {
@@ -123,6 +124,12 @@ class Prepared implements PreparedProgram {
         const clock = ports.clock ?? SYSTEM_CLOCK;
         const started = performance.now();
         const budget = new RunBudget(limits, options.signal);
+        if (this.kind === 'group-expression' && !Array.isArray(inputs.groupRows)) {
+            return {
+                ok: false,
+                error: runError('eval.failed', undefined, { reason: 'a group expression needs RunInputs.groupRows (an empty list is a valid group)' })
+            };
+        }
         try {
             const result = await this.interpreter.run(this.model, {
                 executor: ports.data ?? NO_DATA_PORT,
@@ -136,7 +143,8 @@ class Prepared implements PreparedProgram {
                 budget,
                 record: inputs.record,
                 recordTable: this.recordTable,
-                fieldValue: inputs.fieldValue
+                fieldValue: inputs.fieldValue,
+                ...(this.kind === 'group-expression' ? { groupRows: inputs.groupRows as Row[], groupTable: this.groupTable } : {})
             });
             const durationMs = performance.now() - started;
             if (result.ok) {
@@ -264,7 +272,8 @@ export async function prepareProgram(
     expect: ExpectedType | undefined,
     recordTable: string | undefined,
     localHostFunctions: ReadonlySet<string> | undefined,
-    limits: Limits
+    limits: Limits,
+    groupTable?: string
 ): Promise<PreparedProgram> {
     const { shared, services } = set;
     // A limit of the program text stops the work before the parser sees it.
@@ -334,8 +343,19 @@ export async function prepareProgram(
     const analysis =
         lexerErrors.length > 0 || parserErrors.length > 0
             ? conservativeAnalysis()
-            : analyzeProgram(model, services.schema, recordTable, { localHostFunctions });
-    return new Prepared(diagnostics, classified.kind, classified.resultType, analysis, model, services.interpreter, services.sqlCompiler, recordTable, limits);
+            : analyzeProgram(model, services.schema, recordTable, { localHostFunctions, groupTable });
+    return new Prepared(
+        diagnostics,
+        classified.kind,
+        classified.resultType,
+        analysis,
+        model,
+        services.interpreter,
+        services.sqlCompiler,
+        recordTable,
+        limits,
+        groupTable
+    );
 }
 
 function limitDiagnostic(code: 'limit.sourceTooLong' | 'limit.tooDeep', range: SourceRange, params: { limit: number; used: number }): MinabDiagnostic {

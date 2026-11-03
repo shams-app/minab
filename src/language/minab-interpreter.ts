@@ -177,6 +177,13 @@ export interface EvalContext {
     record?: Row;
     recordTable?: string;
     fieldValue?: MinabValue;
+    /**
+     * The rows of one group, when the program is a group expression (P1, spec §4.2.1). An aggregate reads
+     * its argument once for each row. An empty list is a valid group. Division by zero gives `null`.
+     */
+    groupRows?: Row[];
+    /** The table of `groupRows`. */
+    groupTable?: string;
 }
 
 class EvalError extends Error {
@@ -1175,6 +1182,7 @@ export class MinabInterpreter {
         const builtin = getBuiltin(callee.name)!;
         if (builtin.kind !== 'scalar') {
             if (expr.args.length !== 1) fail(`${builtin.name} takes one argument`);
+            if (state.context.groupRows) return await this.groupAggregate(builtin, expr.args[0], state);
             const values = await this.expression(expr.args[0], state);
             // `COUNT` of a `JSON` value counts the elements of an array, and is 0 for anything else (spec §5.3.1).
             if (builtin.name === 'COUNT' && this.isJsonValue(expr.args[0])) return Array.isArray(values) ? values.length : 0;
@@ -1196,6 +1204,23 @@ export class MinabInterpreter {
         const answer = this.runBuiltin(builtin, values, info, state);
         if (builtin.logs) this.log(expr, values, state);
         return answer;
+    }
+
+    /**
+     * An aggregate of a group expression: the argument is read once for each row of the group (`.` is that row),
+     * a `null` is left out like SQL does, and `SUM`, `AVG`, `MIN` and `MAX` of nothing are `null`.
+     */
+    private async groupAggregate(builtin: BuiltinSignature, arg: Expression, state: State): Promise<MinabValue> {
+        const table = state.context.groupTable;
+        const items: MinabValue[] = [];
+        for (const row of state.context.groupRows!) {
+            state.budget.check();
+            const frame: Frame = { record: this.normalizeRecord(row, table), table, variables: new Map(), types: new Map() };
+            const value = await this.expression(arg, state.push(frame));
+            if (value !== null && value !== undefined) items.push(value);
+        }
+        if (items.length === 0 && ['SUM', 'AVG', 'MIN', 'MAX'].includes(builtin.name)) return null;
+        return this.runBuiltin(builtin, [items], [], state);
     }
 
     /**
@@ -1288,7 +1313,13 @@ export class MinabInterpreter {
         if (operator === '+' && this.isTextSum(expr, left, right)) return String(left) + String(right);
         const a = this.number(left);
         const b = this.number(right);
-        return arithmetic(operator as Arithmetic, a, b);
+        try {
+            return arithmetic(operator as Arithmetic, a, b);
+        } catch (e) {
+            // In a group expression a division by zero gives `null` (spec §4.2.1). Everywhere else it is the error.
+            if (state.context.groupRows && e instanceof NumberError && e.code === 'eval.divisionByZero') return null;
+            throw e;
+        }
     }
 
     /**
