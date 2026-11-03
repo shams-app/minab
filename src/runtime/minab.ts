@@ -6,12 +6,23 @@
  */
 
 import { resolveHostDeclarations } from '../language/host-declarations.js';
-import { DEFAULT_RULE_CONTEXT } from '../language/schema.js';
+import { DEFAULT_RULE_CONTEXT, type MinabRuleContext, type MinabSchema } from '../language/schema.js';
 import { resolveLimits } from './limits.js';
 import { LANGUAGE_VERSION, migrate } from './migrate.js';
 import { prepareProgram, refusedByVersion } from './prepare.js';
 import { DEFAULT_SERVICE_CACHE_SIZE, ServiceCache } from './service-cache.js';
 import type { CacheStats, Minab, MinabOptions, PrepareOptions, PreparedProgram } from './types.js';
+
+/** `groupTable` makes a group expression (P1). It names a table of the schema and cannot be combined with a record rule or a field rule. */
+function checkGroupContext(context: MinabRuleContext, schema: MinabSchema): void {
+    if (context.groupTable === undefined) return;
+    if (context.recordTable !== undefined || context.isFieldRule) {
+        throw new TypeError('ruleContext.groupTable cannot be combined with recordTable or isFieldRule');
+    }
+    if (!schema.tables.some(t => t.name === context.groupTable)) {
+        throw new TypeError(`ruleContext.groupTable "${context.groupTable}" is not a table of the schema`);
+    }
+}
 
 export function createMinab(options: MinabOptions): Minab {
     const cache = new ServiceCache(options.serviceCacheSize ?? DEFAULT_SERVICE_CACHE_SIZE, options.mode ?? 'production');
@@ -29,6 +40,7 @@ export function createMinab(options: MinabOptions): Minab {
             if (disposed) throw new Error('this Minab runtime was disposed');
             if (typeof source !== 'string') throw new TypeError('prepare needs the program source as a string');
             const ruleContext = prepareOptions.ruleContext ?? defaultContext;
+            checkGroupContext(ruleContext, options.schema);
             const set = cache.get(options.schema, ruleContext, host);
             // One URI for each call: calls may overlap, and a shared URI would make them fight.
             const uri = `minab:///prepared/${counter++}.minab`;
@@ -51,7 +63,7 @@ export function createMinab(options: MinabOptions): Minab {
                 }
                 text = migrated.source;
             }
-            return prepareProgram(set, uri, text, prepareOptions.expect, ruleContext.recordTable, localHostFunctions, limits);
+            return prepareProgram(set, uri, text, prepareOptions.expect, ruleContext.recordTable, localHostFunctions, limits, ruleContext.groupTable);
         },
         cacheStats(): CacheStats {
             return { size: cache.size, created: cache.created, hits: cache.hits, openDocuments: cache.openDocuments() };

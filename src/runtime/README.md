@@ -47,6 +47,8 @@ Found at prepare time. Every list is sorted and has no duplicates.
 | `builtins` | Built-in functions called. |
 | `needsData` | The program can reach the data port: a table read, a relation column, a query, DML, a host function that is not local. |
 | `writes` | `INSERT`, `UPDATE`, `DELETE`, or an assignment to a record path (not to a local variable). |
+| `groupColumns` | Group expression (P1): the columns of `groupTable` the program reads, in first-use order. Empty for any other program (not sorted). |
+| `aggregates` | Group expression: each aggregate call in first-use order, `{ fn, columns }`. Empty for any other program. |
 | `tier` | `local` when `needsData` and `writes` are both false. Otherwise `data`. |
 
 `prepared.dependsOn(field)` tells if a change of that record field can change the result. Use it to

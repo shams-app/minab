@@ -14,7 +14,7 @@ import { MinabValueConverter } from './minab-value-converter.js';
 import { MinabTypeChecker } from './minab-type-checker.js';
 import { registerValidationChecks } from './minab-validator.js';
 import type { ResolvedHost } from './host-declarations.js';
-import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, type MinabRuleContext, type MinabSchema } from './schema.js';
+import { DEFAULT_RULE_CONTEXT, EMPTY_SCHEMA, SchemaProvider, rootTableOf, type MinabRuleContext, type MinabSchema } from './schema.js';
 
 /**
  * Declaration of custom services for the Minab language.
@@ -148,7 +148,7 @@ function createMinabModule(
               }
             : {}),
         schema: () => new SchemaProvider(schema, options.host),
-        scopeResolver: services => new MinabScopeResolver(services.schema, services.ruleContext.recordTable),
+        scopeResolver: services => new MinabScopeResolver(services.schema, rootTableOf(services.ruleContext)),
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
         sqlCompiler: services => new MinabSqlCompiler(services.schema, services.typeChecker),

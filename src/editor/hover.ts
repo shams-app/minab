@@ -19,7 +19,7 @@ import {
     isVariableDecl
 } from '../language/generated/ast.js';
 import { type MinabType } from '../language/minab-types.js';
-import type { MinabTableSchema } from '../language/schema.js';
+import { rootTableOf, type MinabTableSchema } from '../language/schema.js';
 import { BUILTIN_DOCS } from './builtin-docs.js';
 import { code, describeColumn, hostFunctionDoc, hostFunctionSignature, tableSummary, typeLine } from './describe.js';
 import type { EditorDocument } from './document.js';
@@ -135,8 +135,11 @@ function describeNode(doc: EditorDocument, node: AstNode): string | undefined {
 /** What a `.field` is, with the database name when it differs. */
 function columnWhat(doc: EditorDocument, node: AstNode & { field?: string }): string {
     const base = doc.services.scopeResolver.resolveCurrentRecordBase(node);
-    const tableName = base.found ? (base.scope.tableName ?? doc.services.ruleContext.recordTable) : undefined;
+    const tableName = base.found ? (base.scope.tableName ?? rootTableOf(doc.services.ruleContext)) : undefined;
     const column = tableName && node.field ? doc.services.schema.getColumn(tableName, node.field) : undefined;
+    if (doc.services.ruleContext.groupTable && base.found) {
+        return `a column of the group${sqlNameNote(column?.sqlName, node.field)}`;
+    }
     return `a column of the current record${sqlNameNote(column?.sqlName, node.field)}`;
 }
 

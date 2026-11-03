@@ -35,11 +35,13 @@ import {
     type Model,
     type Query
 } from '../language/generated/ast.js';
-import { isBuiltinName } from '../language/minab-builtins.js';
+import { getBuiltin, isBuiltinName } from '../language/minab-builtins.js';
 import type { SchemaProvider } from '../language/schema.js';
 import type { ProgramAnalysis } from './types.js';
 
 export interface AnalyzeOptions {
+    /** The program is a group expression over the rows of this table (P1): `.Column` is a column of the group. */
+    groupTable?: string;
     /** Host functions marked `local`: they run in the browser and need no data. */
     localHostFunctions?: ReadonlySet<string>;
 }
@@ -74,6 +76,10 @@ class Analyzer {
     readonly hostFunctions = new Set<string>();
     readonly userFunctions = new Set<string>();
     readonly builtins = new Set<string>();
+    /** Group expression (P1): the columns of the group table that are read, and the aggregate calls. */
+    readonly groupColumns = new Set<string>();
+    readonly aggregates: Array<{ fn: string; columns: Set<string> }> = [];
+    private readonly openAggregates: Array<{ fn: string; columns: Set<string> }> = [];
     readsFieldValue = false;
     readsWholeRecord = false;
     needsData = false;
@@ -116,7 +122,10 @@ class Analyzer {
             this.needsData = true;
             return;
         }
-        if (scope.record) {
+        if (scope.record && this.options.groupTable !== undefined) {
+            this.groupColumns.add(field);
+            for (const open of this.openAggregates) open.columns.add(field);
+        } else if (scope.record) {
             this.recordFields.add(field);
             if (!scope.table) this.needsData = true;
         }
@@ -251,7 +260,16 @@ class Analyzer {
             return;
         }
         const name = callee.name;
+        const aggregate =
+            this.options.groupTable !== undefined && isBuiltinName(name) && getBuiltin(name)?.kind !== 'scalar'
+                ? { fn: name, columns: new Set<string>() }
+                : undefined;
+        if (aggregate) {
+            this.aggregates.push(aggregate);
+            this.openAggregates.push(aggregate);
+        }
         for (const arg of node.args) this.visit(arg, scope);
+        if (aggregate) this.openAggregates.pop();
         if (isBuiltinName(name)) {
             this.builtins.add(name);
             return;
@@ -297,6 +315,8 @@ const sorted = (set: Set<string>): string[] => [...set].sort();
 /** The answer when nothing can be proved: needs data, may write. */
 export function conservativeAnalysis(): ProgramAnalysis {
     return {
+        groupColumns: [],
+        aggregates: [],
         tables: [],
         recordFields: [],
         dependencies: [],
@@ -315,12 +335,15 @@ export function conservativeAnalysis(): ProgramAnalysis {
 export function analyzeProgram(model: Model, schema: SchemaProvider, recordTable: string | undefined, options: AnalyzeOptions = {}): ProgramAnalysis {
     try {
         const analyzer = new Analyzer(schema, options);
-        analyzer.run(model, recordTable);
+        analyzer.run(model, options.groupTable ?? recordTable);
         const recordFields = sorted(analyzer.recordFields);
+        const groupColumns = [...analyzer.groupColumns];
         return {
+            groupColumns,
+            aggregates: analyzer.aggregates.map(a => ({ fn: a.fn, columns: [...a.columns] })),
             tables: sorted(analyzer.tables),
             recordFields,
-            dependencies: sorted(new Set([...recordFields, ...analyzer.foreignKeys])),
+            dependencies: sorted(new Set([...recordFields, ...groupColumns, ...analyzer.foreignKeys])),
             readsWholeRecord: analyzer.readsWholeRecord,
             readsFieldValue: analyzer.readsFieldValue,
             inputs: sorted(analyzer.inputs),

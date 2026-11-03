@@ -5,6 +5,7 @@ Tests for `src/editor/` (production plans E1 and E3).
 - `support.ts`: `diagnose()` (the diagnostics, built like the server builds them), `applyEdits()`, a schema (`Order`, `Customer`, a Persian column name, a column with a SQL name), `setup()` for the services of one host (with or without host declarations), and `cursor()`. A test source has one `|` for the cursor, for example `.cus|tomer`.
 - `complete.test.ts`: columns, tables, aliases, names in scope, built-ins, host inputs and functions, keywords.
 - `hover.test.ts`: columns, functions, built-ins, host names, `#alias`, keywords.
+- `group-expression.test.ts`: columns of the group table after `.`, numbers first inside an aggregate, hover (P1).
 - `definition.test.ts`: aliases, `fn`, parameters, `let`, loop variables.
 - `signature-help.test.ts`: built-ins, user functions, host functions, the active parameter.
 - `symbols.test.ts`: `fn` with parameters, `let`, aliases, order.

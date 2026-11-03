@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, type, null, call, compile, compat, deprecated, eval, limit, data, query, rule, wire.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, aggregate, groupExpression, type, null, call, compile, compat, deprecated, eval, limit, data, query, rule, wire.
  *    `deprecated.*` codes are warnings. A form that is going away gets one (D38). There is none today.
  *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
@@ -39,6 +39,16 @@ const error = 'error' as const;
 const warning = 'warning' as const;
 
 export const DIAGNOSTICS = {
+    'aggregate.fieldOutsideAggregate': entry<{ name: string }>({
+        severity: error,
+        message: p => `a group expression cannot read the column "${p.name}" on its own: wrap ${p.name} in SUM, AVG, MIN, MAX or COUNT`,
+        doc: 'A group expression has one value for a whole group of rows, so a column must go into an aggregate. Wrap the column in SUM, AVG, MIN, MAX or COUNT.'
+    }),
+    'aggregate.nested': entry<{ name: string }>({
+        severity: error,
+        message: p => `${p.name} is inside another aggregate: an aggregate cannot be nested`,
+        doc: 'An aggregate reduces the rows of a group to one value, so it cannot be an argument of another aggregate. Move the inner aggregate out of the outer one.'
+    }),
     'call.argumentType': entry<{
         name: string;
         position: number;
@@ -207,7 +217,7 @@ export const DIAGNOSTICS = {
     'eval.divisionByZero': entry({
         severity: error,
         message: () => 'division by zero',
-        doc: '"/" and "%" fail when the right side is zero. Check the divisor first, for example with "if".'
+        doc: '"/", "%" and "\\" fail when the right side is zero. Check the divisor first, for example with "if". In a group expression the result is null instead.'
     }),
     'eval.failed': entry<{ reason: string }>({
         severity: error,
@@ -261,6 +271,11 @@ export const DIAGNOSTICS = {
         doc: 'The program writes data, and the host gave run no write port. Give a write port, or remove the write.'
     }),
 
+    'groupExpression.unsupported': entry<{ construct: string }>({
+        severity: error,
+        message: p => `${p.construct} is not allowed in a group expression`,
+        doc: 'A group expression reads only the columns of the rows of its group. Remove statements, queries, user and host functions, "$", relations and inputs.'
+    }),
     'limit.callDepth': entry<{ limit: number }>({
         severity: error,
         message: p => `function calls are nested deeper than the limit of ${p.limit}`,

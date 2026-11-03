@@ -98,6 +98,11 @@ export interface RunInputs {
     fieldValue?: unknown;
     /** One value for each declared input. A missing one is the run error `eval.missingInput`. */
     hostInputs?: Record<string, unknown>;
+    /**
+     * The rows of one group, for a group expression (`ruleContext.groupTable`): plain values by column name.
+     * An empty list is a valid group. A group expression run without it is the run error `eval.failed`.
+     */
+    groupRows?: Record<string, unknown>[];
 }
 
 /** Asked, never given: what the program needs from outside (ADR 0002, section 4). */
@@ -213,6 +218,10 @@ export interface ProgramAnalysis {
     needsData: boolean;
     /** The program has INSERT, UPDATE or DELETE, or assigns to a record path. */
     writes: boolean;
+    /** Group expression: the columns of `groupTable` the program reads, in first-use order. Empty for any other program. */
+    groupColumns: string[];
+    /** Group expression: each aggregate call, in first-use order, with the columns its argument reads. Empty for any other program. */
+    aggregates: Array<{ fn: string; columns: string[] }>;
     /** `local`: safe to run in the browser with no data. `data`: needs the server. */
     tier: 'local' | 'data';
 }

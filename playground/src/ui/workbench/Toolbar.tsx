@@ -154,6 +154,7 @@ const KIND_LABELS: Record<string, string> = {
     query: 'Pipeline query',
     'record-rule': 'Record rule',
     'field-rule': 'Field rule',
+    'group-expression': 'Group expression',
     value: 'Expression',
     empty: 'Empty program'
 };

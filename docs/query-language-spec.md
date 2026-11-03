@@ -227,6 +227,23 @@ SELECT .id, #customer.name AS customer_name   // '#' disambiguates the alias fro
 
 Outside a collision like that, `#alias` and bare `alias.field` are equivalent — bare is the default/recommended form.
 
+### 4.2.1 Group expressions
+
+A **group expression** is one expression that is evaluated for a group of rows of one table. It is the `SELECT` part of a `GROUPBY` query without the query around it. A host asks for it by naming the group table (`ruleContext.groupTable`). The program text is only the expression.
+
+```
+SUM(.Revenue) - SUM(.Cost)           // the profit of the group
+SUM(.Price * .Units)                 // multiplies per row, then adds
+SUM(.Profit) / SUM(.Revenue)         // a ratio of two sums
+```
+
+1. **Rows.** `.` is a row **in the group**, as inside `GROUPBY` (§4.1 item 4). A column is written `.Revenue`; a name with spaces or non-Latin letters is quoted (§2.3), for example ``.`Total cost` ``.
+2. **Aggregates.** `SUM`, `AVG`, `MIN`, `MAX` and `COUNT` read their argument once for each row. The argument is an expression over `.` columns: `SUM(.Price * .Units)` is the sum of the products. A `null` value is left out, as in SQL. A `.Column` outside an aggregate is the error `aggregate.fieldOutsideAggregate`. An aggregate inside an aggregate is `aggregate.nested`.
+3. **Empty group.** `SUM`, `AVG`, `MIN` and `MAX` give `null`. `COUNT` gives `0`. So the type of `SUM`, `AVG`, `MIN` and `MAX` is nullable here.
+4. **Division by zero.** In a group expression `/`, `%` and `\` by zero give `null`, not the error `eval.divisionByZero`. The type of these operators is nullable. Every other program, and every `GROUPBY` query, keeps the error (§7.3).
+5. **What it may contain.** Literals, arithmetic, comparison, `and`/`or`, `if` and `switch` (with values only), the number, text and null built-ins, and `currentUser` and `NOW()` when the host declared them. Anything else is the error `groupExpression.unsupported`, with the construct in `params`: statements and `fn`, `FROM` queries, user and host functions, `$`, `^`, `#Table`, relations (`.customer.name`, `.orders`), filters, and host inputs other than `currentUser`.
+6. **Running.** The host gives the rows of one group (`RunInputs.groupRows`, plain values by column name). The data port is never used, so the analysis tier is `local`. `DECIMAL` sums are exact.
+
 ### 4.3 Examples
 
 **Filter, project, sort:**

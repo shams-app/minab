@@ -88,6 +88,7 @@ const NOT_PROGRAMS: Record<string, string> = {
     'spec §3.4 #2': 'three separate WHERE clauses, not a query',
     'spec §3.5 #1': 'shows a wrong line with a ✗ note',
     'spec §4.1 #1': 'clause template',
+    'spec §4.2.1 #1': 'group expressions: they need ruleContext.groupTable and are tested in test/group-expression.test.ts',
     'spec §5.1 #1': 'precedence list',
     'spec §5.5 #1': 'CAST template',
     'spec §5.6 #1': 'is/isnot template',

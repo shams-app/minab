@@ -20,6 +20,8 @@ export const DOC_PATH = resolve(ROOT, 'docs/reference/diagnostics.md');
 const AREAS = {
     syntax: 'The text is not a valid program (lexer and parser errors).',
     scope: 'A name, table, column or sigil cannot be found.',
+    aggregate: 'An aggregate is used in a way a group expression does not allow (P1).',
+    groupExpression: 'A group expression contains something it cannot hold (P1).',
     type: 'A type rule is broken. Minab never converts types by itself (spec §5.5).',
     null: 'A null rule is broken (spec §7.7).',
     call: 'A function call is wrong.',

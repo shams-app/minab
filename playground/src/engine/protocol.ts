@@ -55,7 +55,7 @@ export type Row = Record<string, unknown>;
  * What kind of program this is, which decides how its answer is shown:
  * rows for a query, a pass/fail verdict for a rule, a value otherwise.
  */
-export type ProgramKind = 'query' | 'record-rule' | 'field-rule' | 'value' | 'empty';
+export type ProgramKind = 'query' | 'record-rule' | 'field-rule' | 'group-expression' | 'value' | 'empty';
 
 /** A construct that parses and type-checks but that the evaluator doesn't execute yet. */
 export interface CheckOnlyConstruct {

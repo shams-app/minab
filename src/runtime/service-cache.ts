@@ -42,7 +42,7 @@ export function schemaKey(schema: MinabSchema): string {
 function ruleContextKey(context: MinabRuleContext): string {
     const field = context.fieldType;
     const type = field ? `${field.base}${field.nullable ? '?' : ''}${field.array ? '[]' : ''}${field.arrayNullable ? '?' : ''}` : '';
-    return JSON.stringify([context.isFieldRule, type, context.recordTable ?? null]);
+    return JSON.stringify([context.isFieldRule, type, context.recordTable ?? null, context.groupTable ?? null]);
 }
 
 export class ServiceCache {

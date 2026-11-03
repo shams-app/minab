@@ -57,13 +57,14 @@ const schema: MinabSchema = {
     ]
 };
 
-type Setting = 'record' | 'customer' | 'plain' | 'fieldWithoutType';
+type Setting = 'record' | 'customer' | 'plain' | 'fieldWithoutType' | 'group';
 
 const SETTINGS: Record<Setting, MinabRuleContext> = {
     record: { isFieldRule: false, recordTable: 'Order' },
     customer: { isFieldRule: false, recordTable: 'Customer' },
     plain: { isFieldRule: false },
-    fieldWithoutType: { isFieldRule: true, recordTable: 'Order' }
+    fieldWithoutType: { isFieldRule: true, recordTable: 'Order' },
+    group: { isFieldRule: false, groupTable: 'Order' }
 };
 
 /** The first node of the program for which `pick` is true. */
@@ -84,6 +85,8 @@ type Case =
 
 /** One program per code. Keep it in the same order as the registry. */
 const CASES: Record<DiagnosticCode, Case> = {
+    'aggregate.fieldOutsideAggregate': { via: 'validator', program: '.total * 2', setting: 'group' },
+    'aggregate.nested': { via: 'validator', program: 'SUM(SUM(.total))', setting: 'group' },
     'call.argumentType': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { a }\nf("x")' },
     'call.builtinArity': { via: 'validator', program: 'EXISTS(#Order, #Order)' },
     'call.builtinNeedsBooleanCollection': { via: 'validator', program: 'FROM Customer WHERE ALL(.orders.total) SELECT .id' },
@@ -132,6 +135,8 @@ const CASES: Record<DiagnosticCode, Case> = {
     'eval.programInvalid': { via: 'runtime' }, // test/runtime.test.ts
     'eval.writeModeMissing': { via: 'runtime' }, // test/writes.test.ts
     'eval.writesNotSupported': { via: 'runtime' }, // test/ports.test.ts
+
+    'groupExpression.unsupported': { via: 'validator', program: 'FROM Order SELECT .total', setting: 'group' },
 
     'limit.callDepth': { via: 'runtime' }, // test/limits.test.ts
     'limit.sourceTooLong': { via: 'runtime' }, // test/limits.test.ts
@@ -258,7 +263,9 @@ describe('the registry', () => {
     });
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
-        expect(code).toMatch(/^((syntax|scope|type|null|call|compile|compat|deprecated|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/);
+        expect(code).toMatch(
+            /^((syntax|scope|aggregate|groupExpression|type|null|call|compile|compat|deprecated|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/
+        );
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
         expect(entry.doc.endsWith('.')).toBe(true);

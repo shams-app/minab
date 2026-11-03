@@ -12,6 +12,7 @@ break a limit.
   coded error, and not later than the wall time plus 50 ms.
 - `json-keys.test.ts`: random paths of keys, text keys and positions over random `JSON` values, then left as they are, cast,
   counted or kind-tested (Shamsine card M.1b). Every program checks, and every run is a value or `eval.castFailed`.
+- `group-expression.test.ts`: random group expressions over random rows (P1). Every program checks, and every run is a value, `null` or `eval.integerOutOfRange`.
 
 ## Rules
 
