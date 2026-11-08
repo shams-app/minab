@@ -24,11 +24,12 @@ The GitHub release always uses the existing tag `vX.Y.Z` (`gh release create
 | npm | `@shamsine/minab` | Everyone |
 | VS Code Marketplace | the extension, publisher `shamsine` | Everyone |
 | Open VSX | the extension, namespace `shamsine` (Cursor, VSCodium) | Everyone |
-| GitHub release | the CHANGELOG section as notes, and the `.vsix` | Repository members only |
+| GitHub release | the CHANGELOG section as notes, and the `.vsix` | Everyone (the repository is public) |
 
-The repository stays private (decision D04). So the GitHub release and its
-`.vsix` are visible only to repository members. The public places are npm, the
-Marketplace and Open VSX. For the same reason, npm packages have no provenance
+The repository is public since before 1.0.0 (decision D04 was private at first).
+So the GitHub release and its `.vsix` are public too, and npm packages are
+published with provenance: the workflows add `--provenance` by themselves when
+the repository is public (1.0.0 was the first release with it). Before that, npm packages had no provenance
 for now. The workflows add `--provenance` by themselves if the repository
 becomes public.
 

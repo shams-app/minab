@@ -323,4 +323,4 @@ One line per item, with the phase that logged it.
 
 - Guard does not check `docs/production/tools/**`, `status/README.md`, `decisions.md` (A1)
 - Guard cannot see a README change that is only a checked output block (A1)
-- If the repo goes public: provenance, private vulnerability reporting, CodeQL (A2)
+- The repository is public now (found in the 1.0.0 release: provenance is on, CodeQL runs). Still to do: turn on GitHub private vulnerability reporting (D43), and record the change of D04 in `decisions.md` (A2)

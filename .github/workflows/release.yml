@@ -9,8 +9,8 @@
 #   - npm: trusted publishing for this repository on npmjs.com (no token);
 #   - VSCE_PAT: VS Code Marketplace token for the publisher `shamsine`;
 #   - OVSX_PAT: Open VSX token for the namespace `shamsine`.
-# D04: the repository is private, so npm provenance is off. The workflow turns
-# it on by itself if the repository becomes public.
+# D04: npm provenance is on when the repository is public (it is since 1.0.0)
+# and off when it is private. The workflow checks this by itself.
 name: Release
 
 on:

@@ -5,8 +5,8 @@
 #
 # Needs npm trusted publishing for this repository and this workflow file
 # (`next.yml`) on npmjs.com. Without it, the publish step fails with an npm
-# authentication error. D04: the repository is private, so no provenance; the
-# workflow turns it on by itself if the repository becomes public.
+# authentication error. D04: provenance is on when the repository is public
+# (it is since 1.0.0) and off when it is private; the workflow checks this.
 name: Next
 
 on:
