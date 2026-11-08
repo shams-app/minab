@@ -5,7 +5,7 @@ Everything here is a **draft for you to edit and publish yourself**. Nothing is 
 Facts used in this kit (checked on 2026-10-06, Minab 0.3.0):
 
 - Site: **https://minab-lang.org** (the Cloudflare steps of W4 must be done first). npm: `@shamsine/minab` (public, 0.3.0).
-- The GitHub repository is **private** (D04). Do **not** link it in any post. Link the site and npm.
+- The GitHub repository is **public** since 1.0.0 (it was private under D04). Posts may link it, next to the site and npm.
 - The site runs in the browser: the Minab toolchain in a Web Worker, and a real PostgreSQL (PGlite, WebAssembly). The same runtime runs in a NestJS server.
 - Claims you may make today: the playground, the tour (12 lessons), 32 verified examples, names in any language, exact `DECIMAL`, the `LOG` Console, the embeddable runtime (browser and NestJS), the VS Code extension, the security and performance notes (`docs/security.md`, `docs/performance.md`).
 - Claims to **hold back until V4 and 1.0**: "production ready", "1.0", "stable API". Minab is 0.3.0: before 1.0 a release may break something.

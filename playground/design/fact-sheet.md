@@ -28,7 +28,7 @@ More that is true today: 32 verified examples, a 12-lesson tour, and a browser b
 |---|---|
 | "Runs in your browser, with a real PostgreSQL (WebAssembly)." | "Production ready" or "1.0": Minab is 0.3.0. Before 1.0 a release may break something. |
 | "The same runtime runs in a NestJS server." | "Proven correct": say the interpreter and the compiled SQL are **tested against each other**. |
-| "Strict types. Exact decimals. Names in any language." | A link to the GitHub repository: it is private (D04). Link the site and npm. |
+| "Strict types. Exact decimals. Names in any language." | Nothing here now: the GitHub repository is public since 1.0.0, so posts may link it next to the site and npm. |
 
 ## The name
 

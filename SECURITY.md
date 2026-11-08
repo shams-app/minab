@@ -20,8 +20,8 @@ Please include:
 - a Minab program, a schema and (if it matters) a host setup that show it;
 - the version of `@shamsine/minab` and the version of Node.js.
 
-The repository is private, so GitHub private vulnerability reporting is not available. If the repository becomes
-public, it will be turned on next to the email address.
+The repository is public now. When GitHub private vulnerability reporting is turned on for it (decision D43), you
+can also report there, from the "Security" tab. Until then, use the email address.
 
 ## What to expect
 

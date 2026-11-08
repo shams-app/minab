@@ -74,7 +74,7 @@ if (program.ok) console.log(await program.run({ record: { total: '24.90' } }));
 
 ## Support
 
-- **Ask a question or report a bug:** open an issue in this repository. The bug report template asks for the program, the schema, what you expected and what happened. The repository is private (decision D04): if you cannot open an issue, write to the address in [`SECURITY.md`](SECURITY.md).
+- **Ask a question or report a bug:** open an issue in this repository. The bug report template asks for the program, the schema, what you expected and what happened. If you cannot open an issue, write to the address in [`SECURITY.md`](SECURITY.md).
 - **A security problem:** never in a public issue. Follow [`SECURITY.md`](SECURITY.md).
 - **Which versions get fixes:** the latest 1.x release gets bug fixes. Security fixes go to the latest minor version of the current major version, and to the last minor version of the previous major version ([`SECURITY.md`](SECURITY.md)).
 - **What stays the same:** within 1.x, programs, the runtime API, the wire format and the diagnostic codes do not break ([`docs/compatibility.md`](docs/compatibility.md)).
