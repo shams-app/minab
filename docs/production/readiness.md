@@ -244,7 +244,6 @@ One line per item, with the phase that logged it.
 - Wire answer has no result type; client needs `resultType` (H5)
 - Remote client has no retry or timeout (H5)
 - Firefox and WebKit runs (H6)
-- `@playwright/test` pinned to `~1.56.1` (H6)
 - Per-run worker ports, column names, engine runs through bridge `run` (H7)
 - Drop the empty runtime `createWorkerMinab` makes in the playground (H7)
 - A backtick name can reach a keyword-named host input (H8)

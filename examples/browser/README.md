@@ -28,7 +28,7 @@ cd examples/browser
 npm ci
 npm run setup                   # npm pack in the repository root, then install the tarball here
 npm run dev                     # http://localhost:5173
-npx playwright install chromium # once
+npx playwright install chromium # once (or set CHROMIUM_PATH to a Chromium you already have)
 npm test                        # builds, serves on :4173 and runs the Playwright tests
 ```
 
