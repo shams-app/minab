@@ -47,6 +47,48 @@ describe('queryFunctionDataPort', () => {
     });
 });
 
+describe('pgDataPort and dates (V4)', () => {
+    // `pg` turns a `date` column into a `Date` at local midnight. East of UTC its UTC date is the day before.
+    const fakePg = (value: unknown) => ({
+        query: async () => ({
+            rows: [{ id: 1, due: value, paid: new Date(Date.UTC(2026, 9, 2, 0, 0)) }],
+            fields: [
+                { name: 'id', dataTypeID: 20 },
+                { name: 'due', dataTypeID: 1082 },
+                { name: 'paid', dataTypeID: 1184 }
+            ]
+        })
+    });
+
+    test.each(['UTC', 'Asia/Tehran', 'America/New_York'])('a date column comes back as the date the database sent (TZ=%s)', async zone => {
+        const before = process.env.TZ;
+        process.env.TZ = zone;
+        try {
+            const rows = await pgDataPort(fakePg(new Date(2026, 9, 2))).execute({ text: 'SELECT 1', params: [] }, {} as never);
+            expect(rows[0].due).toBe('2026-10-02');
+            // A `timestamptz` column is not a date: it is left as it is.
+            expect(rows[0].paid).toBeInstanceOf(Date);
+        } finally {
+            if (before === undefined) delete process.env.TZ;
+            else process.env.TZ = before;
+        }
+    });
+
+    test('a date[] column and a text value are handled too', async () => {
+        const port = pgDataPort({
+            query: async () => ({
+                rows: [{ d: [new Date(2026, 0, 31), null], t: '2026-02-01' }],
+                fields: [
+                    { name: 'd', dataTypeID: 1182 },
+                    { name: 't', dataTypeID: 1082 }
+                ]
+            })
+        });
+        const rows = await port.execute({ text: 'SELECT 1', params: [] }, {} as never);
+        expect(rows[0]).toEqual({ d: ['2026-01-31', null], t: '2026-02-01' });
+    });
+});
+
 describe('systemClock', () => {
     test('is the real time, in UTC by default', () => {
         const clock = systemClock();

@@ -86,7 +86,7 @@ import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, ty
 import type { SqlQuery } from './minab-executor.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { jsonNumber, sqlParameter } from './values.js';
-import type { LogicalTypeBase } from './minab-types.js';
+import { NUMERIC_BASES, type LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 import { AstUtils } from 'langium';
@@ -184,6 +184,8 @@ interface SqlScope {
     groupKeys?: GroupKey[];
     /** For each group key that walks a relation: the SQL of the joined column it groups by. */
     groupKeySql?: Map<Expression, string>;
+    /** For each group key whose value is a record (`GROUPBY .customer.region`): the table of that record. */
+    groupKeyTable?: Map<Expression, string>;
     /** The `LEFT JOIN` clauses those keys need, in order. */
     groupJoins?: string[];
     /** `SELECT ... AS n` names, which `ORDERBY` may reference by name. */
@@ -282,10 +284,16 @@ function jsonText(value: unknown): string {
     });
 }
 
+/**
+ * The SQL name of each Minab type, for `CAST` and for typed parameters. `INTEGER` is `bigint`:
+ * a column is `bigint` (`src/host/ddl.ts`), and an `INTEGER` value may be as large as the
+ * interpreter's safe range (spec §7.2), which `integer` cannot hold. So `CAST("3000000000" AS INTEGER)`
+ * is `3000000000` in both runtimes.
+ */
 const SQL_TYPES: Record<LogicalTypeBase, string> = {
     TEXT: 'text',
     CITEXT: 'citext',
-    INTEGER: 'integer',
+    INTEGER: 'bigint',
     DECIMAL: 'numeric',
     BOOLEAN: 'boolean',
     DATE: 'date',
@@ -295,12 +303,8 @@ const SQL_TYPES: Record<LogicalTypeBase, string> = {
     JSON: 'jsonb'
 };
 
-/**
- * The type a bare parameter gets when Postgres has nothing to infer it from (`$1 + $2`, `-$1`).
- * The `CAST` names, except `INTEGER`: a column is `bigint` (`src/host/ddl.ts`), and an `INTEGER`
- * value may be as large as the interpreter's safe range, which `integer` cannot hold.
- */
-const PARAM_TYPES: Record<LogicalTypeBase, string> = { ...SQL_TYPES, INTEGER: 'bigint' };
+/** The type a bare parameter gets when Postgres has nothing to infer it from (`$1 + $2`, `-$1`): the `CAST` names. */
+const PARAM_TYPES: Record<LogicalTypeBase, string> = SQL_TYPES;
 
 /** True for SQL that is one bound parameter, `$n`: Postgres sees no type there. */
 /** A JSON `null` answers SQL `NULL` (spec §5.6). A value that already did is not wrapped again. */
@@ -1070,10 +1074,27 @@ export class MinabSqlCompiler {
             }
             if (joins.length !== path.length - 1) continue;
             const last = this.columnSchema(current.table, path[path.length - 1]);
-            if (last.type.kind !== 'scalar') continue;
+            if (last.type.kind === 'collection') continue;
             (scope.groupJoins ??= []).push(...joins);
-            (scope.groupKeySql ??= new Map()).set(key, `${quoteIdent(current.alias)}.${quoteIdent(path[path.length - 1])}`);
+            if (last.type.kind === 'ref') {
+                // A record key (`GROUPBY .customer.region`) groups by the link's key column on the joined row,
+                // so `KEY.name` reads the record through a grouped column.
+                (scope.groupKeySql ??= new Map()).set(key, `${quoteIdent(current.alias)}.${quoteIdent(this.refForeignKey(current.table, last))}`);
+                (scope.groupKeyTable ??= new Map()).set(key, last.type.table);
+                continue;
+            }
+            (scope.groupKeySql ??= new Map()).set(key, `${quoteIdent(current.alias)}.${quoteIdent(last.sqlName ?? last.name)}`);
         }
+    }
+
+    /** The group key that is the same relation path as `expr` (same source text), when the key was joined. */
+    private sameAsGroupKey(expr: Expression, scopes: SqlScope[]): Expression | undefined {
+        const scope = scopes[0];
+        if (!isMemberAccess(expr) || !scope?.groupKeySql) return undefined;
+        const text = (e: Expression) => e.$cstNode?.text.replace(/\s+/g, '');
+        const wanted = text(expr);
+        if (!wanted) return undefined;
+        return [...scope.groupKeySql.keys()].find(key => key !== expr && text(key) === wanted && !scope.groupKeyTable?.has(key));
     }
 
     /** `KEY.<name>` over several keys: the key with that name (D22). `undefined` for any other expression. */
@@ -1179,7 +1200,10 @@ export class MinabSqlCompiler {
         if (isUnaryExpression(expr)) return this.unary(expr, ctx, scopes);
         if (isCallExpression(expr)) return this.call(expr, ctx, scopes);
         if (isCastExpr(expr)) {
-            const operand = this.expression(expr.value, ctx, scopes);
+            const compiled = this.expression(expr.value, ctx, scopes);
+            // A bare parameter is read as text by `CAST`, so `CAST($1 AS bigint)` refuses "2.5": give it its type first.
+            const numeric = isNumberLiteral(expr.value) || NUMERIC_BASES.has(this.baseOf(expr.value) as LogicalTypeBase);
+            const operand = isBareParam(compiled) && numeric ? this.typedParam(expr.value, compiled) : compiled;
             // A `JSON` value converts only when its kind fits the target; otherwise `eval.castFailed`, as in the interpreter (spec §5.5).
             if (!expr.targetType.array && this.baseOf(expr.value) === 'JSON')
                 return this.jsonCast(isBareParam(operand) ? `${ctx.rebindAsJson(operand)}::jsonb` : operand, expr.targetType);
@@ -1200,6 +1224,8 @@ export class MinabSqlCompiler {
                     return `(CASE WHEN ${zoned} THEN CAST(${operand} AS timestamptz) ELSE CAST(${operand} AS timestamp) AT TIME ZONE ${ctx.sqlClock.zone()} END)`;
                 }
             }
+            // Postgres casts `boolean` to `integer` only: `true` is `1`, `false` is `0` (spec §5.5).
+            if (!target.array && target.base === 'INTEGER' && this.baseOf(expr.value) === 'BOOLEAN') return `CAST(CAST(${operand} AS integer) AS bigint)`;
             return `CAST(${trimmed} AS ${this.sqlType(target)})`;
         }
         if (isSubquery(expr)) return `(${this.query(expr.query, ctx, scopes)})`;
@@ -1241,16 +1267,20 @@ export class MinabSqlCompiler {
      * An arm with several values becomes several `WHEN`s with one result.
      */
     private switchExpr(expr: SwitchExpr, ctx: Ctx, scopes: SqlScope[]): string {
-        const subject = this.expression(expr.subject, ctx, scopes);
+        const compiled = this.expression(expr.subject, ctx, scopes);
+        // A bare parameter as the subject (`switch 1.0 { 1 => … }`) and its bare arm values get their types:
+        // Postgres would compare them as text.
+        const bareSubject = isBareParam(compiled);
+        const subject = bareSubject ? this.typedParam(expr.subject, compiled) : compiled;
+        const armValue = (value: Expression) => {
+            const sql = this.expression(value, ctx, scopes);
+            return bareSubject && isBareParam(sql) ? this.typedParam(value, sql) : sql;
+        };
         const searched = expr.cases.some(arm => arm.values.some(isNullLiteral));
         const arms: string[] = [];
         for (const arm of expr.cases) {
             for (const value of arm.values) {
-                const when = !searched
-                    ? this.expression(value, ctx, scopes)
-                    : isNullLiteral(value)
-                      ? `${subject} IS NULL`
-                      : `${subject} = ${this.expression(value, ctx, scopes)}`;
+                const when = !searched ? armValue(value) : isNullLiteral(value) ? `${subject} IS NULL` : `${subject} = ${armValue(value)}`;
                 // The result is compiled again for each value, so `$n` follows the text order.
                 arms.push(`WHEN ${when} THEN ${this.branch(arm.result, ctx, scopes)}`);
             }
@@ -1290,7 +1320,8 @@ export class MinabSqlCompiler {
         // A `JSON` value the caller holds (a `let`, a parameter) is bound as `jsonb`, as JSON text (D47).
         // A kind test needs a `JSON` operand (the checker says so), so there any bare parameter is one.
         const holdsJson = isBareParam(compiled) && (kind !== undefined || this.baseOf(expr.value) === 'JSON');
-        const value = holdsJson ? `${ctx.rebindAsJson(compiled)}::jsonb` : compiled;
+        // Any other bare parameter gets its type: Postgres cannot type `$1 IS NULL` alone ("could not determine data type").
+        const value = holdsJson ? `${ctx.rebindAsJson(compiled)}::jsonb` : isBareParam(compiled) ? this.typedParam(expr.value, compiled) : compiled;
         if (!kind) return `(${this.jsonNullAsNull(value, expr.value)} IS ${is ? '' : 'NOT '}NULL)`;
         return `(jsonb_typeof(${value}) IS ${is ? 'NOT ' : ''}DISTINCT FROM '${kind}')`;
     }
@@ -1337,6 +1368,10 @@ export class MinabSqlCompiler {
         }
         const named = this.namedKey(expr, scopes);
         if (named) return this.groupKey(named.expression, ctx, scopes);
+        // The path of a group key written again (`GROUPBY .customer.country SELECT .customer.country`) is that key:
+        // Postgres accepts only the grouped column, not a second copy of the path.
+        const sameKey = this.sameAsGroupKey(expr, scopes);
+        if (sameKey) return this.groupKey(sameKey, ctx, scopes);
         if (isMemberAccess(expr)) {
             const mark = ctx.mark();
             const receiver = this.rowRef(expr.receiver, ctx, scopes);
@@ -1397,6 +1432,8 @@ export class MinabSqlCompiler {
             const keys = scopes[0]?.groupKeys;
             if (!keys) fail('KEY is only valid after a GROUPBY clause');
             if (keys.length !== 1) failCoded('query.keyNeedsName', { keys: this.keyNames(scopes[0]) });
+            const table = scopes[0].groupKeyTable?.get(keys[0].expression);
+            if (table) return { kind: 'key', table, keyExpr: this.groupKey(keys[0].expression, ctx, scopes) };
             return this.rowRef(keys[0].expression, ctx, scopes);
         }
         return undefined;
@@ -1585,9 +1622,14 @@ export class MinabSqlCompiler {
         const items = expr.right.items;
         const anyCitext = this.isCitextArg(expr.left) || items.some(i => this.isCitextArg(i));
         const cast = (sql: string, arg: Expression) => (anyCitext && this.isTextArg(arg) && !this.isCitextArg(arg) ? `CAST(${sql} AS citext)` : sql);
-        const value = cast(this.expression(expr.left, ctx, scopes), expr.left);
-        const list = items.map(i => cast(this.expression(i, ctx, scopes), i));
+        let value = cast(this.expression(expr.left, ctx, scopes), expr.left);
+        let list = items.map(i => cast(this.expression(i, ctx, scopes), i));
         if (list.length === 0) return 'FALSE';
+        // Only bare parameters (`1 IN [1.0, 2.0]`): Postgres would compare them as text, so each gets its type.
+        if (isBareParam(value) && list.every(isBareParam)) {
+            value = this.typedParam(expr.left, value);
+            list = list.map((sql, i) => this.typedParam(items[i], sql));
+        }
         if (plainIsSafe(items.some(i => this.canBeNull(i)))) return `${value} IN (${list.join(', ')})`;
         // The value is repeated. That is safe: every Minab expression compiles to SQL with no side
         // effect and no volatile function (the clock is a bound parameter, D21), so each copy has the
@@ -1721,7 +1763,8 @@ export class MinabSqlCompiler {
                 return this.aggregateOverSource(builtin, receiverSource, column);
             }
         }
-        if (builtin.sqlAggregate?.shape === 'exists' || builtin.sqlAggregate?.shape === 'none') {
+        const shape = builtin.sqlAggregate?.shape;
+        if (shape === 'exists' || shape === 'every' || shape === 'some') {
             fail(`${name} needs a collection — a table, a relation field, or a filtered one`);
         }
         // An ordinary grouped aggregate over the current query scope.
@@ -1814,7 +1857,14 @@ export class MinabSqlCompiler {
             if (!column) fail(`${builtin.name} needs a value to aggregate, e.g. ${builtin.name}(.orders.total)`);
             return `(SELECT ${form.fn}(${column})${from}${where})`;
         }
-        fail(`${builtin.name} has no SQL form yet`);
+        if (form?.shape === 'every' || form?.shape === 'some') {
+            if (!column) fail(`${builtin.name} needs a boolean column of the collection, e.g. ${builtin.name}(.orders.paid)`);
+            // `ALL`: no row is not true (an empty collection is `true`). `ANY`: a row is true. A `null` is not true.
+            const test = form.shape === 'every' ? `(${column}) IS NOT TRUE` : `(${column}) IS TRUE`;
+            const rows = `SELECT 1${from}${where ? `${where} AND ${test}` : ` WHERE ${test}`}`;
+            return form.shape === 'every' ? `NOT EXISTS (${rows})` : `EXISTS (${rows})`;
+        }
+        fail(`${builtin.name} has no SQL form`);
     }
 
     /**

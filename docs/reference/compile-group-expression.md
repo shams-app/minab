@@ -59,6 +59,11 @@ const result = prepared.compileGroupExpression({ column: name => 'b.' + name.toL
   own `SELECT` if you need to.
 - **No parameters.** The fragment has no `$1`, so it fits a statement that has its own parameters.
 - **No statement text.** The fragment never has `SELECT`, a subquery, `;`, `--` or `/*` outside its text literals.
+- **The clock.** `NOW()` and `TODAY()` in a fragment are written when you call `compileGroupExpression`, with the
+  system clock in **UTC**. `run` uses the clock and the time zone of the run instead. So near midnight `TODAY()` in
+  Asia/Tehran can be a day later in `run` than in the fragment. If your expression reads the date, run it with `run`
+  over `groupRows`, or avoid `NOW()` and `TODAY()` in a stored group expression. A clock option for the fragment is on
+  the post-1.0 list.
 
 ## Errors
 

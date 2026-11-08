@@ -1,0 +1,3 @@
+let config: JSON = { theme: "dark", retries: 3, tags: ["a", "b"] };
+
+let tags: JSON = ["alpha", "beta", "gamma"];

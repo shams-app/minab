@@ -131,7 +131,8 @@ describe('aggregates', () => {
     test('AVG, MIN and MAX are exact', async () => {
         expect(await value('AVG([0.1, 0.3])')).toBe('0.2');
         expect(await value('MIN([0.30, 0.3, 0.4])')).toBe('0.3');
-        expect(await value('MAX([0.1, 2, 0.4])')).toBe(2);
+        // A list that mixes INTEGER and DECIMAL is DECIMAL[], so its MAX is a DECIMAL and leaves the run as text (spec §7.2).
+        expect(await value('MAX([0.1, 2, 0.4])')).toBe('2');
         expect(await value('MAX([0.1, 2.5, 0.4])')).toBe('2.5');
     });
 

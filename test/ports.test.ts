@@ -167,7 +167,8 @@ describe('host functions (D27)', () => {
             },
             { signal: controller.signal }
         );
-        expect(result).toMatchObject({ ok: true, value: 4 });
+        // fxRate returns DECIMAL, so the result leaves the run as text (spec §7.2).
+        expect(result).toMatchObject({ ok: true, value: '4' });
         expect(seen).toEqual([['EUR', 'USD']]);
         // R4: the port gets one signal that joins the host's signal and the wall-time timer.
         expect(signals[0]).toBeInstanceOf(AbortSignal);
@@ -247,7 +248,8 @@ describe('host function results (ADR 0002 section 4.3)', () => {
         expect(await runWith('INTEGER', 4)).toMatchObject({ ok: true, value: 4 });
         expect(await runWith('INTEGER?', null)).toMatchObject({ ok: true, value: null });
         expect(await runWith('INTEGER', 5n)).toMatchObject({ ok: true, value: 5 });
-        expect(await runWith('DECIMAL', 1.5)).toMatchObject({ ok: true, value: 1.5 });
+        // A DECIMAL result is text, also when the host gave a number (spec §7.2).
+        expect(await runWith('DECIMAL', 1.5)).toMatchObject({ ok: true, value: '1.5' });
         expect(await runWith('DECIMAL', '0.10', 'f() + 0.2 == 0.3')).toMatchObject({ ok: true, value: true });
         expect(await runWith('TEXT', 'a')).toMatchObject({ ok: true, value: 'a' });
         expect(await runWith('BOOLEAN', false)).toMatchObject({ ok: true, value: false });

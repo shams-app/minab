@@ -1,0 +1,4 @@
+FROM Order
+GROUPBY .status, .customer.country AS country
+SELECT KEY.status AS status, KEY.country AS country, COUNT(.) AS order_count
+ORDERBY order_count DESC

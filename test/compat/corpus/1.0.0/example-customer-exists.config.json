@@ -1,0 +1,20 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customer",
+        "primaryKey": "id",
+        "columns": { "id": "UUID", "name": "TEXT" }
+      },
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": { "id": "UUID", "customer_id": "UUID" }
+      }
+    ]
+  },
+  "rule": { "recordTable": "Order", "fieldType": "UUID" },
+  "record": { "id": "o-1", "customer_id": "c-1" },
+  "fieldValue": "c-1",
+  "data": { "responses": [{ "match": "EXISTS", "value": true }] }
+}

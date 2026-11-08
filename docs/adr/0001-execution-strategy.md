@@ -219,6 +219,12 @@ either pure strategy.
   with `CITEXT` being in §7.2's type table at all — and keeps the emitted
   operator spellings in one place so a second dialect is a substitution, not a
   rewrite.
+- **Postgres only for 1.x (decision D39, 2026-10-02).** The compiled SQL targets
+  PostgreSQL (16 is tested in CI, and PGlite in the browser and in the tests).
+  No other dialect is tested, so no other dialect is supported in 1.x. A second
+  dialect (SQLite is the natural one) is on the post-1.0 list in
+  `docs/production/readiness.md`. Adding it must not change the answer of any
+  1.x program on Postgres.
 - **The host schema has to say how tables link, which it previously didn't.**
   Found while implementing: `ColumnType`'s `ref`/`collection` named the
   target table but no join key, and `MinabTableSchema` had no primary key —

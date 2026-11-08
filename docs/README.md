@@ -53,12 +53,12 @@ The [release checklist](releasing.md) says where it is published.
 
 ## Compatibility, security and performance
 
-These documents are planned, and are not written yet.
-The [embedding guide](guides/embedding.md#8-limits-logs-security-and-versions) has a short summary of each.
+- [Compatibility](compatibility.md): the 1.x promise, `languageVersion` and migrations.
+- [Security notes for hosts](security.md), and the [security policy](../SECURITY.md) (how to report a problem).
+- [Performance](performance.md): the budgets that CI checks, and the settings that matter.
+- [Production readiness review](production/readiness.md): the evidence for 1.0, and the post-1.0 list.
 
-- Compatibility policy (`docs/compatibility.md`): phase Q5.
-- Security policy and notes (`docs/security.md`): phase Q3.
-- Performance notes (`docs/performance.md`): phase Q4.
+The [embedding guide](guides/embedding.md#8-limits-logs-security-and-versions) has a short summary of each.
 
 ## Releasing
 
@@ -67,6 +67,6 @@ The [embedding guide](guides/embedding.md#8-limits-logs-security-and-versions) h
 
 ## History and the plan
 
-- [Production plan](production/README.md): the road to 1.0, with one card for each phase. [Progress](production/progress.md) is generated.
+- [Production plan](production/README.md): the road to 1.0, with one card for each phase (closed with the 1.0.0 release). [Progress](production/progress.md) is generated.
 - [Roadmap](roadmap.md) and [status log](status.md): history of the first phases. Frozen.
 - [After v0.2.0](release-future/phases-after-v0.2.0.md): the older plan, replaced by the production plan.

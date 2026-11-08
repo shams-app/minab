@@ -15,7 +15,7 @@ export const cases: DifferentialCase[] = [
     { name: 'GREATEST of only nulls is null', schema, record: { id: 1, n: null, m: null }, expr: 'GREATEST(.n, .m)', expect: null },
     { name: 'GREATEST of negative numbers', schema, record: { id: 1, a: -3, b: -9 }, expr: 'GREATEST(.a, .b)', expect: -3 },
     { name: 'GREATEST of three decimals', schema, record: { id: 1, x: '1.5', y: '2.25', z: '-3' }, expr: 'GREATEST(.x, .y, .z)', expect: '2.25' },
-    { name: 'GREATEST lets INTEGER and DECIMAL mix', schema, record: { id: 1, a: 2, x: '1.5' }, expr: 'GREATEST(.a, .x)', expect: 2 },
+    { name: 'GREATEST lets INTEGER and DECIMAL mix', schema, record: { id: 1, a: 2, x: '1.5' }, expr: 'GREATEST(.a, .x)', expect: '2' },
     { name: 'GREATEST of text', schema, record: { id: 1, s: 'apple', t: 'banana' }, expr: 'GREATEST(.s, .t)', expect: 'banana' },
     { name: 'LEAST of numbers', schema, record: { id: 1, a: 3, b: 9 }, expr: 'LEAST(.a, .b)', expect: 3 },
     { name: 'LEAST ignores null', schema, record: { id: 1, a: 3, n: null }, expr: 'LEAST(.n, .a)', expect: 3 },

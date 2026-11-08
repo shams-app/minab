@@ -7,9 +7,11 @@ Minab is a small language with two layers that share one expression sub-language
 
 It also has a full type system, user-defined functions, `if`/`if!`/`switch`, three loop forms, and declarative `INSERT`/`UPDATE`/`DELETE`. The full language reference lives in [`docs/query-language-spec.md`](docs/query-language-spec.md), with a runnable example for every construct in [`docs/showcase.md`](docs/showcase.md). This repo implements it with [Langium](https://langium.org).
 
+**[Try Minab in your browser →](https://minab-lang.org)**: a live playground with a real PostgreSQL (WASM), a 10-minute tour, and runnable examples.
+
 ## Status
 
-Minab 0.3.0 is the current release. It parses, resolves, validates, type-checks, compiles, and runs. 0.2.0 was the first public release and brought the embeddable runtime; 0.3.0 adds the compatibility guard (`LANGUAGE_VERSION`, `migrate`) and the VS Code extension for the Marketplace. Before 1.0, a release may break something. [`docs/roadmap.md`](docs/roadmap.md) has the phased plan of the first phases and what each one shipped; [`docs/status.md`](docs/status.md) is the running session log. [`docs/production/`](docs/production/README.md) is the plan to version 1.0, and [`docs/README.md`](docs/README.md) lists all the documentation.
+**Minab 1.0 is stable.** It parses, resolves, validates, type-checks, compiles, and runs. Within 1.x there is no breaking change to the language, the runtime API, the wire format or the diagnostic codes, and a stored program keeps working: see [`docs/compatibility.md`](docs/compatibility.md). The [production readiness review](docs/production/readiness.md) shows the evidence for 1.0, and its "Post-1.0" section lists what comes later. [`docs/production/`](docs/production/README.md) is the plan that led to 1.0, [`docs/roadmap.md`](docs/roadmap.md) and [`docs/status.md`](docs/status.md) are the history of the first phases, and [`docs/README.md`](docs/README.md) lists all the documentation.
 
 What runs:
 
@@ -27,18 +29,19 @@ What you can embed (see [Use Minab from your app](#use-minab-from-your-app)):
 - **NestJS** — a module, a service, an exception filter and a run endpoint for stored programs (`@shamsine/minab/nestjs`).
 - **The browser** — the runtime in a Web Worker, local runs, runs delegated to a server by program id, and Monaco (`@shamsine/minab/browser`, `@shamsine/minab/monaco`).
 
-Known limitations (the same list is in the [CHANGELOG](CHANGELOG.md#020---2026-10-05); nothing in it changed in 0.3.0):
+Known limitations (the same list is in the 1.0.0 section of the [CHANGELOG](CHANGELOG.md)):
 
 - A user function can be called inside a query only when its body is one expression (no `let`, no statements, no recursion). A host function, or a function that is not inlinable, in the value of an `INSERT` or `UPDATE` fails with `compile.notSql`.
 - A statement block inside a query is refused (`compile.blockInQuery`). A `LOG` inside a query prints nothing and gives a warning.
 - With several `GROUPBY` keys, `KEY.<name>` reads one key. A bare `KEY` has no value.
-- Some writes are refused or do not check: assigning through a member of a local `JSON` variable, a relation step after a to-many step in a write path (`compile.writePath`), and a filter on the fields of a `JSON` array element.
+- Some writes are refused. Assigning through a member of a local `JSON` variable (`j.a = 1`) fails when the program runs; `check` does not report it. A relation step after a to-many step in a write path is refused (`compile.writePath`). A filter on the fields of a `JSON` array element (`.tags[.k == "a"]`) is a check error (`type.columnNeedsTable`); positions and `.$index` work.
 - A dry run does not see its own writes in later reads (except `JSON` array columns), so a program that depends on its own writes can give another answer than with `--apply`.
-- A `JSON` column that holds the JSON value `null` is `null` in the interpreter, but not in SQL.
+- An `INTEGER` result outside ±9,007,199,254,740,991 is the error `eval.integerOutOfRange` in the interpreter. In the compiled SQL, Postgres computes it as `bigint` or `numeric` and gives no error.
+- Text order (`<` on text, `ORDERBY`, `GREATEST`, `LEAST`) is code-point order in the interpreter and the database's collation in SQL; they agree with the `C` collation. `UPPER`, `LOWER` and `CITEXT` may differ for a few non-ASCII letters (spec §5.3.1).
 - `minab.config.json` cannot declare host functions or inputs yet, so the CLI and the language server use none. Hosts declare them with `createMinab`.
-- The compiled SQL targets PostgreSQL only.
+- **PostgreSQL only for 1.x** (decision D39, [ADR 0001](docs/adr/0001-execution-strategy.md)). The compiled SQL is tested on PostgreSQL 16 and PGlite. A second dialect is on the post-1.0 list.
 
-The language is still in development, so any release before 1.0 may break something. The language spec §12 lists a handful of open questions; those are deferred additions to the language, not gaps in what's specified today.
+The language spec §12 has no open question for 1.0: every item is resolved, retired or a post-1.0 extension that does not change what a valid program means.
 
 ## Install
 
@@ -68,6 +71,14 @@ if (program.ok) console.log(await program.run({ record: { total: '24.90' } }));
 - The [embedding guide](docs/guides/embedding.md) explains the ports, where programs run, and how to wire a NestJS server and a browser app.
 - Two tested example apps show it: [`examples/nestjs`](examples/nestjs/README.md) (a rule inside a request transaction) and [`examples/browser`](examples/browser/README.md) (a worker, local and remote rules, Monaco).
 - The API reference is generated with `npm run docs:api`. The [documentation index](docs/README.md) lists everything else.
+
+## Support
+
+- **Ask a question or report a bug:** open an issue in this repository. The bug report template asks for the program, the schema, what you expected and what happened. The repository is private (decision D04): if you cannot open an issue, write to the address in [`SECURITY.md`](SECURITY.md).
+- **A security problem:** never in a public issue. Follow [`SECURITY.md`](SECURITY.md).
+- **Which versions get fixes:** the latest 1.x release gets bug fixes. Security fixes go to the latest minor version of the current major version, and to the last minor version of the previous major version ([`SECURITY.md`](SECURITY.md)).
+- **What stays the same:** within 1.x, programs, the runtime API, the wire format and the diagnostic codes do not break ([`docs/compatibility.md`](docs/compatibility.md)).
+- **Guides:** the [embedding guide](docs/guides/embedding.md), the [Shamsine guide](docs/guides/shamsine.md), [security notes](docs/security.md), [performance](docs/performance.md) and the [diagnostic codes](docs/reference/diagnostics.md).
 
 ## Setup (working on Minab itself)
 
@@ -310,24 +321,22 @@ MINAB_TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/scratch npm test
 docs/
   query-language-spec.md   # the language spec — source of truth for syntax and semantics
   showcase.md              # a runnable example per construct, kept in sync with the spec
-  roadmap.md               # phased implementation plan
-  status.md                # running session log
+  guides/, reference/      # the embedding and Shamsine guides; diagnostic codes, wire format
   adr/                     # architecture decision records
+  production/              # the plan to 1.0 and the readiness review
+  roadmap.md, status.md    # history of the first phases
 examples/<name>/           # one program + its minab.config.json each; tested by test/examples.test.ts
+examples/nestjs, browser/  # two example apps with their own tests
 vscode-extension/          # the VS Code extension (a separate package — see its README)
 playground/                # the web playground (a separate package — see its README and design/)
 src/
-  language/
-    main.ts                # the language server entry point
-    lsp/                   # hover and go-to-definition for `#alias`
+  language/                # the grammar, scopes, types, checks, SQL compiler and interpreter
     minab.langium          # the grammar (mirrors spec §11)
-    minab-module.ts        # Langium DI wiring
-    schema.ts              # the host-supplied table/column contract
-    minab-scope-resolver.ts  # `.` / `^` / `#alias` / `KEY`
-    minab-types.ts, minab-builtins.ts, minab-type-checker.ts
-    minab-validator.ts     # diagnostics
-    minab-sql-compiler.ts, minab-interpreter.ts, minab-executor.ts
     generated/             # `langium generate` output — gitignored, never hand-edited
+  runtime/                 # the runtime API: createMinab, prepare, run, the wire format
+  node/, nestjs/, browser/, monaco/   # the host entry points (`@shamsine/minab/node`, …)
+  editor/, lsp/            # editor services and the language server
+  host/                    # the config file format shared by the CLI and the language server
   cli/                     # the `minab` command
 test/                      # vitest suites, one per layer
 ```

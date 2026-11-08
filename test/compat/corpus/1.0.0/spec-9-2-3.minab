@@ -1,0 +1,14 @@
+fn classifyOrder(orderId: UUID): TEXT {
+    let status: TEXT = (
+        FROM Order WHERE .id == orderId SELECT .status
+    );
+
+    switch status {
+        "cancelled" => "closed",
+        "shipped", "delivered" => {
+            let hasShipment: BOOLEAN = EXISTS(#Shipment[.order_id == orderId]);
+            if hasShipment { "fulfilled" } else { "pending shipment" }
+        },
+        _ => "open"
+    }
+}

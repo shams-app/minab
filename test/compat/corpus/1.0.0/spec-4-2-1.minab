@@ -1,0 +1,3 @@
+FROM Order
+JOIN Customer AS customer ON .customer.id == customer.id
+SELECT .id, #customer.name AS customer_name   // '#' disambiguates the alias from Order's own `.customer` field

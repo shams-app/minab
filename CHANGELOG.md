@@ -1,8 +1,58 @@
 # Changelog
 
-All notable changes to Minab are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/) — while the version is `0.x`, minor releases may still change behavior.
+All notable changes to Minab are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [semantic versioning](https://semver.org/). From 1.0.0, a release within 1.x never breaks a valid program, the runtime API, the wire format or the diagnostic codes ([`docs/compatibility.md`](docs/compatibility.md)). The 0.x releases below could change behavior.
 
 The npm package (`@shamsine/minab`, the CLI and language server) and the VS Code extension (`minab-vscode`) are versioned together.
+
+## [1.0.0] - 2026-11-08
+
+**Minab 1.0 is stable.** From this release, the 1.x promise applies (decision D38): no breaking change to the language, the runtime API, the wire format or the diagnostic codes within 1.x. A form that will go away first gives a warning with a `deprecated.*` code for at least one minor release, and is removed only in the next major release. A program a host stores keeps working: store `LANGUAGE_VERSION` with it, and the golden corpus of every release (`test/compat/corpus/`) must keep giving the same results. See [`docs/compatibility.md`](docs/compatibility.md) and the [production readiness review](docs/production/readiness.md).
+
+1.0.0 follows 0.3.0 directly (there is no 0.4.0). The entries marked **Breaking** change behavior from 0.3.0; a host that moves from 0.3.0 should read them.
+
+### Added
+
+- `scalarType` is exported from `@shamsine/minab`. It builds the type of a scalar column, so a host does not write the type object by hand.
+- `COUNT` accepts a `JSON` value and counts the elements of an array (it is `0` for anything else). `CAST` of a `JSON` text to `TEXT` or `CITEXT` now works and gives the text without quotes. A `JSON` cast that does not fit fails with `eval.castFailed` in PostgreSQL too, as it does in the interpreter.
+- You can read a key of a `JSON` value: `.location.lat`, `.attachment["name"]`, `.timeTracking.sessions[0]`, and `url.tab` for a `JSON` host input. A key has the type `JSON`, so you `CAST` it to compare it. A missing key, a key of a value that is not an object, and a JSON `null` are all `null`. The interpreter and PostgreSQL give the same answer.
+- A host can prepare a group expression: one expression over the rows of a group, such as `SUM(.Revenue) - SUM(.Cost)`, with `ruleContext.groupTable`. It checks, gets editor help, and runs over `groupRows`. Division by zero gives `null` there. `analysis` lists `groupColumns` and `aggregates`.
+- A host can turn a group expression into one SQL expression with `prepared.compileGroupExpression({ column })`, to put inside its own `SELECT … GROUP BY GROUPING SETS …`. The fragment has no parameters, its number answer is exact `numeric`, and a zero divisor gives `NULL`.
+
+### Fixed
+
+- **Breaking:** Literal-only parts of an expression, such as `.total > 50 + 50` or `.price * (1 + 0.2)`, now run in Postgres. Before, Postgres refused them, or compared two literals as text. `is array`, `is object`, `is string`, `is number` and `is boolean` on a value that is not `JSON` are now the check error `type.kindTestNeedsJson`. `is null` still works on every type. A user function that reads `.`, `^` or `#alias` can no longer be used inside a query: `check` reports `query.functionNotInlinable`.
+- **Breaking:** A `null` value now gives one answer in the interpreter and in the compiled SQL. Arithmetic with a `null` operand gives `null` (also `null / 0`), and `<`, `<=`, `>`, `>=` and `LIKE` with a `null` operand give `false` instead of an error. `IN` is never `null` in SQL (`null IN [1, null]` is `true`), `IN` with a subquery now runs in the interpreter, and a JSON `null` counts as `null` for `is null` and `== null`.
+- `createMinab` now refuses a host input or a host function named like a keyword (`from`, `loop`, ...). A host function result that does not match its declared type (or is `null` without a `?`) now fails the run with the new code `eval.hostFunctionResult`, and the program never sees it. The NestJS module keys its runtimes by the schema's `version` and a hash of its content, so two different schemas never share a runtime.
+- A read through a link (`.customer.vip`, `.customer.orders`, `^.customer`) now follows the key that the record you pass to `run` carries, so a new record and a record with an edited link give the right answer. A record that does not carry the key is read from the stored row, as before.
+- `ALL` and `ANY` now run inside a query and over a table (`FROM Customer WHERE ALL(.orders.paid)`). `GROUPBY` on a path through a relation now runs when `SELECT` writes the same path again, and when the key is a record (`GROUPBY .customer.region SELECT KEY.name`). `IN` and `switch` over only literals give the same answer in SQL as in the interpreter. `MIN` and `MAX` over the rows of a group accept text and dates and skip `null`. `check` now reports a branch of an `if` or `switch` that has no value (`type.blockNoValue`) and an unknown table after `FROM` (`scope.unknownTable`).
+- A `DATE` value that arrives as a JavaScript `Date` is read as its UTC date, so it compares with other dates. `pgDataPort` and `pgWritePort` give a `date` column back as the date the database sent, also when the Node process runs in a time zone east of UTC.
+- **Breaking:** The type of an `if` or a `switch` now describes every branch: it may be `null` when a branch may be `null` (`if .a > 10 { 1 } else { null }` is `INTEGER?`), and `INTEGER` with `DECIMAL` is `DECIMAL`. Such a `DECIMAL` result, and one from `COALESCE` or `GREATEST`, now leaves the run as text (`"4"`, not `4`), like every `DECIMAL`. `x += v` with a `null` on either side gives `null`, as `x = x + v` does, instead of an error. In SQL, `CAST(… AS INTEGER)` now accepts whole numbers above 2,147,483,647 and a decimal literal (`CAST(2.5 AS INTEGER)` is `3`), and `"a" is null` no longer fails in Postgres.
+
+### Security
+
+- **Breaking:** `MinabModule.forRootAsync` now takes `guards` next to `endpointPath`, and puts them on the run endpoint. If the factory returns `endpoint.guards` or `endpoint.path`, the app now stops at startup with a message that names the fix. Before, those settings were ignored without a word, so the endpoint could run with no guard.
+
+### Playground
+
+- The playground uses DOMPurify 3.4.17, which fixes the advisories in the version that the Monaco editor brings.
+- The playground has a demo mode for presentations. Open `/?demo=tv` and the text gets larger, the dark theme is used, and the editor, the engine, PostgreSQL and every page load at once, so the demo keeps working with the network off.
+- The playground's Data panel now shows the tables of the open example's dataset. Before, it kept the previous example's table (English `Customer` rows next to the Persian example), and a direct load of `/play?example=…` could show `unknown table "Customer"`. The SQL console now starts with a query on a table the dataset has.
+
+### Known limitations
+
+What does not run or does not check in 1.0. Each item fails with an explicit error, or is a documented difference between the two runtimes. The same list is in the README.
+
+- A user function can be called inside a query only when its body is one expression (no `let`, no statements, no recursion). A host function, or a function that is not inlinable, in the value of an `INSERT` or `UPDATE` fails with `compile.notSql`.
+- A statement block inside a query is refused (`compile.blockInQuery`). A `LOG` inside a query prints nothing and gives a warning.
+- With several `GROUPBY` keys, `KEY.<name>` reads one key. A bare `KEY` has no value.
+- Some writes are refused. Assigning through a member of a local `JSON` variable (`j.a = 1`) fails when the program runs; `check` does not report it. A relation step after a to-many step in a write path is refused (`compile.writePath`). A filter on the fields of a `JSON` array element (`.tags[.k == "a"]`) is a check error (`type.columnNeedsTable`); positions and `.$index` work.
+- A dry run does not see its own writes in later reads (except `JSON` array columns), so a program that depends on its own writes can give another answer than with `--apply`.
+- An `INTEGER` result outside ±9,007,199,254,740,991 is the error `eval.integerOutOfRange` in the interpreter. In the compiled SQL, Postgres computes it as `bigint` or `numeric` and gives no error.
+- Text order (`<` on text, `ORDERBY`, `GREATEST`, `LEAST`) is code-point order in the interpreter and the database's collation in SQL; they agree with the `C` collation. `UPPER`, `LOWER` and `CITEXT` may differ for a few non-ASCII letters (spec §5.3.1).
+- `NOW()` and `TODAY()` in a group-expression SQL fragment use the system clock in UTC (`docs/reference/compile-group-expression.md`).
+- `minab.config.json` cannot declare host functions or inputs yet, so the CLI and the language server use none. Hosts declare them with `createMinab`.
+- **PostgreSQL only for 1.x** (decision D39). The compiled SQL is tested on PostgreSQL 16 and PGlite.
+- Requires Node.js 22.12 or newer.
 
 ## [0.3.0] - 2026-10-06
 
@@ -116,5 +166,6 @@ This is what does not run or does not check yet. Each item fails with an explici
 - The playground website is deployed from `main` to Cloudflare Pages, with preview deploys for pull requests and long caching for the large database files. The footer shows the Minab version. Lighthouse, accessibility and smoke checks run in CI, and they led to small fixes: keyboard focus on code blocks, a name for the tour progress bar, and better contrast for string and key colors in the light theme.
 - The playground runs loops, `.$index` and tuples, and the `overdue-loop` example runs.
 
+[1.0.0]: https://github.com/shams-app/minab/releases/tag/v1.0.0
 [0.3.0]: https://github.com/shams-app/minab/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shams-app/minab/releases/tag/v0.2.0

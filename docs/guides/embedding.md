@@ -13,8 +13,8 @@ Other documents: the [language spec](../query-language-spec.md), the
 [ADR 0002](../adr/0002-runtime-ports.md) (why the runtime looks like this).
 The full API is in the generated API reference (see [section 9](#9-the-api-reference)).
 
-**Before 1.0 anything may break** (decision D38). Pin an exact version of
-`@shamsine/minab`. From 1.0 on, the [compatibility rules](#8-limits-logs-security-and-versions) apply.
+**Minab 1.x keeps your programs working** (decision D38): no breaking change to the language, the runtime
+API, the wire format or the diagnostic codes within 1.x. See the [compatibility rules](#8-limits-logs-security-and-versions).
 
 ## Contents
 
@@ -139,6 +139,13 @@ Ready-made ports in `@shamsine/minab/node`:
 
 `pg`, TypeORM and Prisma are never dependencies of Minab.
 In the browser, `@shamsine/minab/browser/pglite` has a data port over PGlite.
+
+**Dates from your driver.** Minab reads a `DATE` as `"YYYY-MM-DD"` text. A `Date` object is read as
+its UTC date (spec §7.2). `pg`, and TypeORM and Prisma on top of it, return a `date` column as a
+`Date` at **local** midnight: in a time zone east of UTC (Asia/Tehran) its UTC date is the day before.
+`pgDataPort` and `pgWritePort` fix this for you (they read the column types of the result). With
+`queryFunctionDataPort`, do one of these: run the Node process in UTC (`TZ=UTC`), or make the driver
+return `date` as text (`pg`: `types.setTypeParser(1082, value => value)`).
 It is for demos and playgrounds only (see [section 4](#4-where-programs-run)).
 
 ### Write port
@@ -506,10 +513,9 @@ text, never the parameter values.
 - Host functions are your code. Treat their arguments as hostile.
 
 [ADR 0002, section 12](../adr/0002-runtime-ports.md#12-security-model) has the
-full security model. A security policy and a security guide (`docs/security.md`)
-are planned (phase Q3). A performance guide (`docs/performance.md`, phase Q4)
-and a compatibility policy (`docs/compatibility.md`, phase Q5) are planned too.
-This guide will link to them when they exist.
+full security model. [`docs/security.md`](../security.md) is the security guide for hosts, and
+[`SECURITY.md`](../../SECURITY.md) says how to report a problem. See also
+[`docs/performance.md`](../performance.md) and [`docs/compatibility.md`](../compatibility.md).
 
 ### Stored programs and versions
 
@@ -519,9 +525,9 @@ table `minab_program` has a `language_version` column.
 
 - A program with an id and a version never changes. A new rule is a new version.
 - `languageVersion` says which version of the language the program was written
-  for. Phase Q5 builds the rules around it. Until then it is stored and not yet used.
-- Before 1.0, anything may break: the language, the runtime API, the wire format
-  and the codes (decision D38). Pin an exact version of the package.
+  for. Store `LANGUAGE_VERSION` with each program and pass it to `prepare`
+  (`docs/compatibility.md`).
+- Before 1.0 (0.x releases), anything could break (decision D38).
 - From 1.0, within 1.x: no breaking change to the language, the runtime API, the
   wire format or the codes. A deprecated form warns for at least one minor
   release before it goes. A golden set of programs from every release must keep

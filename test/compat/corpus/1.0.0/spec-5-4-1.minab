@@ -1,0 +1,2 @@
+FROM Customer
+WHERE .id IN (FROM Order WHERE .status == "flagged" SELECT .customer_id)

@@ -35,6 +35,9 @@
 import { AstUtils, type AstNode, type DiagnosticInfo, type ValidationAcceptor, type ValidationChecks } from 'langium';
 import {
     isBlock,
+    isIfExpr,
+    isSwitchCase,
+    isSwitchExpr,
     isFieldValue,
     isGroupKeyRef,
     isIndexRef,
@@ -60,6 +63,8 @@ import {
     isVariableDecl,
     type AssignmentStatement,
     type BinaryExpression,
+    type Block,
+    type TableRef,
     type CallExpression,
     type CallStatement,
     type CurrentRecord,
@@ -112,9 +117,11 @@ export function registerValidationChecks(services: MinabServices): void {
     const validator = new MinabValidator(services);
     const checks: ValidationChecks<MinabAstType> = {
         Model: validator.checkGroupExpression,
+        Block: validator.checkBranchHasValue,
         FieldValue: validator.checkFieldValueInFieldRule,
         GroupKeyRef: validator.checkGroupKeyRefScope,
         NamedScope: validator.checkNamedScopeResolves,
+        TableRef: validator.checkTableRefResolves,
         BinaryExpression: validator.checkExpressionTypeChecks,
         UnaryExpression: validator.checkExpressionTypeChecks,
         MemberAccess: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
@@ -172,6 +179,14 @@ export class MinabValidator {
         }
     }
 
+    /** `FROM Nope`: a table the schema does not have. Before V4 only a column read under it was reported, so `FROM Nope` alone passed `check`. */
+    checkTableRefResolves(node: TableRef, accept: ValidationAcceptor): void {
+        const result = this.services.scopeResolver.resolveTableRef(node);
+        if (!result.found) {
+            report(accept, result, { node });
+        }
+    }
+
     // ---- Phase 4: type checking ----------------------------------------
 
     /**
@@ -204,6 +219,19 @@ export class MinabValidator {
         if (!result.ok && result.origin === node) {
             report(accept, result, { node });
         }
+    }
+
+    /**
+     * A branch of an `if` or a `switch` is a value, so its block needs a tail (spec §9.1): `if c { LOG(1); } else { 2 }`
+     * would give `null` where the type says it cannot. The checker's `type.blockNoValue` starts at the block, which no
+     * other check reports. A statement block (`if!`, a loop, a function body) is not a value and is not checked here.
+     */
+    checkBranchHasValue(node: Block, accept: ValidationAcceptor): void {
+        if (node.tail) return;
+        const container = node.$container as AstNode | undefined;
+        if (!isIfExpr(container) && !isSwitchCase(container) && !isSwitchExpr(container)) return;
+        const result = this.services.typeChecker.inferType(node);
+        if (!result.ok && result.origin === node) report(accept, result, { node });
     }
 
     /**

@@ -1,0 +1,3 @@
+let thresholdInt: INTEGER = 500;
+
+.total > CAST(thresholdInt AS DECIMAL)

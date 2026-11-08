@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: mailto:security@minab-lang.org
+    about: Please do not open a public issue for a security problem. See SECURITY.md.
+  - name: Try a program in the playground
+    url: https://minab-lang.org/play
+    about: Check what a program does before you report it.

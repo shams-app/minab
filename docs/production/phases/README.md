@@ -290,7 +290,7 @@ The old plan's notes for review, and where they went: Q1 → D01 · Q2 → D34, 
 
 ## After 1.0 (not in this plan)
 
-Kept here so they are not lost. None of them blocks production. V4 adds the Later items it moves after 1.0 to the section "Post-1.0" of `docs/production/readiness.md` (V4 writes that file).
+Kept here so they are not lost. None of them blocks production. V4 adds the Later items it moves after 1.0 to the section "Post-1.0" of `docs/production/readiness.md` (V4 writes that file): **[the post-1.0 list](../readiness.md#post-10)**.
 
 - **Explain mode** for rules: show which sub-condition was false, with its values (old note S1; D45).
 - **`minab schema pull`**: build the schema from Postgres foreign keys, Prisma or TypeORM (S3).

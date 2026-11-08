@@ -1,0 +1,57 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customers",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "balance": "DECIMAL",
+          "metadata": "JSON",
+          "status": "TEXT",
+          "flaggedAt": "INTEGER"
+        }
+      },
+      {
+        "name": "CollectionsQueue",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "customer_id": "UUID",
+          "reason": "TEXT"
+        }
+      },
+      {
+        "name": "Payment",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "customer_id": "UUID",
+          "days_ago": "INTEGER"
+        }
+      }
+    ]
+  },
+  "data": {
+    "responses": [
+      {
+        "match": "days_ago",
+        "value": 120
+      },
+      {
+        "match": "FROM \"Customers\"",
+        "rows": [
+          {
+            "id": "c-1",
+            "balance": 1500,
+            "metadata": {
+              "note": "disputed"
+            },
+            "status": "ok",
+            "flaggedAt": 0
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -131,6 +131,13 @@ describe('JSON arrays', () => {
             expect(await tagsOf(1)).toEqual([{ k: 'a' }, { k: 'b', done: true }, { k: 'c', done: true, last: 1, extra: { z: 1 } }]);
         }));
 
+    test('UPDATE with +: on a missing key or with a null value gives null, as SQL does (V4, spec §9.3, D46)', () =>
+        withTables(async () => {
+            const result = await apply(`loop c in #Customer where .id == 1 {\n    UPDATE .tags WHERE .$index == 0 SET { n +: 1, k +: null };\n}\ntrue`);
+            expect(result).toMatchObject({ ok: true });
+            expect(await tagsOf(1)).toEqual([{ k: null, n: null }, { k: 'b' }, { k: 'c' }]);
+        }));
+
     test('a variable position: .tags[i]', () =>
         withTables(async () => {
             await apply(`let i: INTEGER = 1;\nloop c in #Customer where .id == 1 {\n    DELETE .tags[i];\n}\ntrue`);

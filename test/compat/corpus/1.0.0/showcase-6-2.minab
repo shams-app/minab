@@ -1,0 +1,9 @@
+let top_customer_id: UUID = (
+    FROM Order
+    GROUPBY .customer
+    SELECT KEY.id
+    ORDERBY SUM(.total) DESC
+    LIMIT 1
+);
+
+.customer.id == top_customer_id

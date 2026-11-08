@@ -1,0 +1,3 @@
+let point: (INTEGER, INTEGER) = (3, 4);
+
+point[0] + point[1]   // 7

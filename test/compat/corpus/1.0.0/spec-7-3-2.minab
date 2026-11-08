@@ -1,0 +1,3 @@
+let someField: INTEGER = 5;
+let someObject: JSON = { someField, anotherField: 10 };
+// same as: { someField: someField, anotherField: 10 }

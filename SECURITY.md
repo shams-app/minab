@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-Minab is before 1.0. Only the latest release gets security fixes. From 1.0 on, the latest minor version of the
-current major version and the last minor version of the previous major version are supported.
+From 1.0 on, the latest minor version of the current major version and the last minor version of the previous
+major version get security fixes. Today the current major version is 1, and there is no previous one.
 
 | Version | Supported |
 |---|---|
-| latest release (`@shamsine/minab` on npm, and the VS Code extension) | yes |
-| older releases | no, please update |
+| 1.x, the latest minor version (`@shamsine/minab` on npm, and the VS Code extension) | yes |
+| 0.x | no, please update to 1.x |
 
 ## How to report a problem
 

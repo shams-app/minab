@@ -1,0 +1,10 @@
+// A filter inside a rule (spec §3.4, showcase §1): a customer may have fewer
+// than five cancelled orders. The filter narrows `.orders`, and COUNT reduces
+// the collection to a scalar — a bare collection can't be compared.
+// The rule has no FROM: `.` is the customer being checked (`rule.recordTable`
+// and `record` in the config).
+//
+//   minab check cancelled-orders-limit.minab
+//   minab run cancelled-orders-limit.minab --trace
+
+COUNT(.orders[.status == "cancelled"]) < 5

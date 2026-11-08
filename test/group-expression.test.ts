@@ -102,6 +102,20 @@ describe('values', () => {
         expect(await plain.run()).toMatchObject({ ok: false, error: { code: 'eval.divisionByZero' } });
     });
 
+    test('MIN and MAX of text and of decimals given as text, skipping null (V4)', async () => {
+        // Before V4, MIN and MAX read every value as a number: text failed with "expected a number".
+        const rows = [
+            { Region: 'North', Revenue: '10' },
+            { Region: 'East', Revenue: null },
+            { Region: 'South', Revenue: '9' }
+        ];
+        expect(await value('MIN(.Region)', rows)).toMatchObject({ ok: true, value: 'East' });
+        expect(await value('MAX(.Region)', rows)).toMatchObject({ ok: true, value: 'South' });
+        expect(await value('MIN(.Revenue)', rows)).toMatchObject({ ok: true, value: '9' });
+        expect(await value('MAX(.Revenue)', rows)).toMatchObject({ ok: true, value: '10' });
+        expect(await value('MAX(.Revenue)', [{ Revenue: null }])).toMatchObject({ ok: true, value: null });
+    });
+
     test('an empty group: SUM, AVG, MIN, MAX are null and COUNT is 0', async () => {
         for (const fn of ['SUM', 'AVG', 'MIN', 'MAX']) {
             expect(await value(`${fn}(.Price)`, [])).toMatchObject({ ok: true, value: null });

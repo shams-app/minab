@@ -1,0 +1,7 @@
+let sumOdd: INTEGER = 0;
+
+loop n from 1 to 20 where n % 2 != 0 {
+    sumOdd = sumOdd + n;
+}
+
+sumOdd
