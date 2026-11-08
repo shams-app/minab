@@ -8,10 +8,12 @@ M.4–M.16.
 Read it with [ADR 0002](../adr/0002-runtime-ports.md) (section 13 is about
 Shamsine) and the [wire format](../reference/wire-format.md).
 
-**State of things.** Shamsine integrates at Minab **0.3.0** (decision D02).
-`@shamsine/minab` is **not published yet** (on 2026-10-01 it was not on npm).
-The package in this repo says `0.2.0`. Before 1.0 anything may break (D38), so
-pin an exact version.
+**State of things.** Minab **1.0.0** is the release for Shamsine. It carries everything this guide
+needs, also the work done for Shamsine after 0.3.0 (key access on `JSON`, the `scalarType` export, links
+that follow the key of the record in hand, and group expressions). From 1.0, the 1.x promise applies
+(D38, [`docs/compatibility.md`](../compatibility.md)): no breaking change to the language, the runtime
+API, the wire format or the codes within 1.x. So `^1.0.0` is safe; pin an exact version if you want to
+choose when to update.
 
 **How this guide was checked.** The Shamsine facts come from a read-only copy of
 the monorepo (commit `357e7bd`, 2026-10-01). Every example expression below was
@@ -34,7 +36,7 @@ and tell the owner (see [section 12](#12-monorepo-follow-ups)).
     - [Calculated values for a pivot](#calculated-values-for-a-pivot)
 11. [Jest, CommonJS and Bun](#11-jest-commonjs-and-bun)
 12. [Monorepo follow-ups](#12-monorepo-follow-ups)
-13. [Limits you will meet in 0.3.0](#13-limits-you-will-meet-in-030)
+13. [Limits you will meet in 1.0](#13-limits-you-will-meet-in-10)
 
 ## 1. Map of the GM cards
 
@@ -162,8 +164,8 @@ type `JSON?`, a missing key is `null`, and you `CAST` it to compare:
 `CAST(.location.lat AS DECIMAL) > 35.7`, `CAST(.address.text AS TEXT) == "Tehran"`,
 `COUNT(.timeTracking.sessions) > 0`. You can still test the shape (`is object`,
 `is array`, `is null`, `isnot null`). A `JSON` value cannot be compared with `==` to a
-text or a number without a `CAST`. Builds before the one that carries M.1b (0.3.0 and
-`0.4.0-next.55`) fail a key with `type.memberOnNonRecord`.
+text or a number without a `CAST`. Key access is new in 1.0.0: 0.3.0 fails a key with
+`type.memberOnNonRecord`.
 
 **Read-only** only matters for writes (phase X5). Expressions read all of these.
 
@@ -196,7 +198,7 @@ const schema = {
 
 `scalar(base, options)` stands for `{ kind: 'scalar', type: scalarType(base, options) }`.
 `scalarType(base, { nullable, array, arrayNullable })` is exported from `@shamsine/minab`
-(from the release after 0.3.0; in 0.3.0 write the type object by hand).
+(from 1.0.0; in 0.3.0 write the type object by hand).
 
 Rules:
 
@@ -308,9 +310,9 @@ createMinab({
   The **server** fills it from the session. The run endpoint ignores a client value of
   the same name (`endpoint.hostInputs`). The browser fills it from the signed-in
   user, for `local` programs only.
-- **`url` as `JSON`** works from the build that carries M.1b: `CAST(url.tab AS TEXT) == "open"`
-  and `url.tab is null` check and run, and a missing key is `null`. Builds before it
-  (0.3.0, `0.4.0-next.55`) fail `url.tab` on a `JSON` input with `type.memberOnNonRecord`;
+- **`url` as `JSON`** works from 1.0.0: `CAST(url.tab AS TEXT) == "open"`
+  and `url.tab is null` check and run, and a missing key is `null`. 0.3.0
+  fails `url.tab` on a `JSON` input with `type.memberOnNonRecord`;
   there, declare `url` as a typed record **per page**, from the page's own parameters:
   `{ tab: 'TEXT?', page: 'INTEGER?' }`. `?` means it may be null. Then `url.tab == "open"`
   and `url.tab is null` both check and run, with no `CAST`. A typed record is still the
@@ -745,10 +747,10 @@ A bound expression is part of a view, so Shamsine stores it. For each expression
   `bound` expression. If `!prepared.ok`, answer 400 with, for each error diagnostic, the
   element id, the property path, and the diagnostic's `code`, `params` and `range`. Warnings do
   not block the save.
-- **`languageVersion`.** The policy is phase Q5 of the Minab plan, and it is not built yet.
-  `StoredProgram.languageVersion` is a required string today and Minab does not read it. Until Q5, store the
-  Minab package version you validated with (for example `"0.3.0"`), and check this guide
-  again when Q5 lands.
+- **`languageVersion`.** Store `LANGUAGE_VERSION` (a whole number, exported by `@shamsine/minab`) with
+  each expression, and pass it to `prepare(source, { languageVersion })` (see `docs/compatibility.md`).
+  The NestJS `StoredProgram.languageVersion` is a string that Minab does not read yet (on the post-1.0
+  list); fill it with the same number as text.
 - **Messages for failed rules are Shamsine's (D45).** A rule returns only `true` or
   `false` (or a value). Minab gives no message. Shamsine stores a translated message (all
   four languages) next to each rule and shows it when the rule says "invalid". Minab's
@@ -839,7 +841,7 @@ These are the same answers as `profit.run({ groupRows })` on the rows of each gr
 
 ```jsonc
 // packages/core/service/package.json
-{ "dependencies": { "@shamsine/minab": "0.3.0" } }   // pin the exact version
+{ "dependencies": { "@shamsine/minab": "^1.0.0" } }   // 1.x keeps programs working
 ```
 
 ```ts
@@ -848,7 +850,7 @@ import { queryFunctionDataPort, systemClock } from '@shamsine/minab/node';
 import { MinabModule, MinabService } from '@shamsine/minab/nestjs';
 ```
 
-- Install with `bun add @shamsine/minab@0.3.0`. Node 22.12 or newer (`engines`).
+- Install with `bun add @shamsine/minab@^1.0.0`. Node 22.12 or newer (`engines`).
 - NestJS entry needs `@nestjs/common`, `@nestjs/core`, `rxjs` and `reflect-metadata`.
   `core/service` already has them. `pg`, TypeORM and Prisma are **not** dependencies
   of Minab: `core/service` brings its own.
@@ -923,25 +925,21 @@ Line numbers are from commit `357e7bd`.
 6. Translations: add the `minabErrors` block of section 9 to `translations.json`.
 7. A rule for the DECIMAL strings: `core/web` must parse them with a decimal library.
 
-## 13. Limits you will meet in 0.3.0
+## 13. Limits you will meet in 1.0
 
 Facts a Shamsine session would otherwise find by surprise. The Minab side is listed in
-the status file of phase G2 (`docs/production/status/G2.md`) for the owner.
+the status file of phase G2 (`docs/production/status/G2.md`) and in the "Post-1.0" section
+of `docs/production/readiness.md`.
 
-- **No key access on `JSON`.** Fields stored as JSON (`location`, `address`,
-  `attachment`, `lookup`, `formula`, …) can be tested for null or shape, not read by key.
 - **`numberRange` and `timeline` are not usable.** Their columns are Postgres range
-  types. Keep them out of the schema until Minab has a range type.
-- **`scalarType` is exported only after 0.3.0.** In 0.3.0 write the type object by hand
-  (section 3).
-- **In 0.3.0 a read through a link ignores the key in the record.** `.customer.vip`,
-  `.customer.orders` and `^.customer` read the key from the stored row, so a new record
-  got `null` and an edited link was not followed. From the release after 0.3.0 they use
-  the key column the record carries (section 3, the `customer_id` column); a record that
-  does not carry it is read from the stored row as before.
-- **`languageVersion` is not enforced** until phase Q5.
-- **No many-to-many link** and no write statements yet (writes come in phase X5; a run
-  with no write port fails with `eval.writesNotSupported`).
+  types. Keep them out of the schema until Minab has a range type (post-1.0).
+- **Upgrading from 0.3.0.** 0.3.0 had no key access on `JSON`, no `scalarType` export, and
+  a read through a link (`.customer.vip`, `^.customer`) took the key from the stored row,
+  not from the record in hand. 1.0.0 has all three (sections 2 and 3).
+- **The stored `languageVersion` of the NestJS endpoint is not read** (see section 10).
+- **No many-to-many link.** Writes run (`INSERT`, `UPDATE`, `DELETE`, path assignment), with a
+  write port and `writes: 'dry-run'` or `'apply'`; a run with no write port fails with
+  `eval.writesNotSupported`.
 - **The first `prepare` for a schema is slow** (about 90 ms in a browser, from the ADR
   spike) and later ones are fast. Keep one worker and one runtime per schema version.
 - **Limits are always on (D36).** Defaults: 64 KB source, 200 nesting levels, 1,000 ms,
