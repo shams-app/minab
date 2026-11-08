@@ -87,6 +87,7 @@ import {
     baseTypesEqual,
     comparableTypes,
     formatType,
+    isNullable,
     isNumeric,
     isOrderable,
     isTextual,
@@ -838,9 +839,23 @@ export class MinabTypeChecker {
 
     // ---- if/switch (spec §9.1, §9.2) -------------------------------------
 
+    /** The type, made nullable as a whole: an array becomes a nullable array, not an array of nullable items. */
     private makeNullable(t: MinabType): MinabType {
-        if (t.kind === 'scalar') return { ...t, nullable: true };
-        return t;
+        if (t.kind !== 'scalar') return t;
+        return t.array ? { ...t, arrayNullable: true } : { ...t, nullable: true };
+    }
+
+    /**
+     * The type of an `if` or a `switch` whose branches agree (`baseTypesEqual`): it may be `null`
+     * when any branch may be `null`, and `INTEGER` with `DECIMAL` is `DECIMAL` (spec §7.2, as in
+     * arithmetic and `COALESCE`). So the type always describes the value a run gives.
+     */
+    private joinBranches(a: MinabType, b: MinabType): MinabType {
+        if (a.kind === 'null') return this.makeNullable(b);
+        if (b.kind === 'null') return this.makeNullable(a);
+        const numeric = a.kind === 'scalar' && b.kind === 'scalar' && NUMERIC_BASES.has(a.base) && NUMERIC_BASES.has(b.base);
+        const joined: MinabType = numeric ? { ...a, base: widenNumeric(a.base, b.base) } : a;
+        return isNullable(b) && !isNullable(joined) ? this.makeNullable(joined) : joined;
     }
 
     private inferIfExpr(node: IfExpr): TypeResult {
@@ -855,19 +870,20 @@ export class MinabTypeChecker {
         if (!baseTypesEqual(thenType.type, elseType.type)) {
             return err('type.ifBranchesDiffer', { then: formatType(thenType.type), else: formatType(elseType.type) });
         }
-        return ok(thenType.type);
+        return ok(this.joinBranches(thenType.type, elseType.type));
     }
 
     private inferSwitchExpr(node: SwitchExpr): TypeResult {
         const defaultType = this.inferType(node.defaultResult);
         if (!defaultType.ok) return defaultType;
-        const result = defaultType.type;
+        let result = defaultType.type;
         for (const c of node.cases) {
             const caseType = this.inferType(c.result);
             if (!caseType.ok) return caseType;
             if (!baseTypesEqual(result, caseType.type)) {
                 return err('type.switchArmsDiffer', { first: formatType(result), second: formatType(caseType.type) });
             }
+            result = this.joinBranches(result, caseType.type);
         }
         return ok(result);
     }

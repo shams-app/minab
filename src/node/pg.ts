@@ -15,14 +15,36 @@ export interface PgClientLike {
     /** Opens the connection. */
     connect(): Promise<void>;
     /** Runs one statement with `$1`-style parameters. */
-    query(text: string, params: unknown[]): Promise<{ rows: Row[] }>;
+    query(text: string, params: unknown[]): Promise<{ rows: Row[]; fields?: readonly { name: string; dataTypeID: number }[] }>;
     /** Closes the connection. */
     end(): Promise<void>;
 }
 
 /** A data port over a connected client or pool. It does not close it: the host owns it. */
 export function pgDataPort(client: Pick<PgClientLike, 'query'>): DataPort {
-    return wrapQuery((text, params) => client.query(text, params));
+    return wrapQuery(async (text, params) => datesAsText(await client.query(text, params)));
+}
+
+/** The type ids of Postgres `date` and `date[]`. */
+const PG_DATE_TYPES = new Set([1082, 1182]);
+
+/**
+ * `pg` turns a `date` column into a `Date` at local midnight, so in a time zone east of UTC its UTC
+ * date is the day before. Minab reads a `DATE` as "YYYY-MM-DD" text (spec §7.2): this gives back the
+ * date the database sent, from the local fields. Only columns whose type is `date` are changed
+ * (from `fields`), never a `timestamp`. A row that already has text is left as it is.
+ */
+export function datesAsText<R extends { rows: Row[]; fields?: readonly { name: string; dataTypeID: number }[] }>(result: R): R {
+    const names = (result.fields ?? []).filter(f => PG_DATE_TYPES.has(f.dataTypeID)).map(f => f.name);
+    if (names.length === 0) return result;
+    const text = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(text);
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) return value;
+        const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+        return `${pad(value.getFullYear(), 4)}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+    };
+    for (const row of result.rows) for (const name of names) row[name] = text(row[name]);
+    return result;
 }
 
 /** A connection lent by a pool: `query`, and `release` to give it back. */
@@ -60,7 +82,7 @@ export function pgWritePort(clientOrPool: PgQueryable | PgPoolLike): WritePort {
         async transaction(work) {
             const pooled = isPool(clientOrPool) ? await clientOrPool.connect() : undefined;
             const client: PgQueryable = pooled ?? (clientOrPool as PgQueryable);
-            const query = (text: string, params: unknown[]) => client.query(text, params) as Promise<WriteQueryResult>;
+            const query = async (text: string, params: unknown[]) => datesAsText(await client.query(text, params)) as WriteQueryResult;
             // A connection that failed to roll back is broken: the pool must drop it, not lend it again.
             let broken: unknown;
             try {

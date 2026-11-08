@@ -118,6 +118,7 @@ import {
     negate,
     normalizeIn,
     NumberError,
+    toBig,
     toNumeric,
     type Arithmetic,
     type Numeric
@@ -379,7 +380,18 @@ export class MinabInterpreter {
             if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
         }
         if (!model.tail) return null;
-        return externalize(await this.mainStatement(model.tail, state));
+        return externalize(this.asResultType(model.tail, await this.mainStatement(model.tail, state)));
+    }
+
+    /**
+     * A `DECIMAL` result is a decimal, also when the branch it came from gave an `INTEGER`
+     * (`if … { 1 } else { 2.5 }`, `COALESCE(.qty, .price)`). So it leaves the run as text, as
+     * every `DECIMAL` does (spec §7.2).
+     */
+    private asResultType(tail: MainStatement, value: MinabValue): MinabValue {
+        if (typeof value !== 'number' || isQuery(tail)) return value;
+        const type = this.staticScalar(tail);
+        return type?.base === 'DECIMAL' && !type.array ? (toBig(value) ?? value) : value;
     }
 
     /**
@@ -960,12 +972,7 @@ export class MinabInterpreter {
             at: async (expr, element, index) =>
                 await this.expression(expr, state.push({ record: element as Row, table: undefined, variables: new Map(), types: new Map(), index })),
             truthy: value => this.truthy(value),
-            arithmetic: (operator, current, value) =>
-                operator === '+' && this.isTextAssign(current, value, undefined)
-                    ? current === null || value === null
-                        ? null
-                        : String(current) + String(value)
-                    : arithmetic(operator, this.number(current), this.number(value)),
+            arithmetic: (operator, current, value) => this.compound(operator, current, value),
             merge: (current, value) => this.merge(current, value)
         };
     }
@@ -1120,17 +1127,19 @@ export class MinabInterpreter {
             const value = await this.expression(statement.value, state);
             if (operator === '=') next = value;
             else if (operator === '|=') next = this.merge(current, value);
-            else if (operator === '+=' && this.isTextAssign(current, value, type))
-                next = current === null || value === null ? null : String(current) + String(value);
-            else next = arithmetic(operator.slice(0, 1) as Arithmetic, this.number(current), this.number(value));
+            else next = this.compound(operator.slice(0, 1) as '+' | '-' | '*' | '/', current, value);
         }
         frame.variables.set(name, type ? this.coerce(type, next) : next);
     }
 
-    /** `+=` joins texts (D13). With two `null`s, the declared type decides. */
-    private isTextAssign(current: MinabValue, value: MinabValue, type: Type | undefined): boolean {
-        if (typeof current === 'string' || typeof value === 'string') return true;
-        return current === null && value === null && type !== undefined && isTypeRef(type) && !type.array && (type.base === 'TEXT' || type.base === 'CITEXT');
+    /**
+     * `x += v` is `x = x + v` (spec §9.3), and `SET { k +: v }` is the same on a field: a `null` on
+     * either side gives `null` (D46), and `+` joins texts (D13).
+     */
+    private compound(operator: '+' | '-' | '*' | '/', current: MinabValue, value: MinabValue): MinabValue {
+        if (current === null || value === null) return null;
+        if (operator === '+' && (typeof current === 'string' || typeof value === 'string')) return String(current) + String(value);
+        return arithmetic(operator, this.number(current), this.number(value));
     }
 
     /** `|=` on a `JSON` local: the keys of the object on the right replace or join the keys on the left. A `null` is an empty object. */

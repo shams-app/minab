@@ -143,6 +143,38 @@ describe('calendar functions', () => {
     });
 });
 
+describe('a DATE that arrives as a Date (V4, spec §7.2)', () => {
+    // Before V4 a `Date` object was never read as a date, so every comparison with it was false.
+    const record = { id: 1, due_date: new Date(Date.UTC(2026, 9, 2)), day: '2026-10-02', opens: '09:00' };
+
+    test('is read as its UTC date, so it compares with other dates', async () => {
+        expect(await value('.due_date == .day', AT, 'UTC', record)).toBe(true);
+        expect(await value('.due_date < CAST("2026-10-03" AS DATE)', AT, 'UTC', record)).toBe(true);
+        expect(await value('.due_date', AT, 'Asia/Tehran', record)).toBe('2026-10-02');
+    });
+
+    test('a list of rows from the data port is read the same way', async () => {
+        const rows = [{ id: 1, due_date: new Date(Date.UTC(2026, 9, 2)) }];
+        const data: DataPort = { execute: async () => rows };
+        let seen = 0;
+        const loop = await minab.prepare('let n: INTEGER = 0;\nloop i in #Invoice {\n    if! i.due_date == CAST("2026-10-02" AS DATE) { n += 1; }\n}\nn');
+        expect(loop.diagnostics).toEqual([]);
+        const result = await loop.run(
+            { record },
+            {
+                data: {
+                    execute: async (q, context) => {
+                        seen++;
+                        return data.execute(q, context);
+                    }
+                }
+            }
+        );
+        expect(result).toMatchObject({ ok: true, value: 1 });
+        expect(seen).toBeGreaterThan(0);
+    });
+});
+
 describe('the clock of a run', () => {
     test('TODAY depends on the time zone', async () => {
         expect(await value('TODAY()', '2026-03-20T21:00:00Z', 'Asia/Tehran')).toBe('2026-03-21');

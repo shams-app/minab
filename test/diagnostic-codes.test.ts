@@ -188,7 +188,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.unknownAlias': { via: 'validator', program: '#Nope' },
     'scope.unknownColumn': { via: 'validator', program: 'FROM Order SELECT .bogus' },
     'scope.unknownName': { via: 'checker', program: 'x + 1', target: ofType('NameRef') },
-    'scope.unknownTable': { via: 'checker', program: 'FROM Nope SELECT 1', target: ofType('TableRef') },
+    'scope.unknownTable': { via: 'validator', program: 'FROM Nope' },
 
     'syntax.incompleteExpression': { via: 'validator', program: '.id >' },
     'syntax.lexer': { via: 'validator', program: '@@@' },
@@ -197,7 +197,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.arithmeticNeedsNumeric': { via: 'validator', program: '1 + true' },
     'type.assignMismatch': { via: 'validator', program: 'let n: INTEGER = 1;\nn = "x";' },
     'type.assignNeedsNumericTarget': { via: 'validator', program: 'let t: TEXT = "a";\nt -= 1;' },
-    'type.blockNoValue': { via: 'checker', program: 'if true { }', target: ofType('IfExpr') },
+    'type.blockNoValue': { via: 'validator', program: 'if true { }' },
     'type.cannotDetermine': { via: 'checker', program: 'FROM Nope AS n SELECT n', target: ofType('NameRef') },
     'type.cannotInfer': { via: 'guard' },
     'type.collectionAsGroupKey': { via: 'validator', program: 'FROM Customer GROUPBY .orders SELECT KEY' },

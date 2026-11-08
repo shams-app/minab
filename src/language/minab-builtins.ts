@@ -116,8 +116,11 @@ export interface SqlArg extends BuiltinArgInfo {
     sql: string;
 }
 
-/** How an aggregate or predicate looks in SQL. */
-export type SqlAggregate = { shape: 'exists' } | { shape: 'count' } | { shape: 'column'; fn: string } | { shape: 'none' };
+/**
+ * How an aggregate or predicate looks in SQL. `every` and `some` test a boolean column of the
+ * collection (`ALL(.orders.paid)`): a `null` counts as not true, as in the interpreter.
+ */
+export type SqlAggregate = { shape: 'exists' } | { shape: 'count' } | { shape: 'column'; fn: string } | { shape: 'every' } | { shape: 'some' };
 
 /** A runtime problem in a built-in (for example a negative length). The interpreter turns it into an evaluation error. */
 export class BuiltinError extends Error {}
@@ -353,12 +356,8 @@ const AGGREGATES: BuiltinSignature[] = [
         kind: 'aggregate',
         params: [{ kind: 'orderableCollection' }],
         returns: ([arg]) => elementType(arg)!,
-        evaluate: args =>
-            items(args).length === 0
-                ? null
-                : items(args)
-                      .map(number)
-                      .reduce((a, b) => (compareNumbers(b, a) < 0 ? b : a)),
+        // Like SQL: any orderable type (numbers, text, dates), and a `null` is skipped. No value at all is `null`.
+        evaluate: args => extreme(items(args), -1),
         sqlAggregate: { shape: 'column', fn: 'MIN' }
     },
     {
@@ -366,12 +365,7 @@ const AGGREGATES: BuiltinSignature[] = [
         kind: 'aggregate',
         params: [{ kind: 'orderableCollection' }],
         returns: ([arg]) => elementType(arg)!,
-        evaluate: args =>
-            items(args).length === 0
-                ? null
-                : items(args)
-                      .map(number)
-                      .reduce((a, b) => (compareNumbers(b, a) > 0 ? b : a)),
+        evaluate: args => extreme(items(args), 1),
         sqlAggregate: { shape: 'column', fn: 'MAX' }
     },
     {
@@ -388,7 +382,7 @@ const AGGREGATES: BuiltinSignature[] = [
         params: [{ kind: 'booleanCollection' }],
         returns: () => scalarType('BOOLEAN'),
         evaluate: args => items(args).every(truthy),
-        sqlAggregate: { shape: 'none' }
+        sqlAggregate: { shape: 'every' }
     },
     {
         name: 'ANY',
@@ -396,7 +390,7 @@ const AGGREGATES: BuiltinSignature[] = [
         params: [{ kind: 'booleanCollection' }],
         returns: () => scalarType('BOOLEAN'),
         evaluate: args => items(args).some(truthy),
-        sqlAggregate: { shape: 'none' }
+        sqlAggregate: { shape: 'some' }
     }
 ];
 
