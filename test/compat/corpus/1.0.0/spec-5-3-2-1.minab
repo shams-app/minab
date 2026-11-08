@@ -1,0 +1,1 @@
+LOG(COUNT(.orders[.status == "cancelled"]), "cancelled") < 5

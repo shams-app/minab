@@ -1,0 +1,6 @@
+fn processOrder(orderId: UUID): BOOLEAN {
+    let valid: BOOLEAN = (
+        FROM Order WHERE .id == orderId SELECT .status == "pending"
+    );
+    valid
+}

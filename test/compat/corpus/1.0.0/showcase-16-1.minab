@@ -1,0 +1,4 @@
+FROM سفارش
+WHERE .وضعیت == "ارسال‌شده" AND .مبلغ > 100
+SELECT .مبلغ AS مبلغ_کل
+ORDERBY .مبلغ DESC

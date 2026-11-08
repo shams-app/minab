@@ -1,0 +1,13 @@
+// A first pipeline query (spec §4, showcase §3): shipped US orders with the
+// customer's name, biggest first. `.customer.name` walks a `ref` — no JOIN
+// written in the source.
+//
+//   minab check first-query.minab
+//   minab compile first-query.minab
+//   minab run first-query.minab
+
+FROM Order
+WHERE .status == "shipped" AND .customer.country == "US"
+SELECT .id, .total, .customer.name AS customer_name
+ORDERBY .total DESC
+LIMIT 20

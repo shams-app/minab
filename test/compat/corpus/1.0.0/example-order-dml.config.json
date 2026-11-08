@@ -1,0 +1,26 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Customer",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "country": "TEXT?",
+          "checked": "BOOLEAN",
+          "points": "INTEGER"
+        }
+      },
+      {
+        "name": "Archive",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "country": "TEXT?",
+          "checked": "BOOLEAN",
+          "points": "INTEGER"
+        }
+      }
+    ]
+  }
+}

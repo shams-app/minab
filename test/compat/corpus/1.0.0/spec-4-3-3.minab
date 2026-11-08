@@ -1,0 +1,2 @@
+FROM Order
+SELECT DISTINCT .customer.country

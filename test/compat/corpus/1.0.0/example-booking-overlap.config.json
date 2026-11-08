@@ -1,0 +1,26 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Booking",
+        "primaryKey": "id",
+        "columns": {
+          "id": "UUID",
+          "room_id": "UUID",
+          "start_date": "DATE",
+          "end_date": "DATE"
+        }
+      }
+    ]
+  },
+  "rule": { "recordTable": "Booking" },
+  "record": {
+    "id": "b-1",
+    "room_id": "room-7",
+    "start_date": "2026-10-01",
+    "end_date": "2026-10-05"
+  },
+  "data": {
+    "responses": [{ "match": "EXISTS", "value": false }]
+  }
+}
