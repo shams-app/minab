@@ -6,12 +6,15 @@
  *
  * - `DataPort`: SQL text and parameters (D28).
  * - `WritePort`: one transaction for the writes of a run (X5). The Node adapters are in `src/node/`.
+ * - `DirectoryPort`: the workspace's users and groups (MN.2, P11).
  * - `HostFunctions`: the host's implementation of the functions it declared (D27).
  * - `ClockPort`: the instant of the run and the time zone.
  * - `EventSink`: one stream for statements, logs and timing (D33).
  */
 
 import type { Row, SqlQuery } from '../language/minab-executor.js';
+import type { DirectoryRuntime } from '../language/directory-values.js';
+import type { DirectorySchema } from '../language/schema.js';
 import type { SourceRange } from './types.js';
 
 /**
@@ -35,6 +38,75 @@ export interface DataPort {
     /** Runs one statement and returns its rows. Pass `context.signal` to the driver when it can cancel. */
     execute(query: SqlQuery, context: DataContext): Promise<Row[]>;
 }
+
+// ---- directory -----------------------------------------------------------
+
+/** What the runtime gives to every directory port call. A port should pass the signal to its driver when it can. */
+export interface DirectoryContext {
+    signal: AbortSignal;
+}
+
+/** What a route call gets: how many route calls are open around it (the first one is `0`). A host that runs a route body passes it on. */
+export interface RouteContext extends DirectoryContext {
+    depth: number;
+}
+
+/**
+ * A user as the directory gives it: `id` and `name`, and a column for each of `schema()`.
+ * A person who left the workspace keeps `id` and `name`; every other column is `null` (P10).
+ */
+export type DirectoryUser = Row & { id: string; name: string | null };
+
+/** A group as the directory gives it: `id`, `name` and `tags`. */
+export type DirectoryGroup = Row & { id: string; name: string; tags: string[] };
+
+/** The text of a filter over `@@everyone` (`.city == 'Marand'`), for a host that can answer it faster than a full list. */
+export interface DirectoryFilter {
+    source: string;
+}
+
+/**
+ * The workspace's users and groups, seen from Minab (P11). A set of users stays a tree in the interpreter and asks
+ * the port only what the program needs: `u IN A + B` is `isMember` for each side, and `members` is read only to
+ * list a set (`COUNT`, a loop, a result, `single`), at most `limits.maxUsers` users. Minab never opens a connection.
+ */
+export interface DirectoryPort {
+    /** One answer for each id, in any order. An id the directory does not know has `name: null` and no other column (P10). */
+    resolveUsers(ids: string[], context: DirectoryContext): Promise<DirectoryUser[]>;
+    /** The id of the user with this id, e-mail or phone (normalized like sign-in), or `null`. */
+    findUser(key: string, context: DirectoryContext): Promise<string | null>;
+    /** The group with this name, or `null`. */
+    findGroup(name: string, context: DirectoryContext): Promise<DirectoryGroup | null>;
+    /** One page of the member ids of a group, nested groups flattened. `next` is the cursor of the next page. */
+    members(groupId: string, cursor: string | undefined, context: DirectoryContext): Promise<{ ids: string[]; next?: string }>;
+    /** Is the user in the group, directly or through nesting? Someone who left is in no group. */
+    isMember(userId: string, groupId: string, context: DirectoryContext): Promise<boolean>;
+    /** The groups the user is in, directly or through nesting. */
+    groupsOf(userId: string, context: DirectoryContext): Promise<DirectoryGroup[]>;
+    /** Runs the route `name` for one user: the ids of the users it answers (a `USER?` route answers none or one). */
+    callRoute(name: string, userId: string, context: RouteContext): Promise<string[]>;
+    /** Optional. The members of `@@everyone` that match a filter, at most `limit`; `null` when the port cannot tell. Without it the interpreter lists `everyone` and filters. */
+    findUsers?(filter: DirectoryFilter, limit: number, context: DirectoryContext): Promise<DirectoryUser[] | null>;
+    /** The columns of `USER` and `GROUP`, for the host's schema. */
+    schema(): DirectorySchema;
+}
+
+/** The default directory port: it refuses. A host gives a real one to run programs that read users and groups. */
+export const NO_DIRECTORY_PORT: DirectoryPort = (() => {
+    const refuse = (): never => {
+        throw new PortError('eval.failed', 'this program reads users and groups, and the run has no directory port');
+    };
+    return {
+        resolveUsers: refuse,
+        findUser: refuse,
+        findGroup: refuse,
+        members: refuse,
+        isMember: refuse,
+        groupsOf: refuse,
+        callRoute: refuse,
+        schema: () => ({})
+    };
+})();
 
 // ---- write ---------------------------------------------------------------
 
@@ -78,7 +150,14 @@ export const REFUSING_WRITE_PORT: WritePort = {
 /** Implemented by the host, given per run. The declarations (names and types) go to `createMinab`. */
 export interface HostFunctions {
     /** Runs the host function `name`. The runtime checks the argument count and the types of the result. */
-    call(name: string, args: unknown[], context: { signal: AbortSignal }): unknown | Promise<unknown>;
+    call(name: string, args: unknown[], context: HostCallContext): unknown | Promise<unknown>;
+}
+
+/** What a host function gets with each call. */
+export interface HostCallContext {
+    signal: AbortSignal;
+    /** The run's view of the directory (MN.2): the directory host functions read special users and list sets through it. */
+    directory?: DirectoryRuntime;
 }
 
 // ---- clock ---------------------------------------------------------------

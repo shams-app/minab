@@ -40,6 +40,7 @@ import {
     isFieldValue,
     isFilterAccess,
     isGroupKeyRef,
+    isGroupRef,
     isIfExpr,
     isInsertStatement,
     isJsonObjectLiteral,
@@ -52,6 +53,7 @@ import {
     isParentRecord,
     isQuery,
     isStringLiteral,
+    isSpecialUserRef,
     isSubquery,
     isSwitchExpr,
     isTableRef,
@@ -86,7 +88,7 @@ import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, ty
 import type { SqlQuery } from './minab-executor.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { jsonNumber, sqlParameter } from './values.js';
-import { NUMERIC_BASES, type LogicalTypeBase } from './minab-types.js';
+import { isDirectoryTable, NUMERIC_BASES, type LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
 import { AstUtils } from 'langium';
@@ -1192,6 +1194,8 @@ export class MinabSqlCompiler {
         // Only the node right under `condition` (or under `AND`/`OR` there) is in a truth position.
         const truth = ctx.truthPosition;
         ctx.truthPosition = false;
+        const directory = this.directoryPart(expr);
+        if (directory) failCoded('compile.directoryInSql', { part: directory });
         if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes, truth);
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
         if (isNumberLiteral(expr)) return ctx.bind(this.numberLiteralValue(expr), true);
@@ -1247,6 +1251,33 @@ export class MinabSqlCompiler {
             fail(`"${expr.$type}" refers to a record, not a value — use one of its fields`);
         }
         fail(`"${expr.$type}" has no SQL form (it belongs to the interpreted layer)`);
+    }
+
+    /**
+     * The text of a part that reads users or groups, which a query cannot do yet (P11; MN.4 lets through the parts that
+     * do not depend on the row). A special user, a group, `!`, `&` and `|` always do. `+`, `-` and `IN` do when an
+     * operand is a user or a set, and so does a read of a user column or of a column of a user.
+     */
+    private directoryPart(expr: Expression): string | undefined {
+        const text = expr.$cstNode?.text ?? 'this part';
+        if (isSpecialUserRef(expr) || isGroupRef(expr)) return text;
+        if (isUnaryExpression(expr)) return expr.operator === '!' ? text : undefined;
+        const readsDirectory = (operand: Expression): boolean => {
+            try {
+                const inferred = this.typeChecker?.inferType(operand);
+                return !!inferred?.ok && (inferred.type.kind === 'record' || inferred.type.kind === 'collection') && isDirectoryTable(inferred.type.table);
+            } catch {
+                return false;
+            }
+        };
+        if (isBinaryExpression(expr)) {
+            if (expr.operator === '&' || expr.operator === '|') return text;
+            if (['+', '-', 'IN'].includes(expr.operator) && (readsDirectory(expr.left) || readsDirectory(expr.right))) return text;
+            return undefined;
+        }
+        if (isMemberAccess(expr)) return readsDirectory(expr.receiver) || readsDirectory(expr) ? text : undefined;
+        if (isCurrentRecord(expr) && expr.field) return readsDirectory(expr) ? text : undefined;
+        return undefined;
     }
 
     // ---- if, switch, is, JSON literals (spec §5.6, §7.3, §9) -------------
@@ -1971,6 +2002,7 @@ export class MinabSqlCompiler {
         if (!owner) fail(`"${field}" has no owning row here`);
         const column = this.columnSchema(this.tableOf(owner), field);
         if (column.type.kind !== 'collection') fail(`"${field}" is not a to-many relation`);
+        if (isDirectoryTable(column.type.table)) failCoded('compile.directoryInSql', { part: `.${field}` });
         const foreignKey = column.type.foreignKey;
         if (!foreignKey) {
             fail(
@@ -2018,6 +2050,8 @@ export class MinabSqlCompiler {
 
     private refForeignKey(table: string, column: MinabColumnSchema): string {
         if (column.type.kind !== 'ref') fail(`"${column.name}" is not a relation`);
+        // A user column is read from the directory, not joined (P10, P11).
+        if (isDirectoryTable(column.type.table)) failCoded('compile.directoryInSql', { part: `.${column.name}` });
         const foreignKey = column.type.foreignKey;
         if (!foreignKey) {
             fail(`the schema does not say which column on "${table}" holds the "${column.name}" reference (set foreignKey)`);

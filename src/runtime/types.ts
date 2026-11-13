@@ -9,7 +9,7 @@
 import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 import type { SqlQuery } from '../language/minab-executor.js';
 import type { HostFunctionDeclaration, HostInputType } from '../language/host-declarations.js';
-import type { ClockPort, DataPort, EventSink, HostFunctions, WritePort } from './ports.js';
+import type { ClockPort, DataPort, DirectoryPort, EventSink, HostFunctions, WritePort } from './ports.js';
 import type { Limits } from './limits.js';
 import type { ProgramKind } from './program-kind.js';
 
@@ -64,6 +64,11 @@ export interface MinabOptions {
     limits?: Partial<Limits>;
     /** How many service sets to keep, least recently used out. Default 16. */
     serviceCacheSize?: number;
+    /**
+     * `true`: the host's directory port answers in the browser with no round trip (a fixture), so a program that reads
+     * users and groups can stay tier `local`. Default `false`: such a program is tier `data` (P11).
+     */
+    localDirectory?: boolean;
     /** `development` re-checks the grammar on every parser build and is slow. Default `production`. */
     mode?: 'development' | 'production';
 }
@@ -103,6 +108,12 @@ export interface RunInputs {
      * An empty list is a valid group. A group expression run without it is the run error `eval.failed`.
      */
     groupRows?: Record<string, unknown>[];
+    /**
+     * The user ids of the special users of this run (`@currentUser`), one for each name the host declared:
+     * `{ currentUser: 'usr_1', flowStarter: null }`. `null` is allowed for a `USER?`. A name left out is the
+     * run error `eval.missingInput` when the program reads it.
+     */
+    specialUsers?: Record<string, string | null>;
 }
 
 /** Asked, never given: what the program needs from outside (ADR 0002, section 4). */
@@ -112,6 +123,8 @@ export interface RunPorts {
     /** Needed to apply writes (`writes: 'apply'`). Without it, applying fails with `eval.writesNotSupported`. A dry run needs no port. */
     write?: WritePort;
     hostFunctions?: HostFunctions;
+    /** The workspace's users and groups. Without it, a program that reads them fails with `eval.failed`. */
+    directory?: DirectoryPort;
     /** Default: the system clock, in UTC. Read once for each run. */
     clock?: ClockPort;
     events?: EventSink;
@@ -231,6 +244,8 @@ export interface ProgramAnalysis {
     userFunctions: string[];
     /** Built-in functions called. */
     builtins: string[];
+    /** The program reads users or groups (`@name`, `@@name`, a user column, a directory host function). It needs the directory port. */
+    usesDirectory: boolean;
     /** The program can reach the data port. `false`: a run never calls it. */
     needsData: boolean;
     /** The program has INSERT, UPDATE or DELETE, or assigns to a record path. */

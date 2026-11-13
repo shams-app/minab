@@ -110,6 +110,7 @@ const CASES: Record<DiagnosticCode, Case> = {
 
     'compat.newerLanguage': { via: 'runtime' }, // test/compat/compat.test.ts
     'compat.noMigration': { via: 'runtime' }, // test/compat/compat.test.ts
+    'compile.directoryInSql': { via: 'runtime' }, // needs a directory: test/users-eval.test.ts (MN.2)
     'compile.hostFunctionInSql': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'compile.notGroupExpression': { via: 'runtime' }, // test/sql-compilation.test.ts (P2)
     'compile.nothingToCompile': { via: 'runtime' }, // test/runtime.test.ts
@@ -129,13 +130,18 @@ const CASES: Record<DiagnosticCode, Case> = {
     'eval.castFailed': { via: 'evaluation', program: 'CAST("12a" AS INTEGER)' },
     'eval.divisionByZero': { via: 'evaluation', program: '1 / 0' },
     'eval.failed': { via: 'runtime' }, // test/run-errors.test.ts
+    'eval.groupNotFound': { via: 'runtime' }, // needs a directory: test/users-eval.test.ts (MN.2)
     'eval.hostFunctionFailed': { via: 'runtime' }, // needs host declarations: test/run-errors.test.ts
     'eval.hostFunctionMissing': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.hostFunctionResult': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
     'eval.integerOutOfRange': { via: 'evaluation', program: '9007199254740991 + 1' },
     'eval.indexNeedsArray': { via: 'runtime' }, // test/loops.test.ts
     'eval.missingInput': { via: 'runtime' }, // needs host declarations: test/ports.test.ts
+    'eval.notExactlyOne': { via: 'runtime' }, // needs a directory: test/users-eval.test.ts (MN.2)
     'eval.programInvalid': { via: 'runtime' }, // test/runtime.test.ts
+    'eval.routeCycle': { via: 'runtime' }, // needs a directory: test/directory-functions.test.ts (MN.2)
+    'eval.tooManyUsers': { via: 'runtime' }, // needs a directory: test/users-eval.test.ts (MN.2)
+    'eval.userNotFound': { via: 'runtime' }, // needs a directory: test/directory-functions.test.ts (MN.2)
     'eval.writeModeMissing': { via: 'runtime' }, // test/writes.test.ts
     'eval.writesNotSupported': { via: 'runtime' }, // test/ports.test.ts
 

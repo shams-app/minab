@@ -62,7 +62,8 @@
                 "loopIterations": { "type": "number", "exclusiveMinimum": 0 },
                 "callDepth": { "type": "number", "exclusiveMinimum": 0 },
                 "logEntries": { "type": "number", "exclusiveMinimum": 0 },
-                "batchRuns": { "type": "number", "exclusiveMinimum": 0 }
+                "batchRuns": { "type": "number", "exclusiveMinimum": 0 },
+                "maxUsers": { "type": "number", "exclusiveMinimum": 0 }
               },
               "additionalProperties": false
             },
