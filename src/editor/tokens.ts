@@ -74,6 +74,8 @@ export const TYPE_KEYWORDS = [
     'DATETIME',
     'UUID',
     'JSON',
+    'USER',
+    'USERGROUP',
     'array',
     'object',
     'string',
@@ -185,7 +187,8 @@ const OPERATORS = [
     '!',
     '?',
     ':',
-    '|'
+    '|',
+    '&'
 ];
 
 /**
@@ -275,6 +278,16 @@ export function tokenizeLine(line: string, state: LineState): { tokens: Token[];
             IDENT.lastIndex = i + 1;
             const m = IDENT.exec(line);
             const end = m ? i + 1 + m[0].length : i + 1;
+            push('sigil.alias', i, end);
+            i = end;
+            continue;
+        }
+        if (ch === '@') {
+            // `@currentUser` and `@@Sales` name a special user and a group, like `#Table` names a table: one token with its name.
+            const sigil = line.startsWith('@@', i) ? 2 : 1;
+            IDENT.lastIndex = i + sigil;
+            const m = IDENT.exec(line);
+            const end = m ? i + sigil + m[0].length : i + sigil;
             push('sigil.alias', i, end);
             i = end;
             continue;

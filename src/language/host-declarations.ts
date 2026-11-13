@@ -10,7 +10,17 @@
 import { AstUtils, GrammarAST } from 'langium';
 import { MinabGrammar } from './generated/grammar.js';
 import { DateError, parseDate, parseInstant, parseTime, normalizeDateTime } from './dates.js';
-import { scalarType, type LogicalTypeBase, type MinabType, type ScalarType } from './minab-types.js';
+import {
+    groupType,
+    GROUP_TABLE,
+    scalarType,
+    USERGROUP_TYPE,
+    USER_LIST_TYPE,
+    userType,
+    type LogicalTypeBase,
+    type MinabType,
+    type ScalarType
+} from './minab-types.js';
 import { Big, normalizeIn, NumberError } from './values.js';
 import type { MinabColumnSchema, MinabSchema, MinabTableSchema } from './schema.js';
 
@@ -19,7 +29,10 @@ export interface HostFunctionDeclaration {
     /** Needs a lowercase letter (D10), for example `fxRate`. */
     name: string;
     params: { name: string; type: string }[];
-    /** A Minab type word, for example `DECIMAL` or `TEXT[]`. */
+    /**
+     * A Minab type word, for example `DECIMAL` or `TEXT[]`. A function may also take and return users and groups:
+     * `USER`, `USER?`, `USER[]`, `USERGROUP`, `GROUP`, `GROUP?` and `GROUP[]` (the directory record types).
+     */
     returns: string;
     /** `true`: safe to run in the browser. Default `false`: a program using it needs the server. */
     local?: boolean;
@@ -36,8 +49,8 @@ export interface HostDeclarations {
 
 export interface ResolvedHostFunction {
     name: string;
-    params: { name: string; type: ScalarType }[];
-    returns: ScalarType;
+    params: { name: string; type: MinabType }[];
+    returns: MinabType;
     local: boolean;
 }
 
@@ -72,6 +85,28 @@ export function parseTypeWord(word: string): ScalarType | undefined {
     return scalarType(match[1] as LogicalTypeBase, { nullable: match[2] === '?', array: match[3] === '[]', arrayNullable: match[4] === '?' });
 }
 
+/** The words a host function may use for users and groups (the directory record types). */
+const DIRECTORY_WORDS: Readonly<Record<string, MinabType>> = {
+    USER: userType(false),
+    'USER?': userType(true),
+    'USER[]': USER_LIST_TYPE,
+    USERGROUP: USERGROUP_TYPE,
+    GROUP: groupType(false),
+    'GROUP?': groupType(true),
+    'GROUP[]': { kind: 'collection', table: GROUP_TABLE }
+};
+
+/** The type of a host function's parameter or result: a scalar word, or a word for users and groups. */
+function functionTypeWord(word: unknown, where: string): MinabType {
+    if (typeof word === 'string' && Object.hasOwn(DIRECTORY_WORDS, word)) return DIRECTORY_WORDS[word];
+    if (typeof word === 'string' && /^(USER|USERGROUP|GROUP)\b/.test(word)) {
+        throw new HostDeclarationError(
+            `${where}: "${word}" is not a Minab type. For users and groups use USER, USER?, USER[], USERGROUP (a group is never null), GROUP, GROUP? or GROUP[].`
+        );
+    }
+    return typeWord(word, where);
+}
+
 function typeWord(word: unknown, where: string): ScalarType {
     const type = typeof word === 'string' ? parseTypeWord(word) : undefined;
     if (!type) {
@@ -84,13 +119,19 @@ function typeWord(word: unknown, where: string): ScalarType {
 
 let grammarKeywords: ReadonlySet<string> | undefined;
 
-/** Every word keyword of the grammar (`from`, `loop`, `FROM`, ...). Taken from the generated grammar, so a new keyword is covered. */
+/**
+ * Type words that are keywords of the grammar but still names: the rule `Name` accepts them, so a Minab 1.0 program
+ * that has a column, a `let` or a table called `USER` keeps its meaning.
+ */
+const KEYWORDS_THAT_ARE_NAMES: ReadonlySet<string> = new Set(['USER', 'USERGROUP']);
+
+/** Every word keyword of the grammar that a program cannot use as a name (`from`, `loop`, `FROM`, ...). Taken from the generated grammar, so a new keyword is covered. */
 export function keywordsOfGrammar(): ReadonlySet<string> {
     grammarKeywords ??= new Set(
         AstUtils.streamAst(MinabGrammar())
             .filter(GrammarAST.isKeyword)
             .map(k => k.value)
-            .filter(word => NAME.test(word))
+            .filter(word => NAME.test(word) && !KEYWORDS_THAT_ARE_NAMES.has(word))
     );
     return grammarKeywords;
 }
@@ -128,12 +169,12 @@ export function resolveHostDeclarations(declarations: HostDeclarations | undefin
         const params = declaration.params.map(param => {
             if (seen.has(param.name)) throw new HostDeclarationError(`host function "${name}": the parameter "${param.name}" is declared twice.`);
             seen.add(param.name);
-            return { name: param.name, type: typeWord(param.type, `host function "${name}", parameter "${param.name}"`) };
+            return { name: param.name, type: functionTypeWord(param.type, `host function "${name}", parameter "${param.name}"`) };
         });
         functions.set(name, {
             name,
             params,
-            returns: typeWord(declaration.returns, `host function "${name}", return type`),
+            returns: functionTypeWord(declaration.returns, `host function "${name}", return type`),
             local: declaration.local ?? false
         });
     }
@@ -211,7 +252,9 @@ function hostScalar(value: unknown, base: LogicalTypeBase): unknown {
  * whether `null` is allowed (for a list: the list and each item). `undefined` counts as `null`.
  * It gives the value in the form the interpreter keeps, or `{ ok: false }` when the value is not of the type.
  */
-export function checkHostResult(value: unknown, type: ScalarType): { ok: true; value: unknown } | { ok: false } {
+export function checkHostResult(value: unknown, type: MinabType): { ok: true; value: unknown } | { ok: false } {
+    // A function that returns users or groups runs with the directory port (MN.2). Until then its result is refused.
+    if (type.kind !== 'scalar') return { ok: false };
     if (value === undefined || value === null) return (type.array ? type.arrayNullable : type.nullable) ? { ok: true, value: null } : { ok: false };
     if (!type.array) {
         const checked = hostScalar(value, type.base);

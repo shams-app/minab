@@ -40,7 +40,9 @@ A name, table, column or sigil cannot be found.
 | `scope.noStaticTable` | error | no statically known table at this point | none | The checker cannot tell which table this refers to. Open the table explicitly, for example with #Table. |
 | `scope.unknownAlias` | error | unknown table or scope "#{name}" | `name` | No table or alias has this name. Fix the name, or declare the alias with FROM or JOIN. |
 | `scope.unknownColumn` | error | unknown column "{column}" on table "{table}" | `column`, `table` | The table has no column with this name. Fix the name, or ask the host to add the column to the schema. |
+| `scope.unknownGroup` | error | unknown group "@@{name}": did you mean {suggestions}? | `name`, `suggestions` | The workspace has no group with this name. Fix the name, or ask an admin to create the group. |
 | `scope.unknownName` | error | unknown name "{name}" | `name` | No variable, parameter, loop variable or alias has this name in scope. Declare it first, or fix the name. |
+| `scope.unknownSpecialUser` | error | unknown special user "@{name}" here: did you mean {suggestions}? | `name`, `suggestions` | This place does not have a special user with this name. Use one that the host lists for this place, for example @currentUser. |
 | `scope.unknownTable` | error | unknown table "{name}" | `name` | The schema has no table with this name. Fix the name, or ask the host to add the table. |
 
 ## aggregate
@@ -74,6 +76,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.cannotInfer` | error | cannot infer a type for "{nodeType}" | `nodeType` | The checker has no typing rule for this construct. Report it as a Minab bug. |
 | `type.collectionAsGroupKey` | error | a to-many collection can't be used as a GROUPBY key (spec §3.4) | none | A GROUPBY key must be one value per row. Group by a scalar column or a to-one relation instead. |
 | `type.columnNeedsTable` | error | column "{column}" needs a statically known table | `column` | The checker does not know the table of the current record. Open a table first, for example with FROM. |
+| `type.complementNeedsUsers` | error | "!" needs a USERGROUP or a USER, got {actual} | `actual` | The prefix ! gives everyone except the users or the group after it. For a BOOLEAN, write NOT. |
 | `type.conditionNotBoolean` | error | expected a BOOLEAN condition, got {actual} | `actual` | WHERE and HAVING need a BOOLEAN condition. Write a comparison, or CAST the value. |
 | `type.filterOnNonCollection` | error | cannot filter a non-collection value ({actual}) | `actual` | A "[...]" filter works on a collection or an array. Filter one of those. |
 | `type.functionReturnMismatch` | error | function body's result ({actual}) doesn't match its declared return type {expected} (no implicit coercion) | `actual`, `expected` | The last expression of the function has another type than the declared return type. Change one, or use CAST. |
@@ -81,6 +84,7 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.implicitCoercion` | error | "{operator}" between {left} and {right} requires an explicit CAST (no implicit coercion) | `operator`, `left`, `right` | Minab never converts types by itself. Make both sides the same type with CAST. |
 | `type.inCollectionMismatch` | error | "IN" between {left} and a collection of {right} requires matching types (no implicit coercion) | `left`, `right` | The value and the elements of the list must have the same type. Use CAST on one side. |
 | `type.inNeedsCollection` | error | "IN" expects a list or collection on the right, got {actual} | `actual` | The right side of IN must be a list, an array, a collection or a subquery. |
+| `type.inNeedsUser` | error | IN with a USERGROUP needs a USER on the left, got {actual} | `actual` | A group holds users, so only a USER can be in it. Put a USER on the left, for example @currentUser or .owner. To match an id, compare the .id of a user. |
 | `type.inSubqueryMismatch` | error | "IN" between {left} and a subquery of {right} requires matching types (no implicit coercion) | `left`, `right` | The value and the selected column must have the same type. Use CAST on one side. |
 | `type.indexOnNonArray` | error | cannot index a non-array value ({actual}) | `actual` | A position in "[...]" works on an array. Index an array value. |
 | `type.indexOnNonTuple` | error | [{index}] used on a non-tuple, non-array value ({actual}) | `index`, `actual` | A position like [0] works on a tuple or an array. Use it on one of those. |
@@ -99,11 +103,13 @@ A type rule is broken. Minab never converts types by itself (spec §5.5).
 | `type.plusAssignTarget` | error | "+=" requires a numeric or text target, got {actual} | `actual` | The "+=" operator adds numbers or joins text. Use another operator, or change the target type. |
 | `type.positionalIndexOnCollection` | error | a positional index isn't valid on a relational collection — its row order isn't guaranteed without ORDERBY (spec §3.5) | none | A relation has no fixed row order. Use a query with ORDERBY, or filter with a condition. |
 | `type.relationComparedToKey` | error | "{operator}" can't compare a relation with a key — compare {key}, not {operand} | `operator`, `key`, `operand` | A relation (ref) is not compared with a key value. Compare through the key field of the related table, for example .customer.id == x. |
+| `type.setOperandType` | error | "{operator}" combines users and groups, got {left} and {right} | `operator`, `left`, `right` | The operators +, -, & and \| combine USERGROUP, USER and USER? values only. To use an array of users, convert it with CAST(x AS USERGROUP). |
 | `type.switchArmsDiffer` | error | switch arms must agree on type (no implicit coercion) — got {first} and {second} | `first`, `second` | All arms of a switch must give the same type. Change an arm, or use CAST. |
 | `type.tupleIndexOutOfBounds` | error | tuple index {index} out of bounds (tuple has {count} element(s)) | `index`, `count` | The position is larger than the tuple. Use a position from 0 to the last element. |
 | `type.unaryNeedsNumeric` | error | unary "{operator}" requires a numeric operand, got {actual} | `operator`, `actual` | A sign works on INTEGER and DECIMAL. Use a number, or CAST. |
 | `type.unexpectedResultType` | error | the program gives {actual}, but the host expects {expected} | `actual`, `expected` | The host asked for a result of one type, and the last expression has another. Change the expression, or use CAST. |
 | `type.unsupportedOperator` | error | unsupported operator "{operator}" | `operator` | The checker does not know this operator. Report it as a Minab bug. |
+| `type.userComparedToText` | error | "{operator}" cannot compare {left} with {right}: a USER is compared only with a USER (no implicit coercion) | `operator`, `left`, `right` | A USER is a person, not a text. Compare the id text with .id on the user, or compare two users, for example .owner == findUser(id). |
 | `type.vivifyOnCollection` | error | "!" has no use on "{member}": a collection is never null, so there is nothing to create | `member` | The "!" in an assignment path creates a missing ref. A collection is never null (spec §7.7), so "!" on a collection step is an error. Remove the "!". |
 
 ## null

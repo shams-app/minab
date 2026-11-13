@@ -57,14 +57,16 @@ const schema: MinabSchema = {
     ]
 };
 
-type Setting = 'record' | 'customer' | 'plain' | 'fieldWithoutType' | 'group';
+type Setting = 'record' | 'customer' | 'plain' | 'fieldWithoutType' | 'group' | 'users';
 
 const SETTINGS: Record<Setting, MinabRuleContext> = {
     record: { isFieldRule: false, recordTable: 'Order' },
     customer: { isFieldRule: false, recordTable: 'Customer' },
     plain: { isFieldRule: false },
     fieldWithoutType: { isFieldRule: true, recordTable: 'Order' },
-    group: { isFieldRule: false, groupTable: 'Order' }
+    group: { isFieldRule: false, groupTable: 'Order' },
+    // Users and groups (MN.1): one special user and two groups.
+    users: { isFieldRule: false, specialUsers: [{ name: 'currentUser', type: 'USER' }], groupNames: ['Sales', 'Support'] }
 };
 
 /** The first node of the program for which `pick` is true. */
@@ -187,11 +189,13 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.noStaticTable': { via: 'checker', program: 'FROM Order SELECT ^', target: ofType('ParentRecord'), setting: 'plain' },
     'scope.unknownAlias': { via: 'validator', program: '#Nope' },
     'scope.unknownColumn': { via: 'validator', program: 'FROM Order SELECT .bogus' },
+    'scope.unknownGroup': { via: 'validator', program: '@@Slaes', setting: 'users' },
     'scope.unknownName': { via: 'checker', program: 'x + 1', target: ofType('NameRef') },
+    'scope.unknownSpecialUser': { via: 'validator', program: '@flowStarter', setting: 'users' },
     'scope.unknownTable': { via: 'validator', program: 'FROM Nope' },
 
     'syntax.incompleteExpression': { via: 'validator', program: '.id >' },
-    'syntax.lexer': { via: 'validator', program: '@@@' },
+    'syntax.lexer': { via: 'validator', program: '~~~' },
     'syntax.parser': { via: 'validator', program: 'FROM' },
 
     'type.arithmeticNeedsNumeric': { via: 'validator', program: '1 + true' },
@@ -202,6 +206,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.cannotInfer': { via: 'guard' },
     'type.collectionAsGroupKey': { via: 'validator', program: 'FROM Customer GROUPBY .orders SELECT KEY' },
     'type.columnNeedsTable': { via: 'validator', program: 'FROM Nope SELECT .id' },
+    'type.complementNeedsUsers': { via: 'validator', program: '!(1 > 0)', setting: 'users' },
     'type.conditionNotBoolean': { via: 'validator', program: 'FROM Order WHERE .total SELECT .id' },
     'type.filterOnNonCollection': { via: 'validator', program: '1[true]' },
     'type.functionReturnMismatch': { via: 'validator', program: 'fn f(a: INTEGER): INTEGER { "x" }' },
@@ -209,6 +214,7 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.implicitCoercion': { via: 'validator', program: '.status == .total' },
     'type.inCollectionMismatch': { via: 'validator', program: '.total IN [1, 2] AND .status IN [1, 2]' },
     'type.inNeedsCollection': { via: 'validator', program: '.id IN 5' },
+    'type.inNeedsUser': { via: 'validator', program: '"usr_x" IN @@Sales', setting: 'users' },
     'type.inSubqueryMismatch': { via: 'validator', program: '.status IN (FROM Order SELECT .total)' },
     'type.indexOnNonArray': { via: 'validator', program: 'let i: INTEGER = 1;\n.id[i]' },
     'type.indexOnNonTuple': { via: 'validator', program: '.id[0]' },
@@ -227,11 +233,13 @@ const CASES: Record<DiagnosticCode, Case> = {
     'type.plusAssignTarget': { via: 'validator', program: 'let t: BOOLEAN = true;\nt += 1;' },
     'type.positionalIndexOnCollection': { via: 'validator', program: 'FROM Customer WHERE COUNT(.orders[2]) > 0 SELECT .id' },
     'type.relationComparedToKey': { via: 'validator', program: 'FROM Order WHERE .customer == "cus-ada" SELECT .id' },
+    'type.setOperandType': { via: 'validator', program: '@@Sales + 1', setting: 'users' },
     'type.switchArmsDiffer': { via: 'validator', program: 'switch .status { "a" => 1, _ => "x" }' },
     'type.tupleIndexOutOfBounds': { via: 'validator', program: '(1, 2)[5]' },
     'type.unaryNeedsNumeric': { via: 'validator', program: '-"a"' },
     'type.unexpectedResultType': { via: 'runtime' },
     'type.unsupportedOperator': { via: 'guard' },
+    'type.userComparedToText': { via: 'validator', program: '@currentUser == "usr_x"', setting: 'users' },
     'type.vivifyOnCollection': { via: 'validator', program: '.orders!.total = 1;', setting: 'customer' },
     'wire.invalidRequest': { via: 'runtime' }, // test/wire.test.ts
     'wire.invalidResponse': { via: 'runtime' }, // test/wire.test.ts
@@ -383,7 +391,7 @@ describe('the parameters name what went wrong', () => {
     });
 
     test('a lexer error keeps its message as a parameter', async () => {
-        const { diagnostics } = await validate.record('@@@');
+        const { diagnostics } = await validate.record('~~~');
         const diagnostic = diagnostics.find(d => d.code === 'syntax.lexer')!;
         expect((diagnostic.data as { params: unknown }).params).toEqual({ message: String(diagnostic.message) });
         // Langium's own marker stays, so the playground can still tell syntax errors apart.

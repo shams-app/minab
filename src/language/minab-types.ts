@@ -33,16 +33,25 @@ export interface TupleType {
     elements: MinabType[];
 }
 
-/** A single related row (a `ref` traversal target, or `.`/`^`/`#alias` itself). */
+/**
+ * A single related row (a `ref` traversal target, or `.`/`^`/`#alias` itself).
+ * `nullable` is set only where a type is written or declared (`USER?`): a record
+ * with no `nullable` keeps the old reading, that it may be `null`.
+ */
 export interface RecordType {
     kind: 'record';
     table: string;
+    nullable?: boolean;
 }
 
-/** A to-many relational collection — NOT reducible to a scalar without an aggregate/predicate (spec §3.4). Also stands in for a collection produced by broadcasting a `ref`/`collection` field across another collection. */
+/**
+ * A to-many relational collection — NOT reducible to a scalar without an aggregate/predicate (spec §3.4). Also stands in for a collection produced by broadcasting a `ref`/`collection` field across another collection.
+ * `list: true` is an ordered array of rows (`USER[]`, spec §7.2), not a set: it is not the same type as a set of the same table.
+ */
 export interface CollectionType {
     kind: 'collection';
     table: string;
+    list?: boolean;
 }
 
 /** `NullLiteral`'s own type — unifies with any nullable position, and is the one type compatible with an otherwise-mismatched operand for `==`/`!=`/`is`/`isnot` (spec §7.7). */
@@ -51,6 +60,53 @@ export interface NullType {
 }
 
 export type MinabType = ScalarType | TupleType | RecordType | CollectionType | NullType;
+
+/**
+ * The directory record types (users and groups, security plan MN.1). A program never names these tables:
+ * the `@` makes them unreachable from `#Table`, `FROM` and `.`. The host describes their columns in
+ * `MinabSchema.directory`.
+ *
+ * `USER` is a record of `USER_TABLE`. `USERGROUP` is a set of users, typed as a collection of `USER_TABLE`, so
+ * `[…]`, `.field`, `COUNT`, `EXISTS`, `ALL`, `ANY` and `IN` follow the rules of every collection.
+ */
+export const USER_TABLE = '@USER';
+export const GROUP_TABLE = '@GROUP';
+
+/** A table name as a program reads it: the directory tables are `USER` and `GROUP`, not `@USER`. */
+export function tableDisplayName(table: string): string {
+    return table === USER_TABLE ? 'USER' : table === GROUP_TABLE ? 'GROUP' : table;
+}
+
+/** A `USER`, or `USER?` when `nullable`. */
+export function userType(nullable = false): RecordType {
+    return { kind: 'record', table: USER_TABLE, nullable };
+}
+
+/** A `USERGROUP`: a set of users, never `null`. */
+export const USERGROUP_TYPE: CollectionType = { kind: 'collection', table: USER_TABLE };
+
+/** `USER[]`: an ordered array of users. `CAST(x AS USERGROUP)` makes a set of it. */
+export const USER_LIST_TYPE: CollectionType = { kind: 'collection', table: USER_TABLE, list: true };
+
+/** A `GROUP` record of the directory. */
+export function groupType(nullable = false): RecordType {
+    return { kind: 'record', table: GROUP_TABLE, nullable };
+}
+
+/** A single `USER` or `USER?`. */
+export function isUser(type: MinabType): type is RecordType {
+    return type.kind === 'record' && type.table === USER_TABLE;
+}
+
+/** A `USERGROUP`: a set of users, not an array. */
+export function isUserGroup(type: MinabType): type is CollectionType {
+    return type.kind === 'collection' && type.table === USER_TABLE && !type.list;
+}
+
+/** What a set operator or a prefix `!` takes: a `USERGROUP`, or a `USER` or `USER?` (a set of one user, or of none). */
+export function isUserSetOperand(type: MinabType): boolean {
+    return isUser(type) || isUserGroup(type);
+}
 
 /**
  * The type of a scalar column or value: a base type, and whether it may be `null` and whether it is an array.
@@ -105,7 +161,7 @@ export function widenNumeric(a: LogicalTypeBase, b: LogicalTypeBase): LogicalTyp
 export function isNullable(type: MinabType): boolean {
     if (type.kind === 'null') return true;
     if (type.kind === 'scalar') return type.array ? type.arrayNullable : type.nullable;
-    if (type.kind === 'record') return true; // a `ref`'s nullability is column-specific; callers needing precision should check the column directly rather than this generic helper
+    if (type.kind === 'record') return type.nullable ?? true; // a `ref`'s nullability is column-specific unless the type says it (`USER`, `USER?`); callers needing precision should check the column directly rather than this generic helper
     return false;
 }
 
@@ -126,7 +182,7 @@ export function baseTypesEqual(a: MinabType, b: MinabType): boolean {
         case 'record':
             return b.kind === 'record' && a.table === b.table;
         case 'collection':
-            return b.kind === 'collection' && a.table === b.table;
+            return b.kind === 'collection' && a.table === b.table && !a.list === !b.list;
         default:
             return true;
     }
@@ -178,9 +234,10 @@ export function isAssignableTo(value: MinabType, target: MinabType): boolean {
                 value.elements.every((e, i) => isAssignableTo(e, target.elements[i]))
             );
         case 'record':
-            return target.kind === 'record' && value.table === target.table;
+            // `USER?` does not flow into `USER`. A record with no `nullable` keeps the old rule (any record fits).
+            return target.kind === 'record' && value.table === target.table && !(value.nullable === true && target.nullable === false);
         case 'collection':
-            return target.kind === 'collection' && value.table === target.table;
+            return target.kind === 'collection' && value.table === target.table && !value.list === !target.list;
     }
 }
 
@@ -195,8 +252,12 @@ export function formatType(type: MinabType): string {
         case 'tuple':
             return `(${type.elements.map(formatType).join(', ')})`;
         case 'record':
+            if (type.table === USER_TABLE) return type.nullable ? 'USER?' : 'USER';
+            if (type.table === GROUP_TABLE) return type.nullable ? 'GROUP?' : 'GROUP';
             return `record<${type.table}>`;
         case 'collection':
+            if (type.table === USER_TABLE) return type.list ? 'USER[]' : 'USERGROUP';
+            if (type.table === GROUP_TABLE) return 'GROUP[]';
             return `collection<${type.table}>`;
         case 'null':
             return 'null';

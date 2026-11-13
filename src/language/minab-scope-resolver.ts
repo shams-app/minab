@@ -50,7 +50,7 @@ import {
     type VariableDecl
 } from './generated/ast.js';
 import { coded, type CodedMessage } from './diagnostics/codes.js';
-import type { MinabType } from './minab-types.js';
+import { GROUP_TABLE, tableDisplayName, USER_TABLE, type MinabType } from './minab-types.js';
 import type { SchemaProvider } from './schema.js';
 
 export interface ResolvedScope {
@@ -96,6 +96,24 @@ export class MinabScopeResolver {
         private readonly schema: SchemaProvider,
         private readonly rootTable?: string
     ) {}
+
+    private receiverTyper?: (expr: Expression) => MinabType | undefined;
+
+    /**
+     * The type checker lends its inference, so the table of a receiver that is not a sigil can be read from its
+     * type: `@@Sales[…]`, `(a + b)[…]`, `g[…]` for a `let g: USERGROUP`, `groupsOf(u)[…]`. Only the directory tables
+     * (users and groups) are read this way; every other receiver keeps the rules it had.
+     */
+    setReceiverTyper(typer: (expr: Expression) => MinabType | undefined): void {
+        this.receiverTyper = typer;
+    }
+
+    private directoryTableOf(expr: Expression): string | undefined {
+        const type = this.receiverTyper?.(expr);
+        return type && (type.kind === 'record' || type.kind === 'collection') && (type.table === USER_TABLE || type.table === GROUP_TABLE)
+            ? type.table
+            : undefined;
+    }
 
     resolveCurrentRecord(node: CurrentRecord): ScopeResolution {
         const stack = this.stackAt(node);
@@ -221,7 +239,7 @@ export class MinabScopeResolver {
             return { found: false, ...coded('scope.columnNeedsTable', { column: field }) };
         }
         if (!this.schema.getColumn(tableName, field)) {
-            return { found: false, ...coded('scope.unknownColumn', { column: field, table: tableName }) };
+            return { found: false, ...coded('scope.unknownColumn', { column: field, table: tableDisplayName(tableName) }) };
         }
         return { found: true, scope: { owner: node, tableName: undefined } };
     }
@@ -325,7 +343,7 @@ export class MinabScopeResolver {
                 const entry = outerLevels[i].aliases.get(receiver.name);
                 if (entry) return entry.tableName;
             }
-            return undefined;
+            return this.directoryTableOf(receiver);
         }
         // CurrentRecord (`FROM .field`) and MemberAccess (`FROM .a.b`) — a
         // relation traversal chain, now resolvable (Phase 4): walk to the
@@ -357,15 +375,16 @@ export class MinabScopeResolver {
         }
         if (isNameRef(expr)) {
             const res = this.resolveNameRef(expr);
-            return res.found ? res.scope.tableName : undefined;
+            return (res.found ? res.scope.tableName : undefined) ?? this.directoryTableOf(expr);
         }
         // `FROM .orders[...]`: the filter narrows rows, the table stays the receiver's.
         if (isFilterAccess(expr)) return this.tableOfExpression(expr.receiver);
         if (isMemberAccess(expr)) {
             const receiverTable = this.tableOfExpression(expr.receiver);
-            return receiverTable ? this.followRelationColumn(receiverTable, expr.member) : undefined;
+            return receiverTable ? this.followRelationColumn(receiverTable, expr.member) : this.directoryTableOf(expr);
         }
-        return undefined;
+        // A call, a bracketed set, `@@Sales`: users and groups are read from the type.
+        return this.directoryTableOf(expr);
     }
 
     /** A schema `ref`/`collection` column's target table — `undefined` for a scalar column, an unknown column, or an unknown table. */

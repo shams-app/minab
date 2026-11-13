@@ -28,6 +28,9 @@ Single-character (or single-keyword) tokens that resolve to a position in the cu
 | `$` | `FieldValue` | The value of the field currently being validated. Only meaningful inside a `field` rule. |
 | `^` | `ParentRecord` | The enclosing scope's `.` — one level up. Used to "escape" a nested filter or subquery back to the row that opened it. |
 | `#alias` | `NamedScope` | A named scope referencing any table, view, subquery, or join alias — e.g. `#Customer`, `#o`. Can be opened inline without a prior declaration. |
+| `@name` | `SpecialUserRef` | A special user that the host declares for this place, such as `@currentUser`. It is a `USER` (§7.8). `name` is a name (§2.3), never a text or an expression. |
+| `@@name` | `GroupRef` | A group of the workspace, such as `@@Sales`. It is a `USERGROUP` (§7.8). `@@` is one token, so `@@Sales` never reads as `@` and `@Sales`. |
+| `!` | `UnaryExpression` | Not a scope sigil. As a prefix in front of a user or a group, it means everyone except it: `!@@Interns` (§7.8). A `BOOLEAN` keeps `NOT`. |
 | `KEY` | `GroupKeyRef` | The group key, bound after a `GROUPBY` clause. |
 | `.$index` | `IndexRef` | The zero-based position of the current element within the nearest enclosing array-typed `[...]` filter or `WHERE` clause (§3.5). Only meaningful when that source is array-like — a `JSON` array or an in-memory `T[]` — not a relational `collection(Table)`, which has no inherent position. |
 
@@ -304,9 +307,9 @@ OR
 AND
 NOT
 comparison   (== != < <= > >= IN LIKE is isnot)
-additive     (+ -)
-multiplicative (* / % \)
-unary        (- +)
+additive     (+ - |)
+multiplicative (* / % \ &)
+unary        (- + !)
 postfix      (.member  [filter]  (call))
 primary      (literals, sigils, ( ), [ ])
 ```
@@ -326,6 +329,8 @@ Notes:
 
   | `+ - * / % \`, unary `-` | a side that is `null` at run time | `null`. This comes before any other check, so `null / 0` is `null`, not an error. The result type is nullable when an operand is nullable (§7.7, D46) |
   | `< <= > >=`, `LIKE` | a side that is `null` at run time | `false`, never `null`: `NOT (.n < 5)` is `true` when `.n` is `null`. The literal `null` next to them is still a check error (§7.7, D46) |
+
+  **Users and groups.** `+`, `-`, `&` and `|` are also the set operators of `USERGROUP` (§7.8): union, difference, intersection and "in exactly one of the two". The checker takes the meaning from the operand types, as it does for a text `+`. `&` has the precedence of `*`, so `A + B & C` is `A + (B & C)`. `|` has the precedence of `+`, and the prefix `!` is a unary operator like `-`, so `!A & B` is `(!A) & B`. `|` is also part of the longer tokens `|=` (§9.3) and `:|` (§10.3), which keep their meaning. `&` and `|` work only on users and groups: on other types they are the error `type.setOperandType`.
 
   `/`, `%` and `\` by zero are the evaluation error `eval.divisionByZero` (Postgres `22012`). `\` has the same precedence as `*`, `/` and `%`; it is only an operator outside a string and outside a backtick name, where `\` is still an escape (§2.3).
 - `NOT` binds tighter than `AND`/`OR` but looser than comparison, and is right-recursive into itself: `NOT NOT x` is valid; `NOT x == y` parses as `NOT (x == y)`.
@@ -653,6 +658,10 @@ Minab's scalar types are a small, storage-agnostic vocabulary — behavioral cat
 | `DATETIME` | An instant, like Postgres `timestamptz`. It is the same moment everywhere; it shows as a date and a time only when it is read in a time zone. |
 | `UUID` | An opaque identifier — equality only, no ordering. |
 | `JSON` | Structured data of unknown shape — test it with `is`/`isnot` (§5.6) before treating it as one kind or another. |
+| `USER` | One person of the workspace, a record of the host's directory. It compares only with another `USER` (§7.8). |
+| `USERGROUP` | A set of users: no order, no duplicates, never `null` (§7.8). `USER[]` is an array, not a set. |
+
+`USER` and `USERGROUP` are words of the type position only. A column, a `let`, a parameter or a table may still be called `USER` or `USERGROUP`, as in Minab 1.0 (§2.3).
 
 **Text family.** `TEXT` and `CITEXT` are one family: they compare with each other, and with text literals and parameters, with no `CAST`, for `==`, `!=`, `<`, `<=`, `>`, `>=`, `IN` and `LIKE`. When either side is `CITEXT`, the comparison ignores case: `.email == "Ada@Example.COM"` is `true` for `ada@example.com`, and so is `.name == .email` when the texts differ only in case. When both sides are `TEXT`, the comparison is case-sensitive. Case is folded with Unicode lower-casing; for a few non-ASCII letters this can differ from the database (see the note under §5.3.1). The SQL compiler casts the `TEXT` side to `citext` (`$1::citext`), because Postgres would compare `citext = text` as plain text.
 
@@ -827,6 +836,75 @@ NOT (.n < 5)             // true
 FROM Item WHERE .n < 5 SELECT .id    // a row with a null n is not returned
 ```
 
+### 7.8 Users and groups
+
+A workspace has people. Minab gives them two types, two sigils and a few operators, so a rule can say who may do something. The types, the names and the operators are part of the language. The people and the groups themselves come from the host (§8.7). This section is about what a program may write and how it is checked. Running such a program is not part of this section: it needs the host's directory.
+
+**Types.** `USER` is one person of the workspace. It has the columns of the host's directory (`.id`, `.name`, `.email` …) and the workspace's own attributes. `USERGROUP` is a set of users: no order, no duplicates, never `null` (an empty set is empty). `USER?` may be `null`. `USER[]` is an array of users, not a set; `CAST(list AS USERGROUP)` turns it into a set.
+
+```minab
+let me: USER = @currentUser;
+let sales: USERGROUP = @@Sales;
+let n: INTEGER = COUNT(sales);
+```
+
+A `USER` compares only with a `USER` (`==` and `!=`). `.owner == "usr_x"` is the error `type.userComparedToText`. Write `.owner.id == "usr_x"`, or compare two users.
+
+**Names with a sigil.** `@name` is a special user, `@@name` is a group. After the sigil comes a name (§2.3): a plain name or a backtick name, such as ``@@`Sales team` ``. It is never a text, a variable or an expression. To look a user or a group up by a value, the host provides functions (for example `findUser(key)` and `findGroup(name)`). A name that does not exist is an error with the closest names (§8.7).
+
+**Set operators.** The operands are `USERGROUP`. A `USER` or `USER?` counts as a set of one user (an empty `USER?` is the empty set). Anything else is the error `type.setOperandType`.
+
+| Operator | Meaning |
+|---|---|
+| `A + B` | union: every user of A and of B |
+| `A - B` | the users of A that are not in B |
+| `A & B` | the users in both |
+| `A \| B` | the users in exactly one of the two (not in both) |
+| `!A` | everyone except A |
+
+```minab
+@@Sales + @@Support - @@Interns
+@@Sales & @@Support
+@@Sales | @@Support
+!@@Contractors
+```
+
+`A + B & C` is `A + (B & C)`, and `!A & B` is `(!A) & B`. `!` works only on a `USERGROUP` or a `USER`. On a `BOOLEAN` it is the error `type.complementNeedsUsers`, and its message says to use `NOT`.
+
+**Membership and size.** `IN` with a `USERGROUP`, a `USER` or a `USER?` on the right needs a `USER` on the left, else `type.inNeedsUser`. A `USER` on the right is a set of one, so a route that gives one person today can give a group tomorrow without changing the rules that call it. `COUNT`, `EXISTS`, `ALL` and `ANY` work on a `USERGROUP` as on any collection.
+
+```minab
+@currentUser IN @@Managers
+@currentUser IN @@Sales + @@Support - @@Interns
+COUNT(@@Sales)
+EXISTS(@@Sales[.role == 'admin'])
+```
+
+**Filters.** A `USERGROUP` is typed as a collection of the directory's `USER` records, so the filter `[…]`, `.field` on the whole set, and the rules of §3 apply with no new rule. `.` inside the filter is each user, with the typed columns of the directory. `.field` on a set gives the values of all its users. `.members` on a set of groups gives the union of their members, as one `USERGROUP`.
+
+```minab
+@@ActiveUsers[.email LIKE '%@gmail.com']
+@@everyone[.role == 'member' AND .name LIKE 'A%']
+```
+
+**Attributes with a scope.** An attribute of a workspace is a column under its bare name (`.department`). An attribute of another scope has the scope in its name, for example `person:city`, so it is read with a backtick name (§2.3). No new syntax is needed.
+
+```minab
+@@everyone[.department == 'IT' AND .`person:city` == 'Marand']
+.owner.`platform:employeeNo` == 'E-1042'
+```
+
+**Host functions.** Everything that looks a person up or follows a route is a host function, with a name that has a lowercase letter (§8.7).
+
+```minab
+@currentUser IN teamLeader(.owner)
+single(@@ActiveUsers[.name == 'Sara'])
+findUser('sara@example.com')
+groupsOf(@currentUser)['team' IN .tags].members & @@TeamLeaders
+```
+
+**Compatibility.** `USER` and `USERGROUP` are type words, but a Minab 1.0 program can still use them as names: `.USER`, `let USER: TEXT = "a";` and `FROM USER` mean what they always did.
+
 ---
 
 ## 8. Functions
@@ -967,6 +1045,15 @@ A program can use names that **the host** gives it. The host declares them once,
 ```
 let currentUser: TEXT = "x";      // error: "currentUser" is a host input
 ```
+
+**Users and groups.** The host may also give a program, for each place a program runs in (the rule context):
+
+- **Special users**: a list of `{ name, type }`, with `type` `USER` or `USER?`. These are the only names `@name` may take. A name that is not in the list is `scope.unknownSpecialUser`, with the closest names as suggestions. A place that can lack a user (a flow started by a schedule) declares it `USER?`.
+- **Group names**: the names of the workspace's groups. A name after `@@` that is not in the list is `scope.unknownGroup`, with the closest names. When the host gives no list, `@@` names are not checked here: the host checks them when it saves.
+- **The directory**: the columns of the two record types `USER` and `GROUP` (`directory.user` and `directory.group` of the schema). Without a list the fixed columns are used: `id`, `name`, `email`, `phone`, `language`, `timeZone`, `role`, `kind`, `joinedAt` for a `USER`, and `id`, `name`, `tags`, `kind`, `members` for a `GROUP`. A column that holds a user is a `ref` to `USER`, and a column that holds a set of users is a `collection` of `USER`. The two types have no table name, so a program cannot reach them with `#Table` or `FROM`.
+- **Host functions with these types.** A host function may take and return `USER`, `USER?`, `USER[]`, `USERGROUP`, `GROUP`, `GROUP?` and `GROUP[]`, for example `findUser(key: TEXT): USER`, `single(set: USERGROUP): USER` or `groupsOf(u: USER): GROUP[]`. Minab's core adds none of them as built-ins. `USERGROUP` is never `null`, so `USERGROUP?` is refused when the host declares the function.
+
+A host input stays a scalar, an array or a record of scalars: it cannot be a `USER`. Use a special user instead.
 
 ---
 
@@ -1482,7 +1569,7 @@ TupleType:
 TypeRef:
     base=(
         'TEXT' | 'CITEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' |
-        'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON'
+        'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON' | 'USER' | 'USERGROUP'
     )
     nullable?='?'?
     (array?='[]' arrayNullable?='?'?)?;
@@ -1557,8 +1644,10 @@ ContinueStatement:
 // A name as the user writes it: a plain name (ID) or a backtick name
 // (QUOTED_NAME). Everything user-facing uses this rule. The value converter
 // (`minab-value-converter.ts`) removes the backticks and the escapes.
+// `USER` and `USERGROUP` are type words, but a 1.0 program may use them as a name
+// (a column, a `let`, a table), so a name accepts them too (the 1.x promise).
 Name returns string:
-    ID | QUOTED_NAME;
+    ID | QUOTED_NAME | 'USER' | 'USERGROUP';
 
 QualifiedName returns string:
     Name ('.' Name)*;
@@ -1587,13 +1676,13 @@ Comparison infers Expression:
     )?;
 
 Additive infers Expression:
-    Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-') right=Multiplicative)*;
+    Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-' | '|') right=Multiplicative)*;
 
 Multiplicative infers Expression:
-    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION) right=Unary)*;
+    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION | '&') right=Unary)*;
 
 Unary infers Expression:
-    {infer UnaryExpression} operator=('-' | '+') operand=Unary
+    {infer UnaryExpression} operator=('-' | '+' | '!') operand=Unary
     | Postfix;
 
 Postfix infers Expression:
@@ -1613,6 +1702,8 @@ Primary infers Expression:
     | FieldValue
     | ParentRecord
     | NamedScope
+    | SpecialUserRef
+    | GroupRef
     | CastExpr
     | GroupKeyRef
     | IndexRef
@@ -1635,6 +1726,12 @@ ParentRecord infers Expression:
 
 NamedScope infers Expression:
     {infer NamedScope} '#' name=Name;
+
+SpecialUserRef infers Expression:
+    {infer SpecialUserRef} '@' name=Name;
+
+GroupRef infers Expression:
+    {infer GroupRef} '@@' name=Name;
 
 CastExpr infers Expression:
     {infer CastExpr} 'CAST' '(' value=Expression 'AS' targetType=TypeRef ')';

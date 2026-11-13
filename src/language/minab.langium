@@ -69,7 +69,7 @@ TupleType:
 TypeRef:
     base=(
         'TEXT' | 'CITEXT' | 'INTEGER' | 'DECIMAL' | 'BOOLEAN' |
-        'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON'
+        'DATE' | 'TIME' | 'DATETIME' | 'UUID' | 'JSON' | 'USER' | 'USERGROUP'
     )
     nullable?='?'?
     (array?='[]' arrayNullable?='?'?)?;
@@ -144,8 +144,10 @@ ContinueStatement:
 // A name as the user writes it: a plain name (ID) or a backtick name
 // (QUOTED_NAME). Everything user-facing uses this rule. The value converter
 // (`minab-value-converter.ts`) removes the backticks and the escapes.
+// `USER` and `USERGROUP` are type words, but a 1.0 program may use them as a name
+// (a column, a `let`, a table), so a name accepts them too (the 1.x promise).
 Name returns string:
-    ID | QUOTED_NAME;
+    ID | QUOTED_NAME | 'USER' | 'USERGROUP';
 
 QualifiedName returns string:
     Name ('.' Name)*;
@@ -174,13 +176,13 @@ Comparison infers Expression:
     )?;
 
 Additive infers Expression:
-    Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-') right=Multiplicative)*;
+    Multiplicative ({infer BinaryExpression.left=current} operator=('+' | '-' | '|') right=Multiplicative)*;
 
 Multiplicative infers Expression:
-    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION) right=Unary)*;
+    Unary ({infer BinaryExpression.left=current} operator=('*' | '/' | '%' | INTEGER_DIVISION | '&') right=Unary)*;
 
 Unary infers Expression:
-    {infer UnaryExpression} operator=('-' | '+') operand=Unary
+    {infer UnaryExpression} operator=('-' | '+' | '!') operand=Unary
     | Postfix;
 
 Postfix infers Expression:
@@ -200,6 +202,8 @@ Primary infers Expression:
     | FieldValue
     | ParentRecord
     | NamedScope
+    | SpecialUserRef
+    | GroupRef
     | CastExpr
     | GroupKeyRef
     | IndexRef
@@ -222,6 +226,12 @@ ParentRecord infers Expression:
 
 NamedScope infers Expression:
     {infer NamedScope} '#' name=Name;
+
+SpecialUserRef infers Expression:
+    {infer SpecialUserRef} '@' name=Name;
+
+GroupRef infers Expression:
+    {infer GroupRef} '@@' name=Name;
 
 CastExpr infers Expression:
     {infer CastExpr} 'CAST' '(' value=Expression 'AS' targetType=TypeRef ')';

@@ -215,7 +215,7 @@ describe('document lifecycle', () => {
 
     test('a failing prepare also leaves nothing behind', async () => {
         const minab = createMinab({ schema: orderSchema() });
-        await minab.prepare('@@@ FROM');
+        await minab.prepare('~~~ FROM');
         expect(minab.cacheStats().openDocuments).toBe(0);
     });
 });

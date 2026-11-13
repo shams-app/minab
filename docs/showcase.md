@@ -814,6 +814,68 @@ FROM Order WHERE LOG(.total) > 100 SELECT .id
 
 ---
 
+## 20. Users and groups
+
+*Spec §2 (`@`, `@@`, `!`), §5.1, §7.2, §7.8 and §8.7.* The host gives a program its special users (`@currentUser`) and the names of the workspace's groups (`@@Sales`). Sets of users combine with `+ - & |`, and `!` means everyone except. A program here is checked with the special user `currentUser` and the groups `Sales`, `Support`, `Interns`, `Contractors`, `Managers` and `ActiveUsers`.
+
+```
+// A user, a group, and the size of a group
+let me: USER = @currentUser;
+let sales: USERGROUP = @@Sales;
+let n: INTEGER = COUNT(sales);
+```
+
+```
+// Set operators: union, difference, intersection, in exactly one of the two, everyone except
+@@Sales + @@Support - @@Interns
+@@Sales & @@Support
+@@Sales | @@Support
+!@@Contractors
+```
+
+```
+// & binds like *, so this is @@Sales + (@@Support & @@Managers). `!` binds like a unary minus: this is (!@@Interns) & @@Sales
+@@Sales + @@Support & @@Managers
+!@@Interns & @@Sales
+```
+
+```
+// Membership: a USER on the left, a group or a set expression on the right
+@currentUser IN @@Managers
+@currentUser IN @@Sales + @@Support - @@Interns
+EXISTS(@@Sales[.role == 'admin'])
+```
+
+```
+// A filter reads the columns of the directory, and a column on the whole group gives all its values
+@@ActiveUsers[.email LIKE '%@gmail.com']
+@@everyone[.role == 'member' AND .name LIKE 'A%']
+COUNT(@@Sales[.role == 'admin'])
+```
+
+```
+// An attribute with a scope has the scope in its name, so it is read with a backtick name (needs the host's directory columns)
+@@everyone[.department == 'IT' AND .`person:city` == 'Marand']
+```
+
+```
+// Looking a person up, or following a route, is a host function (it needs the host's declarations, §8.7)
+@currentUser IN teamLeader(.owner)
+single(@@ActiveUsers[.name == 'Sara'])
+findUser('sara@example.com')
+groupsOf(@currentUser)['team' IN .tags].members & @@TeamLeaders
+```
+
+```text
+.owner == "usr_x"                  ✗ type.userComparedToText: a USER is compared only with a USER
+"usr_x" IN @@Managers              ✗ type.inNeedsUser: a USER on the left
+@@Sales + 1                        ✗ type.setOperandType
+!(.total > 10)                     ✗ type.complementNeedsUsers: use NOT for a BOOLEAN
+@@Slaes                            ✗ scope.unknownGroup: did you mean "@@Sales"?
+```
+
+---
+
 ## Keeping this in sync
 
 Every construct shown here traces back to a specific section of `query-language-spec.md`. When the grammar changes — a new keyword, a new clause, a resolved open question — both files get updated in the same pass: the spec gets the grammar and rationale, this file gets a runnable example exercising it.

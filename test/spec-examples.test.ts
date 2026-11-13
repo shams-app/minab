@@ -128,13 +128,23 @@ const PIECES: Record<string, 'lines' | 'paragraphs'> = {
     'showcase §17 #3': 'lines',
     'showcase §18 #1': 'lines',
     'showcase §18 #2': 'lines',
-    'showcase §19 #1': 'lines'
+    'showcase §19 #1': 'lines',
+    'spec §7.8 #2': 'lines',
+    'spec §7.8 #3': 'lines',
+    'spec §7.8 #4': 'lines',
+    'spec §7.8 #5': 'lines',
+    'spec §7.8 #6': 'lines',
+    'showcase §20 #2': 'lines',
+    'showcase §20 #3': 'lines',
+    'showcase §20 #4': 'lines',
+    'showcase §20 #5': 'lines',
+    'showcase §20 #7': 'lines'
 };
 
 // ---- how to check ------------------------------------------------------------
 
 /** Who the program belongs to: the record under validation, and the field. */
-type Context = 'none' | 'order' | 'customer' | 'booking' | 'orderTotal' | 'orderTextField' | 'orderIdField';
+type Context = 'none' | 'order' | 'customer' | 'booking' | 'orderTotal' | 'orderTextField' | 'orderIdField' | 'users';
 
 const CONTEXTS: Record<Context, MinabRuleContext> = {
     none: { isFieldRule: false },
@@ -143,7 +153,14 @@ const CONTEXTS: Record<Context, MinabRuleContext> = {
     booking: { isFieldRule: false, recordTable: 'Booking' },
     orderTotal: { isFieldRule: true, fieldType: scalarType('DECIMAL'), recordTable: 'Order' },
     orderTextField: { isFieldRule: true, fieldType: scalarType('TEXT'), recordTable: 'Order' },
-    orderIdField: { isFieldRule: true, fieldType: scalarType('UUID'), recordTable: 'Order' }
+    orderIdField: { isFieldRule: true, fieldType: scalarType('UUID'), recordTable: 'Order' },
+    // Users and groups (MN.1): the special user and the groups that spec §7.8 and showcase §20 use.
+    users: {
+        isFieldRule: false,
+        recordTable: 'Order',
+        specialUsers: [{ name: 'currentUser', type: 'USER' }],
+        groupNames: ['Sales', 'Support', 'Interns', 'Contractors', 'Managers', 'ActiveUsers', 'everyone']
+    }
 };
 
 const DEFAULT_CONTEXT: Context = 'order';
@@ -170,6 +187,8 @@ const NO_RECORD_VARIABLE =
 const NO_RECORD_TABLE = 'needs a record table with relations (doctor, customers) that the fixture does not have';
 
 const HOST_NAMES = 'uses a host input and a host function, which the host declares at createMinab (R3 tests them in test/ports.test.ts)';
+const DIRECTORY_NAMES =
+    'uses host functions of the directory and attributes with a scope, which the host declares (test/users-types.test.ts checks them with a directory)';
 
 const CHECK: Record<string, CheckSetup> = {
     'spec §5.5 #2': { prelude: () => RAW_ID },
@@ -236,7 +255,20 @@ const CHECK: Record<string, CheckSetup> = {
     // It writes, so it is a program a host runs on purpose, not a rule (X5, D26).
     'showcase §14 #1': { context: 'none' },
     'showcase §15 #1': { parseOnly: HOST_NAMES },
-    'showcase §15 #2': { parseOnly: HOST_NAMES }
+    'showcase §15 #2': { parseOnly: HOST_NAMES },
+    'spec §7.8 #1': { context: 'users' },
+    'spec §7.8 #2': { context: 'users' },
+    'spec §7.8 #3': { context: 'users' },
+    'spec §7.8 #4': { context: 'users' },
+    'spec §7.8 #5': { parseOnly: DIRECTORY_NAMES },
+    'spec §7.8 #6': { parseOnly: DIRECTORY_NAMES },
+    'showcase §20 #1': { context: 'users' },
+    'showcase §20 #2': { context: 'users' },
+    'showcase §20 #3': { context: 'users' },
+    'showcase §20 #4': { context: 'users' },
+    'showcase §20 #5': { context: 'users' },
+    'showcase §20 #6': { parseOnly: DIRECTORY_NAMES },
+    'showcase §20 #7': { parseOnly: DIRECTORY_NAMES }
 };
 
 /**
