@@ -16,6 +16,7 @@ import {
     isDeleteStatement,
     isFieldValue,
     isFilterAccess,
+    isGroupRef,
     isFunctionDecl,
     isInsertStatement,
     isJoinClause,
@@ -26,6 +27,7 @@ import {
     isNameRef,
     isParentRecord,
     isQuery,
+    isSpecialUserRef,
     isSubquery,
     isTableRef,
     isTupleAccess,
@@ -36,6 +38,7 @@ import {
     type Query
 } from '../language/generated/ast.js';
 import { getBuiltin, isBuiltinName } from '../language/minab-builtins.js';
+import { isDirectoryTable } from '../language/minab-types.js';
 import type { SchemaProvider } from '../language/schema.js';
 import type { ProgramAnalysis } from './types.js';
 
@@ -44,6 +47,8 @@ export interface AnalyzeOptions {
     groupTable?: string;
     /** Host functions marked `local`: they run in the browser and need no data. */
     localHostFunctions?: ReadonlySet<string>;
+    /** The directory port answers with no round trip: reading users and groups does not make a program tier `data`. */
+    localDirectory?: boolean;
 }
 
 /** Where names and `.` point at one place in the program. */
@@ -83,6 +88,7 @@ class Analyzer {
     readsFieldValue = false;
     readsWholeRecord = false;
     needsData = false;
+    usesDirectory = false;
     writes = false;
 
     private readonly declared = new Map<string, FunctionDecl>();
@@ -111,9 +117,20 @@ class Analyzer {
         if (!table) return undefined;
         const column = this.schema.getColumn(table, field);
         if (!column || column.type.kind === 'scalar') return undefined;
+        // A user column reads the directory, not a table (P10).
+        if (isDirectoryTable(column.type.table)) {
+            this.directory();
+            return undefined;
+        }
         this.needsData = true;
         if (column.type.kind === 'ref' && column.type.foreignKey) this.foreignKeys.add(column.type.foreignKey);
         return this.table(column.type.table);
+    }
+
+    /** The program reads users or groups: it needs the directory port (P11). */
+    private directory(): void {
+        this.usesDirectory = true;
+        if (!this.options.localDirectory) this.needsData = true;
     }
 
     /** A field of the record under validation, or of a row. */
@@ -168,6 +185,10 @@ class Analyzer {
         }
         if (isFieldValue(node)) {
             this.readsFieldValue = true;
+            return;
+        }
+        if (isSpecialUserRef(node) || isGroupRef(node)) {
+            this.directory();
             return;
         }
         if (isNamedScope(node) || isTableRef(node)) {
@@ -289,6 +310,14 @@ class Analyzer {
             return;
         }
         this.hostFunctions.add(name);
+        const declared = this.schema.getHostFunction(name);
+        if (
+            declared &&
+            [declared.returns, ...declared.params.map(p => p.type)].some(
+                type => (type.kind === 'record' || type.kind === 'collection') && isDirectoryTable(type.table)
+            )
+        )
+            this.directory();
         if (!this.options.localHostFunctions?.has(name)) this.needsData = true;
     }
 
@@ -326,6 +355,7 @@ export function conservativeAnalysis(): ProgramAnalysis {
         hostFunctions: [],
         userFunctions: [],
         builtins: [],
+        usesDirectory: true,
         needsData: true,
         writes: true,
         tier: 'data'
@@ -350,6 +380,7 @@ export function analyzeProgram(model: Model, schema: SchemaProvider, recordTable
             hostFunctions: sorted(analyzer.hostFunctions),
             userFunctions: sorted(analyzer.userFunctions),
             builtins: sorted(analyzer.builtins),
+            usesDirectory: analyzer.usesDirectory,
             needsData: analyzer.needsData,
             writes: analyzer.writes,
             tier: analyzer.needsData || analyzer.writes ? 'data' : 'local'

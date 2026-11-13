@@ -11,7 +11,7 @@
 
 import { connectPostgres } from '../node/pg.js';
 
-export { DataSourceError, FixtureExecutor, traced } from '../host/fixture-executor.js';
+export { DataSourceError, FixtureDirectory, FixtureExecutor, traced } from '../host/fixture-executor.js';
 export { connectPostgres, pgDataPort } from '../node/pg.js';
 
 /** The old name: `PostgresExecutor.connect(url)` gives an object with `execute`, `statements` and `close`. */

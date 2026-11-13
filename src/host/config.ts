@@ -33,6 +33,38 @@ export interface FixtureResponse {
     rows: Row[];
 }
 
+/** One user of the fixture directory: the fixed columns, and any other key is an attribute (text or `null`). `left: true` is someone who left the workspace (P10). */
+export interface FixtureUser {
+    id: string;
+    name: string;
+    left?: boolean;
+    [attribute: string]: string | boolean | null | undefined;
+}
+
+/** One group of the fixture directory. `includes` names groups nested in this one (flattened); `tags` are for routes (P7). */
+export interface FixtureGroup {
+    name: string;
+    members: string[];
+    includes: string[];
+    tags: string[];
+}
+
+/** A route written in Minab (P7). `body` reads its user as `u`. */
+export interface FixtureRoute {
+    name: string;
+    returns: 'USERGROUP' | 'USER?';
+    body: string;
+}
+
+/** The `directory` section of a config: a small directory the CLI and the playground run users and groups against (MN.2). */
+export interface DirectoryConfig {
+    users: FixtureUser[];
+    groups: FixtureGroup[];
+    routes: FixtureRoute[];
+    /** The user ids of the special users of the run (`@currentUser`); `null` is "nobody". */
+    specialUsers: Record<string, string | null>;
+}
+
 /** A parsed, validated config — a host's whole answer to what the source leaves unsaid. */
 export interface HostConfig {
     schema: MinabSchema;
@@ -41,6 +73,7 @@ export interface HostConfig {
     fieldValue?: unknown;
     responses: FixtureResponse[];
     database?: string;
+    directory?: DirectoryConfig;
 }
 
 export interface ParseConfigOptions {
@@ -255,6 +288,69 @@ export function parseJsonObject(text: string, source: string): Record<string, un
     return parsed;
 }
 
+function stringList(value: unknown, at: string): string[] {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.some(item => typeof item !== 'string'))
+        throw new ConfigError(`${at}: expected an array of strings, got ${describe(value)}`);
+    return value as string[];
+}
+
+/** Validates the `directory` section: users, groups with tags, routes in Minab, and the special users. */
+export function parseDirectory(spec: unknown, at: string): DirectoryConfig {
+    if (!isRecordValue(spec)) throw new ConfigError(`${at}: expected an object, got ${describe(spec)}`);
+    const entries = (value: unknown, name: string): Record<string, unknown>[] => {
+        if (value === undefined) return [];
+        if (!Array.isArray(value) || value.some(item => !isRecordValue(item))) throw new ConfigError(`${at}.${name}: expected an array of objects`);
+        return value as Record<string, unknown>[];
+    };
+    const users = entries(spec.users, 'users').map((entry, index): FixtureUser => {
+        const where = `${at}.users[${index}]`;
+        for (const [key, value] of Object.entries(entry)) {
+            if (key !== 'left' && value !== null && typeof value !== 'string')
+                throw new ConfigError(`${where}.${key}: expected text or null, got ${describe(value)}`);
+        }
+        return { ...(entry as FixtureUser), id: requireString(entry.id, `${where}.id`), name: requireString(entry.name, `${where}.name`) };
+    });
+    const ids = new Set<string>();
+    for (const user of users) {
+        if (ids.has(user.id)) throw new ConfigError(`${at}.users: the id "${user.id}" is used twice`);
+        ids.add(user.id);
+    }
+    const groups = entries(spec.groups, 'groups').map((entry, index): FixtureGroup => {
+        const where = `${at}.groups[${index}]`;
+        const members = stringList(entry.members, `${where}.members`);
+        for (const id of members) if (!ids.has(id)) throw new ConfigError(`${where}.members: no user "${id}"`);
+        return {
+            name: requireString(entry.name, `${where}.name`),
+            members,
+            includes: stringList(entry.includes, `${where}.includes`),
+            tags: stringList(entry.tags, `${where}.tags`)
+        };
+    });
+    const names = new Set(groups.map(group => group.name));
+    if (names.size !== groups.length) throw new ConfigError(`${at}.groups: a group name is used twice`);
+    for (const group of groups) {
+        for (const included of group.includes)
+            if (!names.has(included)) throw new ConfigError(`${at}.groups: "${group.name}" includes the unknown group "${included}"`);
+    }
+    const routes = entries(spec.routes, 'routes').map((entry, index): FixtureRoute => {
+        const where = `${at}.routes[${index}]`;
+        const name = requireString(entry.name, `${where}.name`);
+        if (!/^[a-z][A-Za-z0-9_]*$/.test(name)) throw new ConfigError(`${where}.name: "${name}" is not a camelCase name`);
+        const returns = entry.returns === undefined ? 'USERGROUP' : entry.returns;
+        if (returns !== 'USERGROUP' && returns !== 'USER?') throw new ConfigError(`${where}.returns: expected "USERGROUP" or "USER?"`);
+        return { name, returns, body: requireString(entry.body, `${where}.body`) };
+    });
+    const special = spec.specialUsers === undefined ? {} : spec.specialUsers;
+    if (!isRecordValue(special)) throw new ConfigError(`${at}.specialUsers: expected an object of names and user ids`);
+    const specialUsers: Record<string, string | null> = {};
+    for (const [name, id] of Object.entries(special)) {
+        if (id !== null && (typeof id !== 'string' || !ids.has(id))) throw new ConfigError(`${at}.specialUsers.${name}: expected the id of a user, or null`);
+        specialUsers[name] = id;
+    }
+    return { users, groups, routes, specialUsers };
+}
+
 /** Validates and expands a config object (the parsed `minab.config.json`). Throws `ConfigError`. */
 export function parseConfig(raw: Record<string, unknown>, options: ParseConfigOptions = {}): HostConfig {
     const schemaSpec = typeof raw.schema === 'string' ? readReferenced(raw.schema, options, 'schema') : raw.schema;
@@ -264,7 +360,8 @@ export function parseConfig(raw: Record<string, unknown>, options: ParseConfigOp
         record: parseInlineOrFile(raw.record, options, 'record') as Row | undefined,
         fieldValue: raw.fieldValue,
         responses: parseResponses(typeof raw.data === 'string' ? readReferenced(raw.data, options, 'data').responses : raw.data, 'data'),
-        database: raw.database === undefined ? undefined : requireString(raw.database, 'database')
+        database: raw.database === undefined ? undefined : requireString(raw.database, 'database'),
+        directory: raw.directory === undefined ? undefined : parseDirectory(raw.directory, 'directory')
     };
 }
 
