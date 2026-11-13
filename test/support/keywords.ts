@@ -19,5 +19,8 @@ function collect(node: unknown, found: Set<string>, seen = new Set<unknown>()): 
 
 const found = new Set<string>();
 collect(MinabGrammar() as Grammar, found);
-/** `_` is a keyword (the default case of `switch`) but also the start of names, so it is not tested as a name. */
-export const ALL_KEYWORDS: string[] = [...found].filter(k => k !== '_').sort();
+/**
+ * `_` is a keyword (the default case of `switch`) but also the start of names, so it is not tested as a name.
+ * `USER` and `USERGROUP` are type words that a name may still be (the 1.x promise; `test/users-parse.test.ts` tests it).
+ */
+export const ALL_KEYWORDS: string[] = [...found].filter(k => k !== '_' && k !== 'USER' && k !== 'USERGROUP').sort();

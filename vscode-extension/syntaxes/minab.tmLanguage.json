@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.minab",
-      "match": "\\b(CROSSJOIN|continue|DATETIME|DISTINCT|LEFTJOIN|boolean|BOOLEAN|DECIMAL|GROUPBY|INTEGER|ORDERBY|CITEXT|DELETE|HAVING|INSERT|number|object|OFFSET|SELECT|string|switch|UPDATE|VALUES|array|break|false|isnot|LIMIT|where|WHERE|CAST|DATE|DESC|else|from|FROM|JOIN|JSON|LIKE|loop|null|NULL|TEXT|TIME|true|UUID|AND|ASC|KEY|let|NOT|SET|AS|by|fn|if|in|IN|is|ON|OR|to)\\b|\\B(\\.\\$index)\\b|\\b(if!)\\B"
+      "match": "\\b(CROSSJOIN|USERGROUP|continue|DATETIME|DISTINCT|LEFTJOIN|boolean|BOOLEAN|DECIMAL|GROUPBY|INTEGER|ORDERBY|CITEXT|DELETE|HAVING|INSERT|number|object|OFFSET|SELECT|string|switch|UPDATE|VALUES|array|break|false|isnot|LIMIT|where|WHERE|CAST|DATE|DESC|else|from|FROM|JOIN|JSON|LIKE|loop|null|NULL|TEXT|TIME|true|USER|UUID|AND|ASC|KEY|let|NOT|SET|AS|by|fn|if|in|IN|is|ON|OR|to)\\b|\\B(\\.\\$index)\\b|\\b(if!)\\B"
     },
     {
       "name": "string.quoted.double.minab",

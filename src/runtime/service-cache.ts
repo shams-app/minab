@@ -42,7 +42,15 @@ export function schemaKey(schema: MinabSchema): string {
 function ruleContextKey(context: MinabRuleContext): string {
     const field = context.fieldType;
     const type = field ? `${field.base}${field.nullable ? '?' : ''}${field.array ? '[]' : ''}${field.arrayNullable ? '?' : ''}` : '';
-    return JSON.stringify([context.isFieldRule, type, context.recordTable ?? null, context.groupTable ?? null]);
+    // The special users and the group names change what a program means, so two contexts that differ in them never share services.
+    return JSON.stringify([
+        context.isFieldRule,
+        type,
+        context.recordTable ?? null,
+        context.groupTable ?? null,
+        context.specialUsers ?? null,
+        context.groupNames ?? null
+    ]);
 }
 
 export class ServiceCache {

@@ -85,7 +85,9 @@ import {
     type NamedScope,
     type NameRef,
     type Param,
+    type GroupRef,
     type ParentRecord,
+    type SpecialUserRef,
     type SwitchExpr,
     type Subquery,
     type TupleAccess,
@@ -135,6 +137,8 @@ export function registerValidationChecks(services: MinabServices): void {
         TypeTestExpression: validator.checkExpressionTypeChecks,
         CurrentRecord: [validator.checkExpressionTypeChecks, validator.checkVivifyNotOnCollection],
         ParentRecord: validator.checkExpressionTypeChecks,
+        SpecialUserRef: validator.checkExpressionTypeChecks,
+        GroupRef: validator.checkExpressionTypeChecks,
         NameRef: validator.checkNameRefTypeChecks,
         Subquery: validator.checkExpressionTypeChecks,
         WhereClause: validator.checkConditionIsBoolean,
@@ -211,6 +215,8 @@ export class MinabValidator {
             | TypeTestExpression
             | CurrentRecord
             | ParentRecord
+            | SpecialUserRef
+            | GroupRef
             | NameRef
             | Subquery,
         accept: ValidationAcceptor

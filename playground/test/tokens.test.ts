@@ -48,11 +48,28 @@ describe('sigils', () => {
         expect(types('.$index')).toEqual(['sigil.index:.$index']);
     });
 
-    test('a name before `(` is a function, a built-in stays a built-in, and `&` is not part of any token', () => {
+    test('a name before `(` is a function, a built-in stays a built-in, and `&` is an operator, not part of a call', () => {
         expect(types('discounted(1)')).toEqual(['function:discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
         expect(types('COUNT(.orders)')).toEqual(['builtin:COUNT', 'delimiter:(', 'sigil.record:.orders', 'delimiter:)']);
         expect(types('discounted')).toEqual(['identifier:discounted']);
-        expect(types('&discounted(1)')).toEqual(['invalid:&', 'function:discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
+        expect(types('&discounted(1)')).toEqual(['operator:&', 'function:discounted', 'delimiter:(', 'number:1', 'delimiter:)']);
+    });
+
+    test('@name and @@name are one token each, like #Table, and members follow them', () => {
+        expect(types('@currentUser')).toEqual(['sigil.alias:@currentUser']);
+        expect(types('@@Sales')).toEqual(['sigil.alias:@@Sales']);
+        expect(types('@@`Sales team`')).toEqual(['sigil.alias:@@`Sales team`']);
+        expect(types('@currentUser.name')).toEqual(['sigil.alias:@currentUser', 'delimiter:.', 'member:name']);
+        expect(types('@@Sales + @@Support & !@@Interns')).toEqual([
+            'sigil.alias:@@Sales',
+            'operator:+',
+            'sigil.alias:@@Support',
+            'operator:&',
+            'operator:!',
+            'sigil.alias:@@Interns'
+        ]);
+        expect(types('let me: USER = @currentUser;')).toContain('type:USER');
+        expect(types('let g: USERGROUP')).toContain('type:USERGROUP');
     });
 
     test('if! is one keyword', () => {

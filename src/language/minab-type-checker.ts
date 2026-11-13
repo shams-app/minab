@@ -30,6 +30,7 @@ import {
     isFunctionDecl,
     isGroupByClause,
     isGroupKeyRef,
+    isGroupRef,
     isIfExpr,
     isIndexRef,
     isJsonObjectLiteral,
@@ -46,6 +47,7 @@ import {
     isQuery,
     isStringLiteral,
     isSubquery,
+    isSpecialUserRef,
     isSwitchExpr,
     isTableRef,
     isTupleAccess,
@@ -91,9 +93,16 @@ import {
     isNumeric,
     isOrderable,
     isTextual,
+    isUser,
+    isUserSetOperand,
     NULL_TYPE,
     NUMERIC_BASES,
     scalarType,
+    tableDisplayName,
+    USERGROUP_TYPE,
+    USER_LIST_TYPE,
+    USER_TABLE,
+    userType,
     widenNumeric,
     type LogicalTypeBase,
     type MinabType,
@@ -141,8 +150,39 @@ function isInGroupedQuery(node: AstNode): boolean {
     return !!AstUtils.getContainerOfType(node, isQuery)?.groupByClause;
 }
 
-export function typeRefToMinabType(t: TypeRef): ScalarType {
+/**
+ * `USER` is a record of the directory, `USER?` a nullable one and `USER[]` a list of them. `USERGROUP` is a set of users,
+ * never `null`: a `?` or `[]` after it changes nothing.
+ */
+export function typeRefToMinabType(t: TypeRef): MinabType {
+    if (t.base === 'USER') return t.array ? USER_LIST_TYPE : userType(!!t.nullable);
+    if (t.base === 'USERGROUP') return USERGROUP_TYPE;
     return scalarType(t.base as LogicalTypeBase, { nullable: t.nullable, array: t.array, arrayNullable: t.arrayNullable });
+}
+
+/** The edit distance of two names (insert, delete, change one letter). Used to suggest a name. */
+function distance(a: string, b: string): number {
+    let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+        const row = [i];
+        for (let j = 1; j <= b.length; j++) {
+            row[j] = Math.min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        }
+        previous = row;
+    }
+    return previous[b.length];
+}
+
+/** Up to three names close to `name`, nearest first, written as `<sigil><name>` and joined with ", ". Empty when none is close. */
+function suggestNames(name: string, candidates: readonly string[], sigil: string): string {
+    const limit = Math.max(2, Math.floor(name.length / 3));
+    return candidates
+        .map(candidate => ({ candidate, d: distance(name.toLowerCase(), candidate.toLowerCase()) }))
+        .filter(({ d }) => d <= limit)
+        .sort((x, y) => x.d - y.d || x.candidate.localeCompare(y.candidate))
+        .slice(0, 3)
+        .map(({ candidate }) => `"${sigil}${candidate}"`)
+        .join(', ');
 }
 
 export function astTypeToMinabType(t: Type): MinabType {
@@ -160,7 +200,13 @@ export class MinabTypeChecker {
         private readonly schema: SchemaProvider,
         private readonly scopeResolver: MinabScopeResolver,
         private readonly ruleContext: MinabRuleContext
-    ) {}
+    ) {
+        // A filter's `.` is a row of its receiver: for users and groups the resolver asks this checker what the receiver is.
+        scopeResolver.setReceiverTyper(expr => {
+            const result = this.inferType(expr);
+            return result.ok ? result.type : undefined;
+        });
+    }
 
     /**
      * Stamps `origin` on a failure the dispatch didn't already tag — which,
@@ -190,6 +236,8 @@ export class MinabTypeChecker {
         if (isCurrentRecord(node)) return this.inferCurrentRecord(node);
         if (isParentRecord(node)) return this.inferSigilRecord(this.scopeResolver.resolveParentRecord(node));
         if (isNamedScope(node)) return this.inferNamedScope(node);
+        if (isSpecialUserRef(node)) return this.inferSpecialUser(node.name);
+        if (isGroupRef(node)) return this.inferGroup(node.name);
         if (isFieldValue(node)) return this.inferFieldValue();
         if (isGroupKeyRef(node)) return this.inferGroupKeyRef(node);
         if (isMemberAccess(node)) return this.inferMemberAccess(node);
@@ -256,6 +304,35 @@ export class MinabTypeChecker {
             return ok({ kind: 'collection', table: res.scope.tableName });
         }
         return ok({ kind: 'record', table: res.scope.tableName });
+    }
+
+    /** `@name`: one of the special users the host declares for this place (P8). */
+    private inferSpecialUser(name: string | undefined): TypeResult {
+        if (!name) return err('syntax.incompleteExpression');
+        const declared = this.ruleContext.specialUsers ?? [];
+        const found = declared.find(u => u.name === name);
+        if (!found) {
+            return err('scope.unknownSpecialUser', {
+                name,
+                suggestions: suggestNames(
+                    name,
+                    declared.map(u => u.name),
+                    '@'
+                )
+            });
+        }
+        return ok(userType(found.type === 'USER?'));
+    }
+
+    /**
+     * `@@name`: a group of the workspace (P2), a `USERGROUP`. The host gives the group names; without a list the
+     * name is not checked here, because the host checks it when it saves.
+     */
+    private inferGroup(name: string | undefined): TypeResult {
+        if (!name) return err('syntax.incompleteExpression');
+        const known = this.ruleContext.groupNames;
+        if (known && !known.includes(name)) return err('scope.unknownGroup', { name, suggestions: suggestNames(name, known, '@@') });
+        return ok(USERGROUP_TYPE);
     }
 
     private inferCurrentRecord(node: CurrentRecord): TypeResult {
@@ -328,12 +405,13 @@ export class MinabTypeChecker {
 
     private lookupColumn(table: string, field: string): TypeResult {
         const col = this.schema.getColumn(table, field);
-        if (!col) return err('scope.unknownColumn', { column: field, table });
+        if (!col) return err('scope.unknownColumn', { column: field, table: tableDisplayName(table) });
         switch (col.type.kind) {
             case 'scalar':
                 return ok(col.type.type);
             case 'ref':
-                return ok({ kind: 'record', table: col.type.table });
+                // A user column says whether it may be empty (`USER?`); another relation keeps the old reading.
+                return ok(col.type.table === USER_TABLE ? userType(col.type.nullable) : { kind: 'record', table: col.type.table });
             case 'collection':
                 return ok({ kind: 'collection', table: col.type.table });
         }
@@ -341,7 +419,7 @@ export class MinabTypeChecker {
 
     private lookupBroadcastColumn(table: string, field: string): TypeResult {
         const col = this.schema.getColumn(table, field);
-        if (!col) return err('scope.unknownColumn', { column: field, table });
+        if (!col) return err('scope.unknownColumn', { column: field, table: tableDisplayName(table) });
         switch (col.type.kind) {
             case 'scalar':
                 return ok(scalarType(col.type.type.base, { nullable: col.type.type.nullable, array: true }));
@@ -599,6 +677,9 @@ export class MinabTypeChecker {
             case '%':
             case '\\':
                 return this.inferArithmetic(node);
+            case '&':
+            case '|':
+                return this.inferSetOperator(node);
             case '==':
             case '!=':
                 return this.inferEquality(node);
@@ -633,6 +714,11 @@ export class MinabTypeChecker {
         const right = this.inferType(node.right);
         if (!right.ok) return right;
 
+        // `+` and `-` on users and groups are set operators (P3); the operand types decide, as they do for a text `+`.
+        if ((node.operator === '+' || node.operator === '-') && (this.involvesUsers(left.type) || this.involvesUsers(right.type))) {
+            return this.setOperatorResult(node, left.type, right.type);
+        }
+
         if (node.operator === '+' && isTextual(left.type) && isTextual(right.type)) {
             return ok(scalarType('TEXT', { nullable: left.type.nullable || right.type.nullable }));
         }
@@ -653,12 +739,37 @@ export class MinabTypeChecker {
         return ok(scalarType(base, { nullable: nullable || (divides && !!this.ruleContext.groupTable) }));
     }
 
+    /** A `USER`, a `USER?`, a `USERGROUP` or a `USER[]`: a type that takes part in the set rules. */
+    private involvesUsers(t: MinabType): boolean {
+        return isUserSetOperand(t) || (t.kind === 'collection' && t.table === USER_TABLE);
+    }
+
+    /** `&` and `|` (and `+`, `-` over users): both operands are users or groups, and the result is a `USERGROUP` (P3). */
+    private setOperatorResult(node: BinaryExpression, left: MinabType, right: MinabType): TypeResult {
+        if (!isUserSetOperand(left) || !isUserSetOperand(right)) {
+            return err('type.setOperandType', { operator: String(node.operator), left: formatType(left), right: formatType(right) });
+        }
+        return ok(USERGROUP_TYPE);
+    }
+
+    private inferSetOperator(node: BinaryExpression): TypeResult {
+        const left = this.inferType(node.left);
+        if (!left.ok) return left;
+        const right = this.inferType(node.right);
+        if (!right.ok) return right;
+        return this.setOperatorResult(node, left.type, right.type);
+    }
+
     private inferEquality(node: BinaryExpression): TypeResult {
         const left = this.inferType(node.left);
         if (!left.ok) return left;
         const right = this.inferType(node.right);
         if (!right.ok) return right;
         if (left.type.kind === 'null' || right.type.kind === 'null') return ok(scalarType('BOOLEAN'));
+        // A `USER` is compared only with a `USER` (P1).
+        if ((isUser(left.type) && !isUser(right.type)) || (isUser(right.type) && !isUser(left.type))) {
+            return err('type.userComparedToText', { operator: node.operator, left: formatType(left.type), right: formatType(right.type) });
+        }
         const relation = this.relationAgainstKey(node, left.type, right.type);
         if (relation) return relation;
         if (!comparableTypes(left.type, right.type)) {
@@ -733,9 +844,17 @@ export class MinabTypeChecker {
 
         const right = this.inferType(node.right);
         if (!right.ok) return right;
+        // A set of users, or one user, on the right needs a `USER` on the left (P9). A `USER` or `USER?` is a set of one, or of none.
+        if (this.involvesUsers(right.type)) {
+            if (left.type.kind !== 'null' && !isUser(left.type)) return err('type.inNeedsUser', { actual: formatType(left.type) });
+            return ok(scalarType('BOOLEAN'));
+        }
         const rightElement = this.arrayOrCollectionElement(right.type);
         if (!rightElement) {
             return err('type.inNeedsCollection', { actual: formatType(right.type) });
+        }
+        if (isUser(left.type) && !isUser(rightElement)) {
+            return err('type.userComparedToText', { operator: 'IN', left: formatType(left.type), right: formatType(rightElement) });
         }
         const relation = this.relationAgainstKey(node, left.type, rightElement);
         if (relation) return relation;
@@ -789,6 +908,11 @@ export class MinabTypeChecker {
         if (node.negated) {
             if (!this.isBoolean(operand.type)) return err('type.notNeedsBoolean', { actual: formatType(operand.type) });
             return ok(scalarType('BOOLEAN'));
+        }
+        if (node.operator === '!') {
+            // The complement of a set of users (P3): everyone except the operand. A `BOOLEAN` keeps `NOT`.
+            if (!isUserSetOperand(operand.type)) return err('type.complementNeedsUsers', { actual: formatType(operand.type) });
+            return ok(USERGROUP_TYPE);
         }
         if (!isNumeric(operand.type)) return err('type.unaryNeedsNumeric', { operator: String(node.operator), actual: formatType(operand.type) });
         return ok(operand.type);

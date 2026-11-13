@@ -465,10 +465,20 @@ export const DIAGNOSTICS = {
         message: p => `unknown column "${p.column}" on table "${p.table}"`,
         doc: 'The table has no column with this name. Fix the name, or ask the host to add the column to the schema.'
     }),
+    'scope.unknownGroup': entry<{ name: string; suggestions: string }>({
+        severity: error,
+        message: p => `unknown group "@@${p.name}"${p.suggestions ? `: did you mean ${p.suggestions}?` : ''}`,
+        doc: 'The workspace has no group with this name. Fix the name, or ask an admin to create the group.'
+    }),
     'scope.unknownName': entry<{ name: string }>({
         severity: error,
         message: p => `unknown name "${p.name}"`,
         doc: 'No variable, parameter, loop variable or alias has this name in scope. Declare it first, or fix the name.'
+    }),
+    'scope.unknownSpecialUser': entry<{ name: string; suggestions: string }>({
+        severity: error,
+        message: p => `unknown special user "@${p.name}" here${p.suggestions ? `: did you mean ${p.suggestions}?` : ''}`,
+        doc: 'This place does not have a special user with this name. Use one that the host lists for this place, for example @currentUser.'
     }),
     'scope.unknownTable': entry<{ name: string }>({
         severity: error,
@@ -537,6 +547,14 @@ export const DIAGNOSTICS = {
         message: p => `column "${p.column}" needs a statically known table`,
         doc: 'The checker does not know the table of the current record. Open a table first, for example with FROM.'
     }),
+    'type.complementNeedsUsers': entry<{ actual: string }>({
+        severity: error,
+        message: p =>
+            p.actual === 'BOOLEAN'
+                ? '"!" is the complement of a set of users, and this is a BOOLEAN: use NOT'
+                : `"!" needs a USERGROUP or a USER, got ${p.actual}`,
+        doc: 'The prefix ! gives everyone except the users or the group after it. For a BOOLEAN, write NOT.'
+    }),
     'type.conditionNotBoolean': entry<{ actual: string }>({
         severity: error,
         message: p => `expected a BOOLEAN condition, got ${p.actual}`,
@@ -575,6 +593,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"IN" expects a list or collection on the right, got ${p.actual}`,
         doc: 'The right side of IN must be a list, an array, a collection or a subquery.'
+    }),
+    'type.inNeedsUser': entry<{ actual: string }>({
+        severity: error,
+        message: p => `IN with a USERGROUP needs a USER on the left, got ${p.actual}`,
+        doc: 'A group holds users, so only a USER can be in it. Put a USER on the left, for example @currentUser or .owner. To match an id, compare the .id of a user.'
     }),
     'type.inSubqueryMismatch': entry<{ left: string; right: string }>({
         severity: error,
@@ -678,6 +701,11 @@ export const DIAGNOSTICS = {
         message: p => `"${p.operator}" can't compare a relation with a key — compare ${p.key}, not ${p.operand}`,
         doc: 'A relation (ref) is not compared with a key value. Compare through the key field of the related table, for example .customer.id == x.'
     }),
+    'type.setOperandType': entry<{ operator: string; left: string; right: string }>({
+        severity: error,
+        message: p => `"${p.operator}" combines users and groups, got ${p.left} and ${p.right}`,
+        doc: 'The operators +, -, & and | combine USERGROUP, USER and USER? values only. To use an array of users, convert it with CAST(x AS USERGROUP).'
+    }),
     'type.switchArmsDiffer': entry<{ first: string; second: string }>({
         severity: error,
         message: p => `switch arms must agree on type (no implicit coercion) — got ${p.first} and ${p.second}`,
@@ -702,6 +730,11 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `unsupported operator "${p.operator}"`,
         doc: 'The checker does not know this operator. Report it as a Minab bug.'
+    }),
+    'type.userComparedToText': entry<{ operator: string; left: string; right: string }>({
+        severity: error,
+        message: p => `"${p.operator}" cannot compare ${p.left} with ${p.right}: a USER is compared only with a USER (no implicit coercion)`,
+        doc: 'A USER is a person, not a text. Compare the id text with .id on the user, or compare two users, for example .owner == findUser(id).'
     }),
     'type.vivifyOnCollection': entry<{ member: string }>({
         severity: error,

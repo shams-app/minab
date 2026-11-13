@@ -12,7 +12,7 @@
  * `ref(Table)` / `collection(Table)` distinction and §7.2's logical types.
  */
 
-import { scalarType, type MinabType, type ScalarType } from './minab-types.js';
+import { GROUP_TABLE, scalarType, USER_TABLE, type MinabType, type ScalarType } from './minab-types.js';
 import { EMPTY_HOST, type ResolvedHost, type ResolvedHostFunction } from './host-declarations.js';
 
 /**
@@ -69,6 +69,40 @@ export interface MinabTableSchema {
     primaryKey?: string;
 }
 
+/**
+ * The two directory record types (users and groups, security plan MN.1). A program reaches them through `@name`, `@@name`,
+ * `USER`, `USERGROUP` and host functions, never by a table name: they are not in `tables`.
+ * A column that points to a user is `{ kind: 'ref', table: USER_TABLE, nullable }`, and a set of users is
+ * `{ kind: 'collection', table: USER_TABLE }`. Leave a list out to get the fixed columns of `DEFAULT_DIRECTORY`.
+ */
+export interface DirectorySchema {
+    /** The columns of a `USER`: the fixed ones and one for each attribute of the workspace. */
+    user?: MinabColumnSchema[];
+    /** The columns of a `GROUP`. */
+    group?: MinabColumnSchema[];
+}
+
+const text = (name: string, options: { nullable?: boolean; array?: boolean } = {}): MinabColumnSchema => ({
+    name,
+    type: { kind: 'scalar', type: scalarType('TEXT', options) }
+});
+
+/** The fixed columns of the directory (Shamsine security spec section 6.3). A host adds its attributes to `user`. */
+export const DEFAULT_DIRECTORY: Required<DirectorySchema> = {
+    user: [
+        text('id'),
+        text('name'),
+        { name: 'email', type: { kind: 'scalar', type: scalarType('CITEXT', { nullable: true }) } },
+        text('phone', { nullable: true }),
+        text('language', { nullable: true }),
+        text('timeZone', { nullable: true }),
+        text('role'),
+        text('kind'),
+        { name: 'joinedAt', type: { kind: 'scalar', type: scalarType('DATETIME') } }
+    ],
+    group: [text('id'), text('name'), text('tags', { array: true }), text('kind'), { name: 'members', type: { kind: 'collection', table: USER_TABLE } }]
+};
+
 /** The whole read surface of every program: the tables and columns a program may use. A program can read all of it, so keep it small. */
 export interface MinabSchema {
     /**
@@ -78,6 +112,8 @@ export interface MinabSchema {
      */
     version?: string;
     tables: MinabTableSchema[];
+    /** The columns of the directory record types `USER` and `GROUP`. Optional; see `DirectorySchema`. */
+    directory?: DirectorySchema;
 }
 
 export const EMPTY_SCHEMA: MinabSchema = { tables: [] };
@@ -92,6 +128,16 @@ export const EMPTY_SCHEMA: MinabSchema = { tables: [] };
  * `Validator`, which is the only consumer of `isFieldRule`.
  */
 export interface MinabRuleContext {
+    /**
+     * The special users of this place (`@currentUser`, `@appUser`, later `@flowStarter`): the only names `@name` may take.
+     * A host that gives no list declares none, so every `@name` is an error. `USER?` is for a place that can lack the user.
+     */
+    specialUsers?: readonly SpecialUserDeclaration[];
+    /**
+     * The group names of the workspace, for `@@name`. An unknown name is an error. When the host gives no list, `@@` names
+     * are not checked here (the host checks them when it saves).
+     */
+    groupNames?: readonly string[];
     /** True when `$` (FieldValue) is valid anywhere in this program. */
     isFieldRule: boolean;
     /**
@@ -122,6 +168,12 @@ export interface MinabRuleContext {
     groupTable?: string;
 }
 
+/** One special user of a place: a name for `@name`, and its type. */
+export interface SpecialUserDeclaration {
+    name: string;
+    type: 'USER' | 'USER?';
+}
+
 /** The table a top-level `.` means: the record under validation, or a row of the group. */
 export function rootTableOf(context: MinabRuleContext): string | undefined {
     return context.recordTable ?? context.groupTable;
@@ -132,7 +184,7 @@ export const DEFAULT_RULE_CONTEXT: MinabRuleContext = { isFieldRule: false };
 // Re-exported so callers building a `MinabSchema`/`MinabRuleContext`
 // fixture don't need a separate import from `minab-types.ts` just for
 // this one helper.
-export { scalarType };
+export { scalarType, USER_TABLE, GROUP_TABLE };
 
 /**
  * Thin lookup wrapper around a host-supplied `MinabSchema`, plus the host's
@@ -147,7 +199,14 @@ export class SchemaProvider {
     ) {}
 
     getTable(name: string): MinabTableSchema | undefined {
-        return this.schema.tables.find(t => t.name === name) ?? this.host.inputTables.get(name);
+        return this.schema.tables.find(t => t.name === name) ?? this.host.inputTables.get(name) ?? this.directoryTable(name);
+    }
+
+    /** `USER` and `GROUP` of the directory. Their names start with `@`, so no program can name them. */
+    private directoryTable(name: string): MinabTableSchema | undefined {
+        if (name === USER_TABLE) return { name, columns: this.schema.directory?.user ?? DEFAULT_DIRECTORY.user, primaryKey: 'id' };
+        if (name === GROUP_TABLE) return { name, columns: this.schema.directory?.group ?? DEFAULT_DIRECTORY.group, primaryKey: 'id' };
+        return undefined;
     }
 
     getColumn(tableName: string, columnName: string): MinabColumnSchema | undefined {

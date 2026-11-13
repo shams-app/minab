@@ -667,6 +667,8 @@ export class MinabInterpreter {
         if (isNameRef(expr)) return state.lookup(expr.name);
         if (isBinaryExpression(expr)) return await this.binary(expr, state);
         if (isUnaryExpression(expr)) {
+            // The complement of a set of users runs with the directory port (MN.2); it is never read as a unary plus.
+            if (expr.operator === '!') fail('the complement "!" of users and groups is not evaluated yet');
             const operand = await this.expression(expr.operand, state);
             if (expr.negated) return !this.truthy(operand);
             // A `null` operand gives `null` (D46).
@@ -1444,7 +1446,8 @@ export class MinabInterpreter {
 
     /** A value that meets a declared type: a `DECIMAL` slot holds a `Big`, even when the value is a whole number (`let x: DECIMAL = 5`). */
     private coerce(type: Type, value: MinabValue): MinabValue {
-        if (isTypeRef(type)) return normalizeIn(value, type.base, type.array);
+        // Users and groups arrive as the directory port gives them (MN.2): nothing to convert here.
+        if (isTypeRef(type)) return type.base === 'USER' || type.base === 'USERGROUP' ? value : normalizeIn(value, type.base, type.array);
         if (Array.isArray(value) && value.length === type.elementTypes.length) return value.map((item, i) => this.coerce(type.elementTypes[i], item));
         return value;
     }
