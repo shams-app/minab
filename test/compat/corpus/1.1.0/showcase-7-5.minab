@@ -1,0 +1,14 @@
+let total: INTEGER = 0;
+total += 5;    // 5
+total -= 2;    // 3
+total *= 4;    // 12
+total /= 3;    // 4
+
+let label: TEXT = "order";
+label += "-42";    // "order-42"
+
+let discount: DECIMAL? = null;
+discount ?= 0.10;    // was null, so now 0.10
+discount ?= 0.20;    // already 0.10 (not null), so this is a no-op
+
+discount

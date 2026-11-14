@@ -4,7 +4,7 @@
  */
 
 import type * as Monaco from 'monaco-editor';
-import type { CompletionResult, HoverResult, SignatureHelpResult } from '../editor/types.js';
+import type { CompletionResult, DirectoryName, EditorHints, HoverResult, PinnedUser, SignatureHelpResult, UserLabel } from '../editor/types.js';
 import type { MinabRuleContext } from '../language/schema.js';
 import type { PrepareOptions, PreparedProgram } from '../runtime/types.js';
 
@@ -24,9 +24,11 @@ export interface MinabEditorClient {
         }
     >;
     /** Completion items at `offset`. */
-    complete(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<CompletionResult>;
+    complete(source: string, offset: number, options?: { ruleContext?: MinabRuleContext; hints?: EditorHints }): Promise<CompletionResult>;
     /** Hover text at `offset`, or `undefined`. */
-    hover(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<HoverResult | undefined>;
+    hover(source: string, offset: number, options?: { ruleContext?: MinabRuleContext; hints?: EditorHints }): Promise<HoverResult | undefined>;
+    /** The `findUser('usr_…')` calls of a program. Needed only for `userLabels` (inlay hints and hover of a pinned person). */
+    pinnedUsers?(source: string, options?: { ruleContext?: MinabRuleContext }): Promise<PinnedUser[]>;
     /** Signature help at `offset`, or `undefined`. */
     signatureHelp(source: string, offset: number, options?: { ruleContext?: MinabRuleContext }): Promise<SignatureHelpResult | undefined>;
 }
@@ -43,6 +45,17 @@ export interface RegisterMinabOptions {
     debounceMs?: number;
     /** The owner of the markers. Default `minab`. */
     markerOwner?: string;
+    /**
+     * The groups of the workspace for `@@` completion and hover: names, titles and kinds. Read when completion or hover asks,
+     * so keep it cheap (cache it). Without it the editor offers the names of `ruleContext.groupNames`.
+     */
+    directoryNames?: () => readonly DirectoryName[] | Promise<readonly DirectoryName[]>;
+    /**
+     * Who these user ids are. A rule that names a person is saved as `findUser('usr_…')`; with this callback the editor shows
+     * "Sara Ahmadi · sara@example.com" after the call (an inlay hint) and on hover. One call for all the ids of a program.
+     * An id the host does not know, or a person with no name, is left out of the answer. Needs `client.pinnedUsers`.
+     */
+    userLabels?: (ids: string[]) => Readonly<Record<string, UserLabel>> | Promise<Readonly<Record<string, UserLabel>>>;
     /** Markdown for a hovered keyword (the editor gives only the word). Without it a keyword has no hover. */
     keywordDocs?: (keyword: string) => string | undefined;
     /** Called when the worker fails (it stopped, or a request failed). The editor itself keeps working. */

@@ -12,7 +12,7 @@
  * Nothing here may touch Node or the DOM.
  */
 
-import { complete, hover, parseDocument, signatureHelp } from '../editor/index.js';
+import { complete, hover, parseDocument, pinnedUsers, signatureHelp } from '../editor/index.js';
 import { coded } from '../language/diagnostics/codes.js';
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import { createMinab } from '../runtime/minab.js';
@@ -274,10 +274,11 @@ export function serveMinab(endpoint: BridgeEndpoint, options: ServeOptions = {})
                 try {
                     const ruleContext = message.ruleContext ?? runtimeOptions.ruleContext ?? DEFAULT_RULE_CONTEXT;
                     const { services } = editorServices.cache.get(runtimeOptions.schema, ruleContext, editorServices.host);
-                    const doc = parseDocument(services, message.source);
+                    const doc = parseDocument(services, message.source, message.hints);
                     if (message.method === 'complete') answer(message.id, await complete(doc, message.offset));
                     else if (message.method === 'hover') answer(message.id, hover(doc, message.offset) ?? null);
                     else if (message.method === 'signatureHelp') answer(message.id, signatureHelp(doc, message.offset) ?? null);
+                    else if (message.method === 'pinnedUsers') answer(message.id, pinnedUsers(doc));
                     else fail(message.id, bridgeError(`unknown editor method ${String(message.method)}`));
                 } catch (error) {
                     fail(message.id, toMinabError(error));

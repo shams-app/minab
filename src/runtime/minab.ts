@@ -9,6 +9,7 @@ import { resolveHostDeclarations } from '../language/host-declarations.js';
 import { DEFAULT_RULE_CONTEXT, type MinabRuleContext, type MinabSchema } from '../language/schema.js';
 import { resolveLimits } from './limits.js';
 import { LANGUAGE_VERSION, migrate } from './migrate.js';
+import { policyRuleContext, ROUTE_PREFIX, type PolicyOptions } from '../policy/profile.js';
 import { prepareProgram, refusedByVersion } from './prepare.js';
 import { DEFAULT_SERVICE_CACHE_SIZE, ServiceCache } from './service-cache.js';
 import type { CacheStats, Minab, MinabOptions, PrepareOptions, PreparedProgram } from './types.js';
@@ -39,7 +40,17 @@ export function createMinab(options: MinabOptions): Minab {
         async prepare(source: string, prepareOptions: PrepareOptions = {}): Promise<PreparedProgram> {
             if (disposed) throw new Error('this Minab runtime was disposed');
             if (typeof source !== 'string') throw new TypeError('prepare needs the program source as a string');
-            const ruleContext = prepareOptions.ruleContext ?? defaultContext;
+            let ruleContext = prepareOptions.ruleContext ?? defaultContext;
+            let policy: { options: PolicyOptions; kind: 'boolean' | 'principal' | 'route' } | undefined;
+            if (prepareOptions.profile !== undefined) {
+                if (prepareOptions.profile !== 'policy') throw new TypeError(`unknown profile "${String(prepareOptions.profile)}"`);
+                const expect = prepareOptions.expect;
+                if (expect !== 'boolean' && expect !== 'principal' && expect !== 'route') {
+                    throw new TypeError("profile 'policy' needs expect: 'boolean', 'principal' or 'route'");
+                }
+                policy = { options: prepareOptions.policy ?? {}, kind: expect };
+                ruleContext = policyRuleContext(ruleContext, expect, policy.options);
+            }
             checkGroupContext(ruleContext, options.schema);
             const set = cache.get(options.schema, ruleContext, host);
             // One URI for each call: calls may overlap, and a shared URI would make them fight.
@@ -63,16 +74,19 @@ export function createMinab(options: MinabOptions): Minab {
                 }
                 text = migrated.source;
             }
+            // A route body reads its user as `u`: the runtime declares it in front of the source (the checker and the walk know the line).
+            const prefix = policy?.kind === 'route' ? ROUTE_PREFIX : '';
             return prepareProgram(
                 set,
                 uri,
-                text,
+                prefix + text,
                 prepareOptions.expect,
                 ruleContext.recordTable,
                 localHostFunctions,
                 limits,
                 ruleContext.groupTable,
-                options.localDirectory
+                options.localDirectory,
+                policy && { ...policy, source: text, prefixLength: prefix.length, prefixLines: prefix === '' ? 0 : 1 }
             );
         },
         cacheStats(): CacheStats {

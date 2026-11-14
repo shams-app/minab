@@ -1,0 +1,368 @@
+{
+  "topic": "unknown",
+  "cases": [
+    {
+      "name": "an Unknown comparison is Unknown",
+      "source": ".note == 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "x",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "false AND Unknown is false",
+      "source": ".id == 1 AND .note == 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "true AND Unknown is Unknown",
+      "source": ".id == 7 AND .note == 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "true OR Unknown is true",
+      "source": ".id == 7 OR .note == 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "false OR Unknown is Unknown",
+      "source": ".id == 1 OR .note == 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "NOT Unknown is Unknown",
+      "source": ".note != 'x'",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ne",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "x",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "is null of an Unknown value is Unknown",
+      "source": ".note is null",
+      "kind": "boolean",
+      "unknown": [
+        "record.note"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "res": [
+              "note"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "an Unknown request value",
+      "source": "request.mfa",
+      "kind": "boolean",
+      "unknown": [
+        "request.mfa"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "mfa"
+          },
+          "r": {
+            "lit": true,
+            "t": "BOOLEAN"
+          }
+        }
+      }
+    },
+    {
+      "name": "an Unknown tag",
+      "source": "resource.tags.sensitivity == 'high'",
+      "kind": "boolean",
+      "unknown": [
+        "resource.tags.sensitivity"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "sensitivity"
+          },
+          "r": {
+            "lit": "high",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "an Unknown new record field",
+      "source": "new.status == 'closed'",
+      "kind": "boolean",
+      "unknown": [
+        "new.status"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "new": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "closed",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a user field that is Unknown",
+      "source": ".owner == @currentUser",
+      "kind": "boolean",
+      "unknown": [
+        "record.owner"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "owner"
+            ]
+          },
+          "r": {
+            "prin": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "membership of an Unknown user",
+      "source": ".owner IN @@Sales",
+      "kind": "boolean",
+      "unknown": [
+        "record.owner"
+      ],
+      "expected": "unknown",
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Sales"
+          }
+        }
+      }
+    }
+  ]
+}

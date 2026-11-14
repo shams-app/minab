@@ -150,7 +150,7 @@ A program cannot become SQL.
 | Code | Severity | Message | Parameters | What to do |
 | --- | --- | --- | --- | --- |
 | `compile.blockInQuery` | error | a block with statements cannot run inside a query (a statement cannot become SQL) | none | A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query. |
-| `compile.directoryInSql` | error | {part} reads users or groups, and a query cannot read the directory yet | `part` | A query cannot use this part of the program with users or groups. Read the value into a variable first, outside the query, then use the variable. |
+| `compile.directoryInSql` | error | {part} reads users or groups for each row, and a query cannot ask the directory for each row | `part` | A query can use a person or a group that does not depend on the row (@currentUser, @@Sales, a route of the current user), and compare a user column with it. This part depends on each row (a route of a column, groupsOf of a column, a column of the user in a column such as .owner.name), so the database cannot answer it. Read the value outside the query, or compare user ids. |
 | `compile.hostFunctionInSql` | error | "{name}" is a host function — it runs in the host, never in SQL | `name` | A host function is the host's own code, so it cannot become SQL. Use the interpreter (run), or move the call out of the query. |
 | `compile.notGroupExpression` | error | this program is not a group expression, so it has no SQL fragment for a group | none | compileGroupExpression works only for a program prepared with ruleContext.groupTable. Use compile for any other program. |
 | `compile.notSql` | error | this program does not compile to SQL on its own: {reason} | `reason` | Part of the program has no SQL form (for example a user function or a statement). The interpreter runs it; use run instead of compile. |
@@ -218,6 +218,16 @@ The data port failed or is missing.
 | --- | --- | --- | --- | --- |
 | `data.error` | error | the data source failed | none | The data port failed. params.sqlstate holds the SQLSTATE when the driver gave one. The SQL text is never part of the error: read it from the statement event. |
 | `data.noPort` | error | this program needs data, and no data port was given | none | The program reads a table, but the host gave run no data port. Give a data port, or run a program that needs no data. |
+
+## policy
+
+A policy, a group expression or a route uses something the policy profile does not allow (MN.3, P12).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `policy.constructNotAllowed` | error | {construct} is not allowed in a policy, a group or a route | `construct` | The policy profile accepts only literals, record fields, @ and @@ names, request, resource.tags, comparisons, AND / OR / NOT, IN, LIKE, is null, set operators, filters, the directory functions and named routes. Remove this part or move it to a place that runs Minab. |
+| `policy.tooManySteps` | error | the route "{name}" is called more than {limit} levels deep inside other route calls | `name`, `limit` | Route calls may be nested at most 3 deep, so a rule stays cheap to check. Call fewer routes inside each other, or write one route that does the work. |
+| `policy.unknownTagKey` | warning | no resource in this workspace carries the tag "{key}": did you mean {suggestions}? | `key`, `suggestions` | The workspace does not use this tag key. A typo here makes a rule that never matches. Check the key; the rule is still saved. |
 
 ## cancelled
 

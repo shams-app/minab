@@ -8,6 +8,7 @@ export { signatureHelp } from './signature-help.js';
 export { quickFixes } from './quick-fixes.js';
 export { findReferences, prepareRename, rename } from './references.js';
 export { semanticTokens } from './semantic-tokens.js';
+export { inlayHints, pinnedUsers, userLabelText } from './inlay-hints.js';
 export { documentSymbols } from './symbols.js';
 export { BUILTIN_DOCS } from './builtin-docs.js';
 export { SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES } from './types.js';
@@ -16,11 +17,15 @@ export type {
     CompletionKind,
     CompletionResult,
     DefinitionResult,
+    DirectoryName,
+    EditorHints,
     DocumentSymbolResult,
     EditorPosition,
     EditorRange,
     FixableDiagnostic,
     HoverResult,
+    InlayHintResult,
+    PinnedUser,
     PrepareRenameResult,
     QuickFix,
     ReferenceResult,
@@ -30,7 +35,8 @@ export type {
     SemanticTokenType,
     SignatureHelpResult,
     SymbolKind,
-    TextEdit
+    TextEdit,
+    UserLabel
 } from './types.js';
 export { ALL_WORD_KEYWORDS, INITIAL_STATE, tokenize, tokenizeLine } from './tokens.js';
 export type { LineState, Token, TokenType } from './tokens.js';

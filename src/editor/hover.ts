@@ -13,8 +13,10 @@ import {
     isMemberAccess,
     isNamedScope,
     isNameRef,
+    isGroupRef,
     isParam,
     isParentRecord,
+    isSpecialUserRef,
     isTableRef,
     isVariableDecl
 } from '../language/generated/ast.js';
@@ -23,7 +25,8 @@ import { rootTableOf, type MinabTableSchema } from '../language/schema.js';
 import { BUILTIN_DOCS } from './builtin-docs.js';
 import { code, describeColumn, hostFunctionDoc, hostFunctionSignature, tableSummary, typeLine } from './describe.js';
 import type { EditorDocument } from './document.js';
-import type { HoverResult } from './types.js';
+import { pinnedUsers } from './inlay-hints.js';
+import { userLabelText, type HoverResult } from './types.js';
 
 /** The inferred type of a node, or `undefined` when the checker has none. */
 export function typeOf(doc: EditorDocument, node: AstNode): MinabType | undefined {
@@ -49,6 +52,18 @@ export function functionSignature(decl: AstNode): string {
 export function hover(doc: EditorDocument, offset: number): HoverResult | undefined {
     const root = doc.document.parseResult.value.$cstNode;
     if (!root) return undefined;
+    // A pinned `findUser('usr_…')` reads as the person, when the host knows who (MN.4, P4).
+    if (doc.hints?.userLabels) {
+        const at = doc.document.textDocument.positionAt(offset);
+        const pin = pinnedUsers(doc).find(
+            ({ range: r }) =>
+                (at.line > r.start.line || (at.line === r.start.line && at.character >= r.start.character)) &&
+                (at.line < r.end.line || (at.line === r.end.line && at.character <= r.end.character))
+        );
+        const label = pin && userLabelText(doc.hints.userLabels[pin.id]);
+        if (pin && label)
+            return { contents: `**${label}** — the person that ${code(`findUser('${pin.id}')`)} stands for\n\n**type** ${code('USER')}`, range: pin.range };
+    }
     const leaf = CstUtils.findLeafNodeAtOffset(root, offset);
     if (!leaf) return undefined;
     if (GrammarAST.isKeyword(leaf.grammarSource)) {
@@ -93,6 +108,16 @@ function describeNode(doc: EditorDocument, node: AstNode): string | undefined {
                   ? `key of a JSON value — a missing key is null (spec §7.3.1)`
                   : 'member access';
         return typed(node.$cstNode?.text.trim() ?? node.member, what, typeOf(doc, node));
+    }
+    if (isSpecialUserRef(node)) {
+        const declared = doc.services.ruleContext.specialUsers?.find(user => user.name === node.name);
+        return typed(`@${node.name}`, declared ? 'a special user of this place' : 'not a special user of this place', typeOf(doc, node));
+    }
+    if (isGroupRef(node)) {
+        const group = doc.hints?.groups?.find(g => g.name === node.name);
+        const title = group?.title && group.title !== group.name ? ` — ${group.title}` : '';
+        const kind = group?.kind ? ` (${group.kind})` : '';
+        return typed(`@@${node.name}`, `a group of the workspace${title}${kind}`, typeOf(doc, node));
     }
     if (isParentRecord(node)) {
         return typed('^', 'the parent record — the row one scope level up (spec §2.2)', typeOf(doc, node));

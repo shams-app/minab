@@ -1,0 +1,8 @@
+fn discountedTotal(orderId: UUID, rate: DECIMAL): DECIMAL {
+    let base: DECIMAL = (
+        FROM Order
+        WHERE .id == orderId
+        SELECT .total
+    );
+    base - (base * rate / 100)
+}

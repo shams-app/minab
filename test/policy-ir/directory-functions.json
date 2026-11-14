@@ -1,0 +1,506 @@
+{
+  "topic": "directory-functions",
+  "cases": [
+    {
+      "name": "findUser by e-mail",
+      "source": "@currentUser == findUser('sara@example.com')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser by e-mail, other case",
+      "source": "@currentUser == findUser('Sara@Example.com')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser by phone",
+      "source": "@currentUser == findUser('+989121234567')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser by a local phone",
+      "source": "@currentUser == findUser('09121234567')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser by persian digits",
+      "source": "@currentUser == findUser('۰۹۱۲۱۲۳۴۵۶۷')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser by id",
+      "source": "@currentUser == findUser('usr_sara')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "prin": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser compared with a field",
+      "source": ".owner == findUser('sara@example.com')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "owner"
+            ]
+          },
+          "r": {
+            "lit": "usr_sara",
+            "t": "USER"
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser is not another user",
+      "source": ".owner != findUser('ali@example.com')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "res": [
+                "owner"
+              ]
+            },
+            "r": {
+              "lit": "usr_ali",
+              "t": "USER"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "findUser in a set",
+      "source": "@currentUser IN findUser('sara@example.com') + @@Interns",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "union",
+            "of": [
+              {
+                "k": "user",
+                "id": "usr_sara"
+              },
+              {
+                "k": "group",
+                "id": "grp_Interns"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "findGroup",
+      "source": "@currentUser IN findGroup('Sales')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Sales"
+          }
+        }
+      }
+    },
+    {
+      "name": "single of a filter",
+      "source": "@currentUser == single(@@everyone[.city == 'Tehran'])",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "single",
+              "set": {
+                "k": "filter",
+                "set": {
+                  "k": "everyone"
+                },
+                "where": {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "prin": [
+                      "city"
+                    ]
+                  },
+                  "r": {
+                    "lit": "Tehran",
+                    "t": "TEXT"
+                  }
+                }
+              },
+              "orNull": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "single is the one user",
+      "source": "single(@@everyone[.city == 'Tehran']) == findUser('usr_mina')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "k": "single",
+            "set": {
+              "k": "filter",
+              "set": {
+                "k": "everyone"
+              },
+              "where": {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "prin": [
+                    "city"
+                  ]
+                },
+                "r": {
+                  "lit": "Tehran",
+                  "t": "TEXT"
+                }
+              }
+            },
+            "orNull": false
+          },
+          "set": {
+            "k": "user",
+            "id": "usr_mina"
+          }
+        }
+      }
+    },
+    {
+      "name": "singleOrNull of nobody is no user",
+      "source": "@currentUser == singleOrNull(@@everyone[.city == 'Nowhere'])",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "single",
+              "set": {
+                "k": "filter",
+                "set": {
+                  "k": "everyone"
+                },
+                "where": {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "prin": [
+                      "city"
+                    ]
+                  },
+                  "r": {
+                    "lit": "Nowhere",
+                    "t": "TEXT"
+                  }
+                }
+              },
+              "orNull": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "singleOrNull in a comparison",
+      "source": "@currentUser == singleOrNull(@@everyone[.city == 'Marand' AND .department == 'IT'])",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "single",
+              "set": {
+                "k": "filter",
+                "set": {
+                  "k": "everyone"
+                },
+                "where": {
+                  "op": "and",
+                  "of": [
+                    {
+                      "op": "cmp",
+                      "cmp": "eq",
+                      "l": {
+                        "prin": [
+                          "city"
+                        ]
+                      },
+                      "r": {
+                        "lit": "Marand",
+                        "t": "TEXT"
+                      }
+                    },
+                    {
+                      "op": "cmp",
+                      "cmp": "eq",
+                      "l": {
+                        "prin": [
+                          "department"
+                        ]
+                      },
+                      "r": {
+                        "lit": "IT",
+                        "t": "TEXT"
+                      }
+                    }
+                  ]
+                }
+              },
+              "orNull": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "groupsOf as a set of members",
+      "source": "@currentUser IN groupsOf(.owner)['team' IN .tags].members",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "groupsOf",
+            "user": {
+              "res": [
+                "owner"
+              ]
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "in",
+              "l": {
+                "lit": "team",
+                "t": "TEXT"
+              },
+              "r": {
+                "res": [
+                  "tags"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "groupsOf without a filter",
+      "source": ".owner IN groupsOf(@currentUser).members",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "groupsOf",
+            "user": {
+              "special": "currentUser"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "groupsOf filtered by a group attribute",
+      "source": "@currentUser IN groupsOf(.owner)[.name == 'Sales'].members",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "groupsOf",
+            "user": {
+              "res": [
+                "owner"
+              ]
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "name"
+                ]
+              },
+              "r": {
+                "lit": "Sales",
+                "t": "TEXT"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -59,6 +59,7 @@ import {
     isFunctionDecl,
     isGroupKeyRef,
     isGroupRef,
+    isModel,
     isIfExpr,
     isDeleteStatement,
     isIfStatement,
@@ -535,7 +536,7 @@ export class MinabInterpreter {
     private async mainStatement(statement: MainStatement, state: State): Promise<MinabValue> {
         if (isQuery(statement)) {
             try {
-                const compiled = this.compiler.compileQuery(statement, this.outerResolver(state), this.clockOf(state));
+                const compiled = this.compiler.compileQuery(statement, await this.outerWithUsers(statement, state), this.clockOf(state));
                 if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
                 return await this.runStatement(compiled.query, statement, state);
             } catch (e) {
@@ -605,7 +606,7 @@ export class MinabInterpreter {
      * interpret the node instead and push down its parts.
      */
     private async pushDown(expr: Expression, state: State): Promise<{ pushed: true; value: MinabValue } | { pushed: false }> {
-        const compiled = this.compiler.compileValue(expr, this.outerResolver(state), this.clockOf(state));
+        const compiled = this.compiler.compileValue(expr, await this.outerWithUsers(expr, state), this.clockOf(state));
         if (!compiled.ok) return { pushed: false };
         const rows = await this.runStatement(compiled.query, expr, state);
         return {
@@ -1178,7 +1179,7 @@ export class MinabInterpreter {
      */
     private async loopSource(iterable: Expression, state: State): Promise<{ source: MinabValue; table?: string; relational: boolean }> {
         if (this.isRelational(iterable, state)) {
-            const compiled = this.compiler.compileRows(iterable, this.outerResolver(state), this.clockOf(state));
+            const compiled = this.compiler.compileRows(iterable, await this.outerWithUsers(iterable, state), this.clockOf(state));
             if (compiled.ok) {
                 const rows = await this.runStatement(compiled.query, iterable, state);
                 return { source: rows.map(row => this.normalizeRecord(row, compiled.table)), table: compiled.table, relational: true };
@@ -1500,7 +1501,7 @@ export class MinabInterpreter {
      * compared with the same `==` rules as a list. The query runs as one statement.
      */
     private async subqueryValues(subquery: Subquery, state: State): Promise<MinabValue[]> {
-        const compiled = this.compiler.compileQuery(subquery.query, this.outerResolver(state), this.clockOf(state));
+        const compiled = this.compiler.compileQuery(subquery.query, await this.outerWithUsers(subquery.query, state), this.clockOf(state));
         if (!compiled.ok) fail(compiled.reason, compiled.code === 'compile.notSql' ? undefined : compiled.code, compiled.params);
         const rows = await this.runStatement(compiled.query, subquery, state);
         const item = subquery.query.selectClause?.items[0]?.expression;
@@ -1659,6 +1660,47 @@ export class MinabInterpreter {
      * which is what makes a correlated `#Table` check one parameterized
      * lookup rather than a table scan.
      */
+    /**
+     * Before a query is compiled (MN.4, P11): every user or set of users in `root` that does not depend on the row is evaluated
+     * here, and a set is listed through the directory port (at most `limits.maxUsers`, else `eval.tooManyUsers`). The compiler
+     * binds each answer as one parameter. Without a directory port there is nothing to list.
+     */
+    private async outerWithUsers(root: AstNode, state: State): Promise<OuterResolver> {
+        const runtime = state.context.runtime;
+        if (!runtime || !this.mentionsUsers(root)) return this.outerResolver(state);
+        const parts = this.compiler.directoryParts(root);
+        if (parts.length === 0) return this.outerResolver(state);
+        const bound = new Map<Expression, string | string[] | null>();
+        for (const { node, set } of parts) {
+            const value = await this.expression(node, state);
+            if (value instanceof UserGroupValue) bound.set(node, await runtime.list(value.set));
+            else if (value instanceof UserValue) bound.set(node, value.id);
+            else if (Array.isArray(value))
+                bound.set(
+                    node,
+                    value.map(item => (item instanceof UserValue ? item.id : String(item)))
+                );
+            else bound.set(node, set ? [] : null);
+        }
+        return { ...this.outerResolver(state), boundUsers: expr => (bound.has(expr) ? bound.get(expr) : undefined) };
+    }
+
+    private readonly mentionsUsersCache = new WeakMap<AstNode, boolean>();
+
+    /** Cheap test, once for each program: does it name a user or a group, or does the host give it a user in a function or a column? */
+    private mentionsUsers(root: AstNode): boolean {
+        const model = AstUtils.getContainerOfType(root, isModel) ?? root;
+        let found = this.mentionsUsersCache.get(model);
+        if (found === undefined) {
+            const hostUsers =
+                [...this.schema.hostFunctions().values()].some(f => f.returns.kind !== 'scalar' && isDirectoryTable((f.returns as { table: string }).table)) ||
+                this.schema.tables().some(t => t.columns.some(c => c.type.kind !== 'scalar' && isDirectoryTable(c.type.table)));
+            found = hostUsers || AstUtils.streamAst(model).some(n => isSpecialUserRef(n) || isGroupRef(n));
+            this.mentionsUsersCache.set(model, found);
+        }
+        return found;
+    }
+
     private outerResolver(state: State): OuterResolver {
         const guard = <T>(produce: () => T): { found: true; value: T } | { found: false; reason: string } => {
             try {

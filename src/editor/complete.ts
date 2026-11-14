@@ -28,13 +28,22 @@ import { BUILTIN_DOCS } from './builtin-docs.js';
 import { code, describeColumn, hostFunctionDoc, hostFunctionSignature, nameText, tableSummary } from './describe.js';
 import { parseDocument, positionAt, sourceOf, type EditorDocument } from './document.js';
 import { functionSignature, tableOfType, typeOf } from './hover.js';
-import type { CompletionItem, CompletionResult } from './types.js';
+import type { CompletionItem, CompletionResult, DirectoryName } from './types.js';
 
 const PLACEHOLDER = '__minab_completion__';
+
+/** `@name` or `@@name` being typed: the sigil, and the part of the name so far (a backtick name may hold spaces). */
+const DIRECTORY_NAME = /(@@?)(`[^`\n]*|[^\s`@.,;()[\]{}'"+\-*/&|!=<>^#$:]*)$/u;
 
 export async function complete(doc: EditorDocument, offset: number): Promise<CompletionResult> {
     const source = sourceOf(doc);
     const before = source.slice(0, offset);
+    const directory = DIRECTORY_NAME.exec(before);
+    if (directory) {
+        const start = offset - directory[2].length;
+        const replace = { start: positionAt(source, start), end: positionAt(source, offset) };
+        return { replace, items: directoryCompletions(doc, directory[1]) };
+    }
     const word = /[A-Za-z_][A-Za-z0-9_]*$/.exec(before)?.[0] ?? '';
     const wordStart = offset - word.length;
     const replace = {
@@ -83,6 +92,37 @@ export async function complete(doc: EditorDocument, offset: number): Promise<Com
         replace,
         items: await generalCompletions(doc, offset, withPlaceholder)
     };
+}
+
+/**
+ * After `@`: the special users of this place. After `@@`: the group names of the host (`directoryNames()`, with their titles
+ * and kinds), else the plain list of `ruleContext.groupNames`. A name that is not a plain word is inserted in backticks (MN.4).
+ */
+function directoryCompletions(doc: EditorDocument, sigil: string): CompletionItem[] {
+    const { ruleContext } = doc.services;
+    if (sigil === '@') {
+        return (ruleContext.specialUsers ?? []).map((user, index) => ({
+            label: user.name,
+            kind: 'input',
+            detail: user.type,
+            documentation: user.type === 'USER?' ? 'A special user of this place. It may be missing here.' : 'A special user of this place.',
+            ...insert(user.name),
+            rank: index
+        }));
+    }
+    const groups: readonly DirectoryName[] = doc.hints?.groups ?? (ruleContext.groupNames ?? []).map(name => ({ name }));
+    return groups.map((group, index) => {
+        const title = group.title && group.title !== group.name ? group.title : undefined;
+        const facts = [title, group.kind ? `kind: ${group.kind}` : undefined].filter(Boolean);
+        return {
+            label: group.name,
+            kind: 'input',
+            detail: 'USERGROUP',
+            documentation: facts.length > 0 ? facts.join(' · ') : 'A group of the workspace.',
+            ...insert(group.name),
+            rank: index
+        };
+    });
 }
 
 /** `insertText` only when the name needs backticks. */

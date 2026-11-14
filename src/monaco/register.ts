@@ -7,7 +7,7 @@
  */
 
 import type * as Monaco from 'monaco-editor';
-import type { CompletionKind, EditorRange } from '../editor/types.js';
+import { inlayHints, type CompletionKind, type EditorHints, type EditorRange, type PinnedUser, type UserLabel } from '../editor/types.js';
 import type { MinabSeverity, SourceRange } from '../runtime/types.js';
 import { languageConfiguration, tokensProvider } from './language.js';
 import type { MinabRegistration, RegisterMinabOptions } from './types.js';
@@ -59,11 +59,11 @@ function completionKinds(monaco: MonacoApi): Record<CompletionKind, Monaco.langu
 const SNIPPET_STOP = /\$(\d|\{\d)/;
 
 export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions): MinabRegistration {
-    const { client, ruleContext, keywordDocs, onError } = options;
+    const { client, ruleContext, keywordDocs, onError, directoryNames, userLabels } = options;
     const languageId = options.languageId ?? DEFAULT_LANGUAGE_ID;
     const markerOwner = options.markerOwner ?? 'minab';
     const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-    const questionOptions = ruleContext ? { ruleContext } : undefined;
+    const withContext = ruleContext ? { ruleContext } : {};
     const kinds = completionKinds(monaco);
     const disposables: Monaco.IDisposable[] = [];
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -76,6 +76,41 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
             if (!disposed) onError?.(error);
             return undefined;
         });
+
+    /** The pinned people of a model and who they are, kept for one version of the text (the inlay hints and the hover read it). */
+    const pinned = new Map<string, { version: number; pins: PinnedUser[]; labels: Record<string, UserLabel> }>();
+
+    async function pinsOf(model: Monaco.editor.ITextModel): Promise<{ pins: PinnedUser[]; labels: Record<string, UserLabel> } | undefined> {
+        if (!userLabels || !client.pinnedUsers) return undefined;
+        const key = model.uri.toString();
+        const version = model.getVersionId();
+        const kept = pinned.get(key);
+        if (kept?.version === version) return kept;
+        const pins = await soft(client.pinnedUsers(model.getValue(), ruleContext ? { ruleContext } : undefined));
+        if (!pins) return undefined;
+        const ids = [...new Set(pins.map(pin => pin.id))];
+        const labels = ids.length > 0 ? ((await soft(Promise.resolve(userLabels(ids)))) ?? {}) : {};
+        const entry = { version, pins, labels: { ...labels } };
+        if (!disposed && !model.isDisposed() && model.getVersionId() === version) pinned.set(key, entry);
+        return entry;
+    }
+
+    /** What an editor question carries: the rule context, and what the host knows (groups, who the pinned people are). */
+    async function questionFor(
+        model: Monaco.editor.ITextModel,
+        withLabels: boolean
+    ): Promise<{ ruleContext?: typeof ruleContext; hints?: EditorHints } | undefined> {
+        const hints: EditorHints = {};
+        const groups = directoryNames ? await soft(Promise.resolve(directoryNames())) : undefined;
+        if (groups) hints.groups = groups;
+        if (withLabels) {
+            const found = await pinsOf(model);
+            if (found && Object.keys(found.labels).length > 0) hints.userLabels = found.labels;
+        }
+        const hasHints = hints.groups !== undefined || hints.userLabels !== undefined;
+        if (!hasHints && !ruleContext) return undefined;
+        return { ...withContext, ...(hasHints ? { hints } : {}) };
+    }
 
     if (!monaco.languages.getLanguages().some(language => language.id === languageId)) {
         monaco.languages.register({ id: languageId, extensions: ['.minab'], aliases: ['Minab', 'minab'] });
@@ -139,6 +174,7 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
         const key = model.uri.toString();
         watched.get(key)?.dispose();
         watched.delete(key);
+        pinned.delete(key);
         clearTimeout(timers.get(key));
         timers.delete(key);
     }
@@ -161,9 +197,9 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
 
     disposables.push(
         monaco.languages.registerCompletionItemProvider(languageId, {
-            triggerCharacters: ['.', '#', '$', '^'],
+            triggerCharacters: ['.', '#', '$', '^', '@'],
             async provideCompletionItems(model, position) {
-                const result = await soft(client.complete(model.getValue(), model.getOffsetAt(position), questionOptions));
+                const result = await soft(client.complete(model.getValue(), model.getOffsetAt(position), await questionFor(model, false)));
                 if (!result) return { suggestions: [] };
                 const range = toMonacoRange(result.replace);
                 return {
@@ -182,7 +218,7 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
         }),
         monaco.languages.registerHoverProvider(languageId, {
             async provideHover(model, position) {
-                const result = await soft(client.hover(model.getValue(), model.getOffsetAt(position), questionOptions));
+                const result = await soft(client.hover(model.getValue(), model.getOffsetAt(position), await questionFor(model, true)));
                 if (!result) return undefined;
                 const contents = result.keyword !== undefined && result.contents === '' ? keywordDocs?.(result.keyword) : result.contents;
                 if (!contents) return undefined;
@@ -193,7 +229,7 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
             signatureHelpTriggerCharacters: ['(', ','],
             signatureHelpRetriggerCharacters: [')'],
             async provideSignatureHelp(model, position) {
-                const result = await soft(client.signatureHelp(model.getValue(), model.getOffsetAt(position), questionOptions));
+                const result = await soft(client.signatureHelp(model.getValue(), model.getOffsetAt(position), ruleContext ? { ruleContext } : undefined));
                 if (!result) return undefined;
                 return {
                     value: {
@@ -212,6 +248,26 @@ export function registerMinab(monaco: MonacoApi, options: RegisterMinabOptions):
             }
         })
     );
+
+    // A person pinned as `findUser('usr_…')` reads as the member, after the call.
+    if (userLabels && client.pinnedUsers) {
+        disposables.push(
+            monaco.languages.registerInlayHintsProvider(languageId, {
+                async provideInlayHints(model) {
+                    const found = await pinsOf(model);
+                    const hints = found ? inlayHints(found.pins, found.labels) : [];
+                    return {
+                        hints: hints.map(hint => ({
+                            label: hint.label,
+                            position: { lineNumber: hint.position.line + 1, column: hint.position.character + 1 },
+                            paddingLeft: true
+                        })),
+                        dispose() {}
+                    };
+                }
+            })
+        );
+    }
 
     return {
         check,

@@ -169,7 +169,7 @@ export function startMinabLanguageServer(options: MinabLanguageServerOptions = {
         return {
             capabilities: {
                 textDocumentSync: TextDocumentSyncKind.Incremental,
-                completionProvider: { triggerCharacters: ['.', '#', '('] },
+                completionProvider: { triggerCharacters: ['.', '#', '(', '@'] },
                 hoverProvider: true,
                 definitionProvider: true,
                 signatureHelpProvider: { triggerCharacters: ['(', ','], retriggerCharacters: [','] },

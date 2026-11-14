@@ -4,6 +4,7 @@
  *
  * - `call.unknownFunction` and `scope.unknownName`: "Did you mean …?" with the
  *   closest names in scope (at most 3);
+ * - `scope.unknownGroup` and `scope.unknownSpecialUser`: "Use @@Sales" / "Use @currentUser" with the closest names of the host (MN.4);
  * - `type.implicitCoercion`: "Add CAST(… AS T)", on either side of the operator.
  */
 
@@ -146,6 +147,15 @@ function addCast(doc: EditorDocument, diagnostic: FixableDiagnostic): QuickFix[]
     return fixes;
 }
 
+/** `@@name` or `@name` written again with the closest names the host gives. The diagnostic's range is the whole reference, sigil included. */
+function didYouMeanDirectory(diagnostic: FixableDiagnostic, sigil: '@' | '@@', candidates: Iterable<string>): QuickFix[] {
+    const name = String(diagnostic.params.name ?? '');
+    return closest(name, candidates).map(candidate => ({
+        title: `Use ${sigil}${nameText(candidate)}`,
+        edits: [{ range: diagnostic.range, newText: `${sigil}${nameText(candidate)}` }]
+    }));
+}
+
 /** The quick fixes of one diagnostic. Empty when the code has none. */
 export function quickFixes(doc: EditorDocument, diagnostic: FixableDiagnostic): QuickFix[] {
     switch (diagnostic.code) {
@@ -153,6 +163,14 @@ export function quickFixes(doc: EditorDocument, diagnostic: FixableDiagnostic): 
             return didYouMean(doc, diagnostic, () => callableNames(doc));
         case 'scope.unknownName':
             return didYouMean(doc, diagnostic, node => namesInScope(doc, node));
+        case 'scope.unknownGroup':
+            return didYouMeanDirectory(diagnostic, '@@', doc.hints?.groups?.map(g => g.name) ?? doc.services.ruleContext.groupNames ?? []);
+        case 'scope.unknownSpecialUser':
+            return didYouMeanDirectory(
+                diagnostic,
+                '@',
+                (doc.services.ruleContext.specialUsers ?? []).map(user => user.name)
+            );
         case 'type.implicitCoercion':
             return addCast(doc, diagnostic);
         default:

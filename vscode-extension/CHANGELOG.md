@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Programs can name users and groups. The types `USER` and `USERGROUP`, the names `@currentUser` and `@@Sales`, the set operators `+ - & |`, the prefix `!`, and `IN` with a group are checked. A host declares the special users, the group names and the directory columns, and host functions may take and return these types; running such programs comes later. `USER` and `USERGROUP` still work as names.
+- The editors know users and groups. After `@` the editor offers the special users of the place, after `@@` the groups of the workspace (a name that needs it goes in backticks), after a user's `.` the directory columns and attributes, and the host's routes appear in the function list with their title and description. Hover shows `USERGROUP`, `@currentUser`'s type and a route's title. `registerMinab` takes two new callbacks: `directoryNames()` (group names, titles, kinds) and `userLabels(ids)`, which makes a pinned `findUser('usr_…')` read as "Sara Ahmadi · sara@example.com" in an inlay hint and on hover. Names after `@` and `@@` have semantic tokens, and an unknown group or special user has a "Use @@Sales" quick fix. A host function declaration may have a `title` and a `description`.
+
 ## 1.0.0
 
 Minab 1.0 is stable: within 1.x, valid programs, the diagnostic codes and the extension's settings keep working.
@@ -26,6 +31,7 @@ The first public release of the extension: syntax highlighting, live diagnostics
 - Names can use any language (Persian, Arabic, Turkish and more), and names with spaces or symbols can be written in backticks.
 - User functions are called by name. The `&` prefix is gone.
 
+[1.1.0]: https://github.com/shams-app/minab/releases/tag/v1.1.0
 [1.0.0]: https://github.com/shams-app/minab/releases/tag/v1.0.0
 [0.3.0]: https://github.com/shams-app/minab/releases/tag/v0.3.0
 [0.2.0]: https://github.com/shams-app/minab/releases/tag/v0.2.0

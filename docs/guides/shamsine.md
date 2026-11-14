@@ -37,6 +37,7 @@ and tell the owner (see [section 12](#12-monorepo-follow-ups)).
 11. [Jest, CommonJS and Bun](#11-jest-commonjs-and-bun)
 12. [Monorepo follow-ups](#12-monorepo-follow-ups)
 13. [Limits you will meet in 1.0](#13-limits-you-will-meet-in-10)
+14. [Policies and groups](#14-policies-and-groups)
 
 ## 1. Map of the GM cards
 
@@ -946,3 +947,119 @@ of `docs/production/readiness.md`.
   100 statements, 10,000 rows per statement, 100,000 loop steps, 64 call depth, 100 log
   lines, 100 runs per batch. A host may change them with `createMinab({ limits })`; a
   run can only be tighter.
+
+## 14. Policies and groups
+
+The engine never runs Minab source. A policy condition, a principal, a dynamic or computed group and a named route are
+written in Minab, checked by the **policy profile** and turned into the **policy IR** when the rule is saved
+(proposal P12, `src/policy/`). The IR's JSON Schema belongs to Shamsine (`packages/authz/contract/schemas/policy-ir.v1.json`);
+`schemas/policy-ir.v1.json` here is a copy, and every compiled IR in the golden corpus is checked against it.
+
+### Prepare
+
+```ts
+import { createMinab, policyInputs } from '@shamsine/minab';
+import { directoryHostFunctions } from '@shamsine/minab/host';
+
+const directory = directoryHostFunctions(port, { routes }); // findUser, findGroup, single, singleOrNull, groupsOf, and the routes
+const minab = createMinab({
+   schema,                                              // the record's table (`recordTable`) and `directory: port.schema()`
+   functions: directory.declarations,
+   inputs: policyInputs({ status: 'TEXT?' }),           // request, resource, and `new` (the fields of the record after a change)
+   ruleContext: { isFieldRule: false, recordTable: 'orders' },
+});
+
+const program = await minab.prepare(source, {
+   profile: 'policy',
+   expect: 'boolean',                                   // a condition; 'principal' for a set of users; 'route' for a route body
+   policy: { groupNames, tagKeys, routes, appUser: false },
+});
+```
+
+- `expect: 'boolean'` is a condition (`ir.condition`). `expect: 'principal'` is a `USERGROUP` or a `USER` (`ir.principal`; for
+  a `notPrincipal` the host compiles the text as a principal and moves the node).
+- `expect: 'route'` is a route body: one parameter `u: USER` (the runtime declares it in front of the text and the ranges of the
+  diagnostics stay the ones of your text), and the return type is `policy.route.returns` (`USERGROUP` by default, or `USER?`).
+  In the IR `u` is `{ special: 'currentUser' }`. A route body cannot read the special users.
+- `@currentUser` is declared by the profile, `@appUser` only with `policy.appUser: true` (the rules of an installed application).
+- `policy.groupNames` makes an unknown `@@Name` the error `scope.unknownGroup`. `policy.tagKeys` makes an unknown
+  `resource.tags.<key>` the warning `policy.unknownTagKey`, with the closest keys (a warning does not make `ok` false).
+- `policy.routes` names the workspace's routes (the host also declares them as functions). Route calls nested in each other's
+  arguments go at most 3 deep (`policy.tooManySteps`).
+
+### What the profile allows
+
+Literals (and lists of literals), record fields (`.a`, `.a.b`), `new.field`, `@currentUser`, `@appUser`, `@@groups`, `request.time |
+ip | mfa | clientId | tagKey`, `resource.tags.<key>` (always `TEXT?`), comparisons, `AND` / `OR` / `NOT`, `IN`, `LIKE`,
+`is null`, `+ - & |` and `!` on users and groups, filters `G[…]`, `findUser('…')` and `findGroup('…')` with a **literal** key,
+`single`, `singleOrNull`, `groupsOf(u)[…].members`, the routes, `NOW()`, `LOWER`, `UPPER`, `YEAR`, `MONTH`, `DAY` and
+`CAST('2026-01-01' AS DATE)`. Anything else is `policy.constructNotAllowed` with its range: `FROM`, `#Table`, `let`, loops,
+writes, `fn`, `if`, `switch`, `^`, arithmetic, `COUNT`, a host function that is not listed, `specialUser`, `LOG`,
+`findUser` with a key that is not a literal, a user's attribute that is not a user (`.owner.city`), `== null` (write `is null`).
+
+### Compile
+
+```ts
+const result = await program.compilePolicy({ directory: port, signal });
+if (result.ok) store(result.pinnedSource, result.ir, result.reads);
+else show(result.error);   // eval.userNotFound, eval.groupNotFound (a user or group that is not there), with a range
+```
+
+- A group is kept by its **id**, so a rename never changes a rule (`reads.groups` lists them). The system groups are the nodes
+  `{ k: 'everyone' }` and `{ k: 'system', name }` and ask the directory nothing.
+- **`pinnedSource`** is the text with every literal e-mail or phone key of `findUser` replaced by the id it found
+  (`findUser('usr_5h2m')`), nothing else changed. Store it, not the typed text (P4).
+- `reads` lists the groups (ids), the user attributes, the routes and the tag keys the program names.
+- `.x` is `{ res: [x] }` in a condition and in a `groupsOf` filter, `{ prin: [x] }` in a filter over users; `@currentUser`
+  as a value is `{ prin: ['id'] }`. A user compared with a user is a `cmp`, or a `member` of `{ k: 'one' }` when one side is
+  only a user (`@appUser`, a route, `single`). `!=` is `ne` for values and `not` of the comparison for users. `NOT` is kept.
+- A boolean value alone (`request.mfa`) is `cmp eq … true`. A decimal literal is kept as its text (`"0.10"`, `DECIMAL`), an
+  integer is a number, a list of literals is `t: 'JSON'`, a text literal next to a `CITEXT` field is `t: 'CITEXT'`.
+- Null is an ordinary value (spec §7.7), so a null field compared is `false`, not unknown. **Unknown** is only a value the
+  request context leaves out; that is the engine's rule (engine spec §6.2), and the corpus marks those cases with `unknown`.
+
+### The golden corpus
+
+`test/policy-ir/*.json` has the cases the interpreter and the engine must agree on: the source, what it must answer, and the IR
+it compiles to. `npm run corpus:check` runs them; the Shamsine engine runs the same files (EN.9). See
+`test/policy-ir/README.md` for the format.
+
+### Users and groups in queries (1.1.0)
+
+A `FROM` query may use a person or a group that does not depend on the row. Minab lists the set through the directory port
+before the query runs, then sends the ids as one array parameter. It lists at most `limits.maxUsers` people (10,000), else
+`eval.tooManyUsers`, and it sends no statement in that case.
+
+```minab
+COUNT(#Task[.assignee IN teamMates(@currentUser) AND .status != 'done'])   // assignee = ANY($1::text[])
+FROM Task WHERE .owner == @currentUser SELECT .id                           // owner = $1, no directory read
+FROM Task WHERE @currentUser IN .approvers SELECT .id                       // $1 = ANY(approvers), no directory read
+FROM Task WHERE EXISTS(.approvers & @@Reviewers) SELECT .id                 // approvers && $1::text[]
+FROM Task WHERE @currentUser IN teamLeader(.owner) SELECT .id               // compile.directoryInSql: teamLeader(.owner)
+```
+
+- A `user` column holds the id as text. A `users` column is a `text[]` of ids. Both must be real columns of the table.
+- A part that depends on each row (a route or `groupsOf` of a column, a column of the user in a column such as `.owner.name`)
+  is `compile.directoryInSql`. The message names that part.
+- `prepared.compile()` shows the SQL with each such part as one parameter, with an empty answer.
+- The interpreter and the SQL give the same answer. `test/users-sql.test.ts` runs 15 conditions both ways on each row.
+
+### Editor support for users and groups
+
+`registerMinab` takes two callbacks. Both are optional, and a failing callback leaves the editor working.
+
+```ts
+registerMinab(monaco, {
+    client,
+    ruleContext: { isFieldRule: false, specialUsers: [{ name: 'currentUser', type: 'USER' }] },
+    directoryNames: () => groups.map(g => ({ name: g.name, title: g.title, kind: g.kind })),
+    userLabels: async ids => lookupMembers(ids) // { usr_5h2m: { name: 'Sara Ahmadi', email: 'sara@example.com' } }
+});
+```
+
+- After `@` the editor offers `ruleContext.specialUsers`. After `@@` it offers `directoryNames()`, or `ruleContext.groupNames`
+  when there is no callback. A name that is not a plain word is inserted in backticks.
+- After a user's `.` it offers the directory columns. A scoped attribute such as `person:city` is inserted in backticks.
+- A host function or route may have a `title` and a `description` (`HostFunctionDeclaration`). They show in the function list and on hover.
+- `userLabels(ids)` is called once for all `findUser('usr_…')` calls of a program. A pinned call shows the member after it, as an
+  inlay hint, and on hover. It needs `client.pinnedUsers` (a `WorkerMinab` has it). A person who left has no name, so there is no hint.

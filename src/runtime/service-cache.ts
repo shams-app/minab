@@ -49,7 +49,8 @@ function ruleContextKey(context: MinabRuleContext): string {
         context.recordTable ?? null,
         context.groupTable ?? null,
         context.specialUsers ?? null,
-        context.groupNames ?? null
+        context.groupNames ?? null,
+        context.resourceTags ?? false
     ]);
 }
 

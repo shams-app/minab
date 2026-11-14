@@ -38,6 +38,10 @@ export interface HostFunctionDeclaration {
     returns: string;
     /** `true`: safe to run in the browser. Default `false`: a program using it needs the server. */
     local?: boolean;
+    /** A short name for people, shown by the editor in the list and on hover (a route's title, MN.4). */
+    title?: string;
+    /** One or two sentences for people, shown by the editor next to the signature. */
+    description?: string;
 }
 
 /** A type word (`TEXT`, `TEXT?`, `TEXT[]`), or an object of typed fields (`{ id: 'TEXT', roles: 'TEXT[]' }`). */
@@ -54,6 +58,8 @@ export interface ResolvedHostFunction {
     params: { name: string; type: MinabType }[];
     returns: MinabType;
     local: boolean;
+    title?: string;
+    description?: string;
 }
 
 export interface ResolvedHost {
@@ -177,7 +183,9 @@ export function resolveHostDeclarations(declarations: HostDeclarations | undefin
             name,
             params,
             returns: functionTypeWord(declaration.returns, `host function "${name}", return type`),
-            local: declaration.local ?? false
+            local: declaration.local ?? false,
+            ...(declaration.title ? { title: declaration.title } : {}),
+            ...(declaration.description ? { description: declaration.description } : {})
         });
     }
 
@@ -202,7 +210,7 @@ export function resolveHostDeclarations(declarations: HostDeclarations | undefin
     }
 
     const key = JSON.stringify([
-        [...functions.values()].map(f => [f.name, f.params.map(p => [p.name, p.type]), f.returns, f.local]),
+        [...functions.values()].map(f => [f.name, f.params.map(p => [p.name, p.type]), f.returns, f.local, f.title, f.description]),
         [...inputs].map(([name, type]) => [name, type, inputTables.get(type.kind === 'record' ? type.table : '')?.columns])
     ]);
     return { functions, inputs, inputTables, key };

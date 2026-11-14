@@ -6,11 +6,13 @@
 import { URI, type LangiumDocument } from 'langium';
 import type { Model } from '../language/generated/ast.js';
 import type { MinabServices } from '../language/minab-module.js';
-import type { EditorPosition, EditorRange } from './types.js';
+import type { EditorHints, EditorPosition, EditorRange } from './types.js';
 
 export interface EditorDocument {
     services: MinabServices;
     document: LangiumDocument<Model>;
+    /** What only the host knows (MN.4): group names with titles, user labels. */
+    hints?: EditorHints;
 }
 
 let counter = 0;
@@ -20,10 +22,10 @@ let counter = 0;
  * value: it is not added to the workspace, so there is nothing to clean up.
  * It does not check the program.
  */
-export function parseDocument(services: MinabServices, source: string): EditorDocument {
+export function parseDocument(services: MinabServices, source: string, hints?: EditorHints): EditorDocument {
     const uri = URI.parse(`inmemory:///editor-${counter++}.minab`);
     const document = services.shared.workspace.LangiumDocumentFactory.fromString<Model>(source, uri);
-    return { services, document };
+    return hints ? { services, document, hints } : { services, document };
 }
 
 export function sourceOf(doc: EditorDocument): string {

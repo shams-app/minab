@@ -1,0 +1,14 @@
+// A record-level validation rule (spec §6.1): a booking must end after it
+// starts, and must not overlap another booking of the same room.
+//
+//   minab run examples/booking-overlap.minab
+//   minab run examples/booking-overlap.minab --trace
+//
+// The local half (`.end_date > .start_date`) is answered from the record
+// in the config; only the correlated half reaches the database, as one
+// parameterized EXISTS.
+
+.end_date > .start_date AND NOT EXISTS(
+    #Booking[. != ^ AND .room_id == ^.room_id
+             AND .start_date < ^.end_date AND .end_date > ^.start_date]
+)

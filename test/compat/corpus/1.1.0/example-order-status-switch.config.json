@@ -1,0 +1,13 @@
+{
+  "schema": {
+    "tables": [
+      {
+        "name": "Order",
+        "primaryKey": "id",
+        "columns": { "id": "UUID", "status": "TEXT", "total": "DECIMAL" }
+      }
+    ]
+  },
+  "rule": { "recordTable": "Order" },
+  "record": { "id": "o-1", "status": "high", "total": 750 }
+}

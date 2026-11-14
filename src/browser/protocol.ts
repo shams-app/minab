@@ -17,7 +17,7 @@
  */
 
 import { parseTypeWord, type HostFunctionDeclaration, type HostInputType } from '../language/host-declarations.js';
-import type { CompletionResult, HoverResult, SignatureHelpResult } from '../editor/types.js';
+import type { CompletionResult, EditorHints, HoverResult, PinnedUser, SignatureHelpResult } from '../editor/types.js';
 import type { MinabRuleContext, MinabSchema } from '../language/schema.js';
 import { Big, decimalText } from '../language/values.js';
 import { runError } from '../runtime/errors.js';
@@ -50,13 +50,15 @@ export interface WireInputs {
 }
 
 /** The editor questions a worker answers. Each is computed by `src/editor/`. */
-export type EditorMethod = 'complete' | 'hover' | 'signatureHelp';
+export type EditorMethod = 'complete' | 'hover' | 'signatureHelp' | 'pinnedUsers';
 
 /** The answer type of each editor method. `undefined` crosses as `null`. */
 export interface EditorAnswers {
     complete: CompletionResult;
     hover: HoverResult | null;
     signatureHelp: SignatureHelpResult | null;
+    /** The `findUser('usr_…')` calls of the program (MN.4): the editor asks the host who they are. */
+    pinnedUsers: PinnedUser[];
 }
 
 // ---- main thread to worker -----------------------------------------------
@@ -69,7 +71,7 @@ export type ToWorker =
     | { v: 1; type: 'run'; id: string; programId: string; inputs: WireInputs; ports: PortName[]; limits?: Partial<Limits> }
     | { v: 1; type: 'dispose'; id: string }
     /** Editor services (phase E5). They read the text: no program is kept. `offset` is a UTF-16 offset into `source`. */
-    | { v: 1; type: 'editor'; id: string; method: EditorMethod; source: string; offset: number; ruleContext?: MinabRuleContext }
+    | { v: 1; type: 'editor'; id: string; method: EditorMethod; source: string; offset: number; ruleContext?: MinabRuleContext; hints?: EditorHints }
     /** A request to a handler the host app put in `serveMinab` (`requests`). `cancel` with the same `id` aborts it. */
     | { v: 1; type: 'request'; id: string; name: string; payload?: unknown }
     /** Aborts the run (or request) with this id and its pending port calls. */

@@ -1,0 +1,72 @@
+{
+  "about": "The host of every case: the record's columns, the tag keys the workspace uses, and the directory. A case may change request, record, new, tags, now, currentUser, appUser, u and returns. The ir of a case is made by the compiler (UPDATE_POLICY_IR=1 npm run corpus:check) and then read by a person.",
+  "record": {
+    "id": "INTEGER",
+    "status": "TEXT",
+    "owner": "USER",
+    "reviewer": "USER?",
+    "amount": "DECIMAL",
+    "note": "TEXT?",
+    "title": "TEXT",
+    "code": "CITEXT",
+    "urgent": "BOOLEAN",
+    "closesAt": "DATETIME",
+    "due": "DATE",
+    "dueText": "TEXT",
+    "tags": "TEXT[]"
+  },
+  "newRecord": { "status": "TEXT?", "amount": "DECIMAL?", "approvedBy": "TEXT?" },
+  "defaults": {
+    "now": "2026-03-10T09:30:00Z",
+    "request": { "time": "2026-03-10T09:30:00Z", "ip": "10.0.0.1", "mfa": true, "clientId": "web", "tagKey": null },
+    "tags": { "sensitivity": "high", "department": "finance" },
+    "record": {
+      "id": 7,
+      "status": "open",
+      "owner": "usr_sara",
+      "reviewer": null,
+      "amount": "250.00",
+      "note": null,
+      "title": "Hello",
+      "code": "ABC",
+      "urgent": true,
+      "closesAt": "2026-04-01T00:00:00Z",
+      "due": "2026-03-15",
+      "dueText": "2026-03-15",
+      "tags": ["urgent", "vip"]
+    },
+    "new": { "status": "open", "amount": "100", "approvedBy": null },
+    "currentUser": "usr_sara",
+    "appUser": "svc_bot"
+  },
+  "tagKeys": ["sensitivity", "department", "confidential"],
+  "directory": {
+    "users": [
+      { "id": "usr_root", "name": "Root", "email": "root@example.com", "role": "owner", "city": "Shiraz", "department": "IT" },
+      { "id": "usr_ali", "name": "Ali", "email": "ali@example.com", "role": "admin", "city": "Tabriz", "department": "IT" },
+      { "id": "usr_sara", "name": "Sara", "email": "sara@example.com", "phone": "+989121234567", "role": "member", "city": "Marand", "department": "IT" },
+      { "id": "usr_mina", "name": "Mina", "email": "mina@example.com", "role": "member", "city": "Tehran", "department": "HR" },
+      { "id": "usr_omid", "name": "Omid", "email": "omid@example.com", "role": "viewer", "city": "Marand", "department": "HR" },
+      { "id": "usr_gone", "name": "Gone", "email": "gone@example.com", "role": "member", "left": true },
+      { "id": "svc_bot", "name": "Bot", "kind": "application", "role": "member" }
+    ],
+    "groups": [
+      { "name": "Managers", "members": ["usr_ali", "usr_mina"], "includes": [], "tags": [] },
+      { "name": "Sales", "members": ["usr_sara", "usr_omid"], "includes": [], "tags": ["team"] },
+      { "name": "Support", "members": ["usr_mina", "usr_ali"], "includes": [], "tags": ["team"] },
+      { "name": "Interns", "members": ["usr_omid"], "includes": [], "tags": [] },
+      { "name": "TeamLeaders", "members": ["usr_ali"], "includes": [], "tags": [] },
+      { "name": "Contractors", "members": [], "includes": [], "tags": [] },
+      { "name": "Everyone2", "members": [], "includes": ["Sales", "Support"], "tags": [] },
+      { "name": "Sales team", "members": ["usr_sara"], "includes": [], "tags": [] },
+      { "name": "Leavers", "members": ["usr_gone"], "includes": [], "tags": [] }
+    ],
+    "routes": [
+      { "name": "teamMates", "returns": "USERGROUP", "body": "groupsOf(u)['team' IN .tags].members" },
+      { "name": "teamLeader", "returns": "USERGROUP", "body": "teamMates(u) & @@TeamLeaders" },
+      { "name": "deputy", "returns": "USER?", "body": "singleOrNull(@@TeamLeaders)" },
+      { "name": "vacant", "returns": "USER?", "body": "singleOrNull(@@Contractors)" }
+    ],
+    "specialUsers": { "currentUser": "usr_sara", "appUser": "svc_bot" }
+  }
+}

@@ -151,7 +151,7 @@ function createMinabModule(
         scopeResolver: services => new MinabScopeResolver(services.schema, rootTableOf(services.ruleContext)),
         ruleContext: () => ruleContext,
         typeChecker: services => new MinabTypeChecker(services.schema, services.scopeResolver, services.ruleContext),
-        sqlCompiler: services => new MinabSqlCompiler(services.schema, services.typeChecker),
+        sqlCompiler: services => new MinabSqlCompiler(services.schema, services.typeChecker, services.scopeResolver),
         interpreter: services => new MinabInterpreter(services.schema, services.sqlCompiler, services.typeChecker),
         parser: {
             ...(options.mode === 'production' ? { LangiumParser: productionParser } : {}),

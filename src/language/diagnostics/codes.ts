@@ -7,7 +7,7 @@
  * and fill it with the parameters. Minab ships English only.
  *
  * Rules:
- *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, aggregate, groupExpression, type, null, call, compile, compat, deprecated, eval, limit, data, query, rule, wire.
+ *  - A code is `<area>.<camelCaseName>`. Areas: syntax, scope, aggregate, groupExpression, type, null, call, compile, compat, deprecated, eval, limit, data, policy, query, rule, wire.
  *    `deprecated.*` codes are warnings. A form that is going away gets one (D38). There is none today.
  *    One code has no area: `cancelled` (the host aborted the run).
  *  - Keep the entries sorted by code. A test checks it.
@@ -151,8 +151,8 @@ export const DIAGNOSTICS = {
     }),
     'compile.directoryInSql': entry<{ part: string }>({
         severity: error,
-        message: p => `${p.part} reads users or groups, and a query cannot read the directory yet`,
-        doc: 'A query cannot use this part of the program with users or groups. Read the value into a variable first, outside the query, then use the variable.'
+        message: p => `${p.part} reads users or groups for each row, and a query cannot ask the directory for each row`,
+        doc: 'A query can use a person or a group that does not depend on the row (@currentUser, @@Sales, a route of the current user), and compare a user column with it. This part depends on each row (a route of a column, groupsOf of a column, a column of the user in a column such as .owner.name), so the database cannot answer it. Read the value outside the query, or compare user ids.'
     }),
     'compile.hostFunctionInSql': entry<{ name: string }>({
         severity: error,
@@ -361,6 +361,22 @@ export const DIAGNOSTICS = {
         severity: error,
         message: p => `"${p.operator}" doesn't accept null as an operand`,
         doc: 'An ordering comparison (<, <=, >, >=) with null has no answer. Test for null explicitly instead.'
+    }),
+
+    'policy.constructNotAllowed': entry<{ construct: string }>({
+        severity: error,
+        message: p => `${p.construct} is not allowed in a policy, a group or a route`,
+        doc: 'The policy profile accepts only literals, record fields, @ and @@ names, request, resource.tags, comparisons, AND / OR / NOT, IN, LIKE, is null, set operators, filters, the directory functions and named routes. Remove this part or move it to a place that runs Minab.'
+    }),
+    'policy.tooManySteps': entry<{ name: string; limit: number }>({
+        severity: error,
+        message: p => `the route "${p.name}" is called more than ${p.limit} levels deep inside other route calls`,
+        doc: 'Route calls may be nested at most 3 deep, so a rule stays cheap to check. Call fewer routes inside each other, or write one route that does the work.'
+    }),
+    'policy.unknownTagKey': entry<{ key: string; suggestions: string }>({
+        severity: warning,
+        message: p => `no resource in this workspace carries the tag "${p.key}"${p.suggestions ? `: did you mean ${p.suggestions}?` : ''}`,
+        doc: 'The workspace does not use this tag key. A typo here makes a rule that never matches. Check the key; the rule is still saved.'
     }),
 
     'query.duplicateGroupKeyName': entry<{ name: string }>({

@@ -35,7 +35,7 @@ export interface DirectoryFunctionOptions {
     /** `true`: the port answers with no round trip, so a program that uses these functions can run in the browser. */
     local?: boolean;
     /** Routes the workspace defines (P7). Each one becomes a host function that calls `port.callRoute`. */
-    routes?: ReadonlyArray<{ name: string; returns: RouteReturns }>;
+    routes?: ReadonlyArray<{ name: string; returns: RouteReturns; title?: string; description?: string }>;
     /** How many route calls are open around the functions of this set (a host that runs a route body passes `context.depth + 1`). */
     routeDepth?: number;
 }
@@ -66,11 +66,18 @@ export function routeHostFunction(
     port: DirectoryPort,
     name: string,
     returns: RouteReturns,
-    options: { depth?: number; local?: boolean } = {}
+    options: { depth?: number; local?: boolean; title?: string; description?: string } = {}
 ): DirectoryHostFunction {
     const depth = options.depth ?? 0;
     return {
-        declaration: { name, params: [{ name: 'u', type: 'USER' }], returns, ...(options.local ? { local: true } : {}) },
+        declaration: {
+            name,
+            params: [{ name: 'u', type: 'USER' }],
+            returns,
+            ...(options.local ? { local: true } : {}),
+            ...(options.title ? { title: options.title } : {}),
+            ...(options.description ? { description: options.description } : {})
+        },
         async run([user], context) {
             const directory = runtimeOf(context);
             if (depth >= MAX_ROUTE_DEPTH) directory.raise('eval.routeCycle', { name, limit: MAX_ROUTE_DEPTH });
@@ -138,7 +145,14 @@ export function directoryHostFunctions(port: DirectoryPort, options: DirectoryFu
                 return (Array.isArray(rows) ? rows : []).filter(row => row && typeof row.id === 'string').map(row => new GroupValue(row));
             }
         },
-        ...(options.routes ?? []).map(route => routeHostFunction(port, route.name, route.returns, { depth: options.routeDepth, local: options.local }))
+        ...(options.routes ?? []).map(route =>
+            routeHostFunction(port, route.name, route.returns, {
+                depth: options.routeDepth,
+                local: options.local,
+                title: route.title,
+                description: route.description
+            })
+        )
     ];
     return { declarations: entries.map(entry => entry.declaration), functions: hostFunctionsOf(entries) };
 }

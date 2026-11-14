@@ -17,6 +17,7 @@ import {
     isFunctionDecl,
     isGroupKey,
     isGroupKeyRef,
+    isGroupRef,
     isIndexRef,
     isJoinClause,
     isJsonProperty,
@@ -29,6 +30,7 @@ import {
     isQuery,
     isSelectItem,
     isSetAssignment,
+    isSpecialUserRef,
     isTableRef,
     isTypeRef,
     isVariableDecl,
@@ -72,6 +74,9 @@ function nameKind(doc: EditorDocument, node: AstNode, property: string | undefin
         // A `#Table` has itself as owner: it is a table of the schema, not an alias.
         return result.scope.owner === node ? ['class'] : ['namespace'];
     }
+    // `@currentUser` is a name the host declares for this place; `@@Sales` is a group of the workspace (MN.4).
+    if (isSpecialUserRef(node)) return property === 'name' ? ['variable', 'host'] : undefined;
+    if (isGroupRef(node)) return property === 'name' ? ['class', 'host'] : undefined;
     if (isCurrentRecord(node) || isMemberAccess(node)) return ['property'];
     if (isTableRef(node) || (isJoinClause(node) && property === 'source')) return ['class'];
     if (isQuery(node) || isJoinClause(node)) return property === 'alias' ? ['namespace', 'declaration'] : undefined;
@@ -85,12 +90,20 @@ function nameKind(doc: EditorDocument, node: AstNode, property: string | undefin
     return undefined;
 }
 
-const SIGILS = new Set(['.', '^', '#', '$', 'KEY', '.$index']);
+const SIGILS = new Set(['.', '^', '#', '$', 'KEY', '.$index', '@', '@@']);
 
 /** The kind of a keyword token. Punctuation and operators have none. */
 function keywordKind(leaf: LeafCstNode): Kind | undefined {
     const node = leaf.astNode;
-    const sigil = isCurrentRecord(node) || isParentRecord(node) || isFieldValue(node) || isNamedScope(node) || isGroupKeyRef(node) || isIndexRef(node);
+    const sigil =
+        isCurrentRecord(node) ||
+        isParentRecord(node) ||
+        isFieldValue(node) ||
+        isNamedScope(node) ||
+        isGroupKeyRef(node) ||
+        isIndexRef(node) ||
+        isSpecialUserRef(node) ||
+        isGroupRef(node);
     // The `.` of member access belongs to `MemberAccess`, so it is not a sigil. A `!` after a field is not one either.
     if (sigil && SIGILS.has(leaf.text)) return ['operator'];
     if (!/^[A-Za-z]/.test(leaf.text)) return undefined;

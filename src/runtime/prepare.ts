@@ -9,11 +9,14 @@
 import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { coded } from '../language/diagnostics/codes.js';
-import { isExpression, isQuery, type Model } from '../language/generated/ast.js';
+import { isExpression, isQuery, type Expression, type Model } from '../language/generated/ast.js';
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import type { MinabInterpreter } from '../language/minab-interpreter.js';
-import type { MinabSqlCompiler } from '../language/minab-sql-compiler.js';
-import { formatType, type MinabType } from '../language/minab-types.js';
+import { NO_OUTER_SCOPE, type MinabSqlCompiler } from '../language/minab-sql-compiler.js';
+import type { MinabTypeChecker } from '../language/minab-type-checker.js';
+import { checkPolicyProfile, compilePolicyProgram, shifted, type PolicyProgram } from '../policy/compile-ir.js';
+import type { PolicyOptions } from '../policy/profile.js';
+import { formatType, isUser, isUserGroup, type MinabType } from '../language/minab-types.js';
 import { analyzeProgram, conservativeAnalysis, dependsOnField } from './analyze.js';
 import { runError } from './errors.js';
 import { RunBudget, tightenLimits, type Limits } from './limits.js';
@@ -23,6 +26,8 @@ import type { ServiceSet } from './service-cache.js';
 import type {
     CompileExpressionOptions,
     CompileExpressionResult,
+    CompilePolicyOptions,
+    CompilePolicyResult,
     CompileResult,
     ExpectedType,
     MinabDiagnostic,
@@ -54,6 +59,7 @@ function toDiagnostic(d: Diagnostic): MinabDiagnostic {
 /** Does the type of the answer fit what the host expects? Null-ability does not matter here. */
 export function fitsExpected(type: MinabType, expected: ExpectedType): boolean {
     if (typeof expected === 'object') return formatType(type).replaceAll('?', '') === expected.minab.replaceAll('?', '');
+    if (expected === 'principal' || expected === 'route') return isUser(type) || isUserGroup(type);
     if (expected === 'list') return type.kind === 'collection' || (type.kind === 'scalar' && type.array);
     if (type.kind !== 'scalar' || type.array) return false;
     switch (expected) {
@@ -93,8 +99,27 @@ class Prepared implements PreparedProgram {
         private readonly compiler: MinabSqlCompiler,
         private readonly recordTable: string | undefined,
         private readonly hostLimits: Limits,
-        private readonly groupTable?: string
+        private readonly groupTable?: string,
+        /** Set when the program was prepared with `profile: 'policy'` (MN.3). */
+        private readonly policy?: PolicyProgram
     ) {}
+
+    async compilePolicy(options: CompilePolicyOptions = {}): Promise<CompilePolicyResult> {
+        if (!this.policy) throw new TypeError("compilePolicy needs a program prepared with profile: 'policy'");
+        if (!this.ok) return { ok: false, error: runError('compile.programHasErrors', undefined) };
+        const port = options.directory;
+        const signal = options.signal ?? new AbortController().signal;
+        const directory = port && {
+            findUser: (key: string, s: AbortSignal) => port.findUser(key, { signal: s }),
+            findGroup: async (name: string, s: AbortSignal) => (await port.findGroup(name, { signal: s }))?.id ?? null
+        };
+        const compiled = await compilePolicyProgram(this.policy, directory, signal);
+        if (compiled.ok) return { ok: true, ir: compiled.ir, reads: compiled.reads, pinnedSource: compiled.pinnedSource };
+        return {
+            ok: false,
+            error: { code: compiled.code, message: compiled.message, ...(compiled.range ? { range: compiled.range } : {}), params: compiled.params }
+        };
+    }
 
     dependsOn(field: string): boolean {
         return dependsOnField(this.analysis, field);
@@ -108,7 +133,10 @@ class Prepared implements PreparedProgram {
         if (!this.ok) return { ok: false, error: runError('compile.programHasErrors', undefined) };
         const tail = this.model?.tail;
         if (!tail) return { ok: false, error: runError('compile.nothingToCompile', undefined) };
-        const compiled = isQuery(tail) ? this.compiler.compileQuery(tail) : this.compiler.compileValue(tail);
+        // To show the SQL, each user or set that does not depend on the row stands for its answer: a user is `null`, a set is empty (MN.4, P11).
+        const stand = new Map(this.compiler.directoryParts(tail).map(({ node, set }) => [node, set ? [] : null] as const));
+        const outer = { ...NO_OUTER_SCOPE, boundUsers: (expr: Expression) => (stand.has(expr) ? stand.get(expr) : undefined) };
+        const compiled = isQuery(tail) ? this.compiler.compileQuery(tail, outer) : this.compiler.compileValue(tail, outer);
         if (compiled.ok) return { ok: true, sql: compiled.query };
         const range = tail.$cstNode?.range;
         if (compiled.code === 'compile.notSql') return { ok: false, error: runError('compile.notSql', range, { reason: compiled.reason }) };
@@ -291,7 +319,8 @@ export async function prepareProgram(
     localHostFunctions: ReadonlySet<string> | undefined,
     limits: Limits,
     groupTable?: string,
-    localDirectory?: boolean
+    localDirectory?: boolean,
+    policy?: { options: PolicyOptions; kind: 'boolean' | 'principal' | 'route'; source: string; prefixLength: number; prefixLines: number }
 ): Promise<PreparedProgram> {
     const { shared, services } = set;
     // A limit of the program text stops the work before the parser sees it.
@@ -345,8 +374,10 @@ export async function prepareProgram(
     const model = document.parseResult.value;
     const classified = classifyProgram(model, services);
     const hasErrors = diagnostics.some(d => d.severity === 'error');
-    if (expect !== undefined && !hasErrors && classified.type && !fitsExpected(classified.type, expect)) {
-        const message = coded('type.unexpectedResultType', { expected: expectedText(expect), actual: classified.resultType! });
+    // A route body must return what the route is declared to return.
+    const wanted: ExpectedType | undefined = expect === 'route' && policy ? { minab: policy.options.route?.returns ?? 'USERGROUP' } : expect;
+    if (wanted !== undefined && !hasErrors && classified.type && !fitsExpected(classified.type, wanted)) {
+        const message = coded('type.unexpectedResultType', { expected: expectedText(wanted), actual: classified.resultType! });
         diagnostics.push({
             severity: 'error',
             code: message.code,
@@ -362,8 +393,28 @@ export async function prepareProgram(
         lexerErrors.length > 0 || parserErrors.length > 0
             ? conservativeAnalysis()
             : analyzeProgram(model, services.schema, recordTable, { localHostFunctions, groupTable, localDirectory });
+    // The policy profile (MN.3): after the checker, so the walk can ask for types. A half-parsed tree is not walked.
+    let policyProgram: PolicyProgram | undefined;
+    if (policy) {
+        policyProgram = {
+            declarations: model.declarations,
+            tail: model.tail,
+            typeOf: node => {
+                const inferred = (services.typeChecker as MinabTypeChecker).inferType(node);
+                return inferred.ok ? inferred.type : undefined;
+            },
+            options: policy.options,
+            kind: policy.kind,
+            source: policy.source,
+            prefixLength: policy.prefixLength,
+            prefixLines: policy.prefixLines
+        };
+        if (lexerErrors.length === 0 && parserErrors.length === 0 && !hasErrors) diagnostics.push(...(await checkPolicyProfile(policyProgram)));
+    }
+    // A route body has a line in front of it that the host did not write: the ranges are the host's again.
+    const lines = policy?.prefixLines ?? 0;
     return new Prepared(
-        diagnostics,
+        lines > 0 ? diagnostics.map(d => ({ ...d, range: shifted(d.range, lines) })) : diagnostics,
         classified.kind,
         classified.resultType,
         analysis,
@@ -372,7 +423,8 @@ export async function prepareProgram(
         services.sqlCompiler,
         recordTable,
         limits,
-        groupTable
+        groupTable,
+        policyProgram
     );
 }
 

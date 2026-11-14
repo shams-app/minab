@@ -1,0 +1,802 @@
+{
+  "topic": "principals",
+  "cases": [
+    {
+      "name": "a group",
+      "source": "@@Sales",
+      "kind": "principal",
+      "expected": [
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "group",
+          "id": "grp_Sales"
+        }
+      }
+    },
+    {
+      "name": "a system group",
+      "source": "@@admins",
+      "kind": "principal",
+      "expected": [
+        "usr_ali"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "system",
+          "name": "admins"
+        }
+      }
+    },
+    {
+      "name": "everyone",
+      "source": "@@everyone",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_omid",
+        "usr_root",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "everyone"
+        }
+      }
+    },
+    {
+      "name": "applications",
+      "source": "@@applications",
+      "kind": "principal",
+      "expected": [
+        "svc_bot"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "system",
+          "name": "applications"
+        }
+      }
+    },
+    {
+      "name": "a union",
+      "source": "@@Sales + @@Support",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            {
+              "k": "group",
+              "id": "grp_Support"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a difference",
+      "source": "@@Sales - @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "group",
+            "id": "grp_Sales"
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "an intersection",
+      "source": "@@Sales & @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_omid"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "inter",
+          "of": [
+            {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a symmetric difference",
+      "source": "@@Sales | @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "xor",
+          "a": {
+            "k": "group",
+            "id": "grp_Sales"
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "the complement",
+      "source": "!@@Contractors",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_omid",
+        "usr_root",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "everyone"
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Contractors"
+          }
+        }
+      }
+    },
+    {
+      "name": "the complement of a group",
+      "source": "!@@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_root",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "everyone"
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "union flattens",
+      "source": "@@Sales + @@Support + @@Managers",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            {
+              "k": "group",
+              "id": "grp_Support"
+            },
+            {
+              "k": "group",
+              "id": "grp_Managers"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "precedence",
+      "source": "@@Interns + @@Sales & @@Support",
+      "kind": "principal",
+      "expected": [
+        "usr_omid"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "group",
+              "id": "grp_Interns"
+            },
+            {
+              "k": "inter",
+              "of": [
+                {
+                  "k": "group",
+                  "id": "grp_Sales"
+                },
+                {
+                  "k": "group",
+                  "id": "grp_Support"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a filter",
+      "source": "@@everyone[.city == 'Marand']",
+      "kind": "principal",
+      "expected": [
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "everyone"
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "prin": [
+                "city"
+              ]
+            },
+            "r": {
+              "lit": "Marand",
+              "t": "TEXT"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter of a group",
+      "source": "@@Sales[.department == 'IT']",
+      "kind": "principal",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "group",
+            "id": "grp_Sales"
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "prin": [
+                "department"
+              ]
+            },
+            "r": {
+              "lit": "IT",
+              "t": "TEXT"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a nested filter",
+      "source": "@@everyone[.city == 'Marand'][.department == 'HR']",
+      "kind": "principal",
+      "expected": [
+        "usr_omid"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "prin": [
+                  "city"
+                ]
+              },
+              "r": {
+                "lit": "Marand",
+                "t": "TEXT"
+              }
+            }
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "prin": [
+                "department"
+              ]
+            },
+            "r": {
+              "lit": "HR",
+              "t": "TEXT"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter with or",
+      "source": "@@everyone[.city == 'Tehran' OR .city == 'Tabriz']",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "everyone"
+          },
+          "where": {
+            "op": "or",
+            "of": [
+              {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "prin": [
+                    "city"
+                  ]
+                },
+                "r": {
+                  "lit": "Tehran",
+                  "t": "TEXT"
+                }
+              },
+              {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "prin": [
+                    "city"
+                  ]
+                },
+                "r": {
+                  "lit": "Tabriz",
+                  "t": "TEXT"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter with not",
+      "source": "@@everyone[NOT .city == 'Marand']",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_root"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "everyone"
+          },
+          "where": {
+            "op": "not",
+            "x": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "prin": [
+                  "city"
+                ]
+              },
+              "r": {
+                "lit": "Marand",
+                "t": "TEXT"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter with like",
+      "source": "@@everyone[.email LIKE 'a%']",
+      "kind": "principal",
+      "expected": [
+        "usr_ali"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "filter",
+          "set": {
+            "k": "everyone"
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "like",
+            "l": {
+              "prin": [
+                "email"
+              ]
+            },
+            "r": {
+              "lit": "a%",
+              "t": "CITEXT"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter minus a group",
+      "source": "@@everyone[.city == 'Marand'] - @@Sales",
+      "kind": "principal",
+      "expected": [],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "prin": [
+                  "city"
+                ]
+              },
+              "r": {
+                "lit": "Marand",
+                "t": "TEXT"
+              }
+            }
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Sales"
+          }
+        }
+      }
+    },
+    {
+      "name": "the current user",
+      "source": "@currentUser",
+      "kind": "principal",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "one",
+          "user": {
+            "special": "currentUser"
+          }
+        }
+      }
+    },
+    {
+      "name": "the current user and a group",
+      "source": "@currentUser + @@Managers",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "one",
+              "user": {
+                "special": "currentUser"
+              }
+            },
+            {
+              "k": "group",
+              "id": "grp_Managers"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "everyone but the current user",
+      "source": "!@currentUser",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina",
+        "usr_omid",
+        "usr_root"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "everyone"
+          },
+          "b": {
+            "k": "one",
+            "user": {
+              "special": "currentUser"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a user by e-mail",
+      "source": "findUser('ali@example.com') + @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_omid"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "user",
+              "id": "usr_ali"
+            },
+            {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a group by a literal name",
+      "source": "findGroup('Managers')",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "group",
+          "id": "grp_Managers"
+        }
+      }
+    },
+    {
+      "name": "single in a set",
+      "source": "single(@@everyone[.city == 'Tehran']) + @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_mina",
+        "usr_omid"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "union",
+          "of": [
+            {
+              "k": "one",
+              "user": {
+                "k": "single",
+                "set": {
+                  "k": "filter",
+                  "set": {
+                    "k": "everyone"
+                  },
+                  "where": {
+                    "op": "cmp",
+                    "cmp": "eq",
+                    "l": {
+                      "prin": [
+                        "city"
+                      ]
+                    },
+                    "r": {
+                      "lit": "Tehran",
+                      "t": "TEXT"
+                    }
+                  }
+                },
+                "orNull": false
+              }
+            },
+            {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the groups of a user",
+      "source": "groupsOf(@currentUser)['team' IN .tags].members",
+      "kind": "principal",
+      "expected": [
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "groupsOf",
+          "user": {
+            "special": "currentUser"
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "in",
+            "l": {
+              "lit": "team",
+              "t": "TEXT"
+            },
+            "r": {
+              "res": [
+                "tags"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the groups of a user, all of them",
+      "source": "groupsOf(@currentUser).members & @@Managers",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "inter",
+          "of": [
+            {
+              "k": "groupsOf",
+              "user": {
+                "special": "currentUser"
+              }
+            },
+            {
+              "k": "group",
+              "id": "grp_Managers"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the groups of a found user",
+      "source": "groupsOf(findUser('usr_mina'))['team' IN .tags].members - @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_ali",
+        "usr_mina"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "groupsOf",
+            "user": {
+              "id": "usr_mina"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "in",
+              "l": {
+                "lit": "team",
+                "t": "TEXT"
+              },
+              "r": {
+                "res": [
+                  "tags"
+                ]
+              }
+            }
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "a person who left is in no set",
+      "source": "@@Leavers",
+      "kind": "principal",
+      "expected": [],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "group",
+          "id": "grp_Leavers"
+        }
+      }
+    }
+  ]
+}

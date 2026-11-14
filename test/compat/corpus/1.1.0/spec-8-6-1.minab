@@ -1,0 +1,15 @@
+fn cancelledOrdersFor(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId AND .status == "cancelled"
+    SELECT .id
+}
+// cancelledOrdersFor(x) : JSON — a JSON array of UUIDs (one per cancelled order)
+
+fn recentOrders(customerId: UUID): JSON {
+    FROM Order
+    WHERE .customer.id == customerId
+    SELECT *
+    ORDERBY .placed_at DESC
+    LIMIT 10
+}
+// recentOrders(x) : JSON — a JSON array of order objects
