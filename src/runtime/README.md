@@ -12,7 +12,7 @@ database driver. A test checks the imports.
   declared functions and inputs (D27). They are checked here: a bad name or type word,
   or a name that is a keyword of the grammar (`from`, `loop`), throws a `HostDeclarationError`.
 - `ports.ts`: the ports a host implements and gives to each `run`: `DataPort`, `WritePort`
-  (one transaction for the writes of a run, X5), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
+  (one transaction for the writes of a run, X5), `DirectoryPort` (users and groups, MN.2), `HostFunctions`, `ClockPort`, `EventSink`, and the event types.
 - `limits.ts`: the `Limits` and their defaults (D36), `resolveLimits`, `tightenLimits`, and `RunBudget`,
   which counts what one run uses and stops it at a limit or an abort.
 - `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
@@ -125,6 +125,7 @@ Limits are always on (D01). `createMinab({ limits })` sets them. A run can only 
 | `callDepth` | 64 | each user `fn` call | `limit.callDepth` |
 | `logEntries` | 100 | when an entry is made (L7) | extra entries are dropped and counted |
 | `batchRuns` | 100 | the run endpoint (H2) | |
+| `maxUsers` | 10,000 | when a set of users is listed: `COUNT`, a loop, a result, `single` (MN.2). `u IN set` lists nothing | `eval.tooManyUsers` |
 
 A program that a prepare-time limit stops has one error diagnostic and no analysis. `run` and
 `compile` refuse it.

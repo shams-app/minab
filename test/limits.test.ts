@@ -39,7 +39,9 @@ describe('the limits table (D36)', () => {
             loopIterations: 100_000,
             callDepth: 64,
             logEntries: 100,
-            batchRuns: 100
+            batchRuns: 100,
+            // Added by MN.2 (users and groups): the new limit of a listed set of users, on purpose.
+            maxUsers: 10_000
         });
     });
 

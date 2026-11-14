@@ -72,6 +72,9 @@ export type MinabType = ScalarType | TupleType | RecordType | CollectionType | N
 export const USER_TABLE = '@USER';
 export const GROUP_TABLE = '@GROUP';
 
+/** A table of the directory (`@USER`, `@GROUP`): its rows come from the directory port, never from SQL. */
+export const isDirectoryTable = (table: string): boolean => table === USER_TABLE || table === GROUP_TABLE;
+
 /** A table name as a program reads it: the directory tables are `USER` and `GROUP`, not `@USER`. */
 export function tableDisplayName(table: string): string {
     return table === USER_TABLE ? 'USER' : table === GROUP_TABLE ? 'GROUP' : table;
