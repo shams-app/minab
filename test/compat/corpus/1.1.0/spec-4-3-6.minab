@@ -1,0 +1,3 @@
+FROM Product AS p
+CROSSJOIN Warehouse AS w
+SELECT p.name, w.name, p.id == w.default_product_id AS is_default

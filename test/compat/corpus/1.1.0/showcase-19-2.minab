@@ -1,0 +1,6 @@
+// As a statement, in a function body or at the top level
+fn discounted(total: DECIMAL, rate: DECIMAL): DECIMAL {
+    let cut: DECIMAL = LOG(total * rate / 100, "cut");
+    LOG(cut);
+    total - cut
+}

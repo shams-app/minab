@@ -1,0 +1,17 @@
+// Loops (spec §9.4, showcase §12): a `for-in` over a customer's orders, with a
+// guard. `.orders` is a relation of the record under validation
+// (`rule.recordTable` in the config). Entering the loop makes `.` the current
+// order, and `order` is a named alias for the same row.
+//
+// The orders are read once, then the loop runs in memory. In the config the
+// shipped orders add up to 550.25, so the answer is `true`.
+//
+//   minab run overdue-loop.minab
+
+let shippedTotal: DECIMAL = 0;
+
+loop order in .orders where .status == "shipped" AND order.total > 0 {
+    shippedTotal = shippedTotal + order.total;
+}
+
+shippedTotal > 500

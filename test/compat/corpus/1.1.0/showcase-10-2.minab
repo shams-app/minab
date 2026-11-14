@@ -1,0 +1,5 @@
+fn net(t: DECIMAL): DECIMAL { t * 0.9 }
+
+FROM Order
+WHERE net(.total) > 100
+SELECT .id, net(.total) AS net_total

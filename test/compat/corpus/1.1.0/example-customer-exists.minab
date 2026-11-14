@@ -1,0 +1,12 @@
+// A field-level rule (spec §6.2): `$` is the value being checked. Here, a
+// referential-integrity check — the value must be the id of a real Customer.
+// The host says this is a field rule and what `$` holds (`rule.fieldType` and
+// `fieldValue` in the config, or `--field` on the command line).
+//
+//   minab run customer-exists.minab
+//   minab run customer-exists.minab --trace   # the one parameterized EXISTS
+//
+// The fixture answers "yes" whatever `$` is; against a real database
+// (`--database`), `--field '"c-404"'` would come back `false`.
+
+EXISTS(#Customer[.id == $])

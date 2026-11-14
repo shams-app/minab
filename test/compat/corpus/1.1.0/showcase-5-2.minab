@@ -1,0 +1,3 @@
+FROM Order
+GROUPBY .status AS s
+SELECT KEY AS status, COUNT(.) AS order_count

@@ -1,0 +1,14 @@
+// A pipeline query with grouping (spec §4.3): what each customer has
+// spent, for customers past a threshold, biggest first.
+//
+//   minab compile examples/top-customers.minab   # see the SQL
+//   minab run examples/top-customers.minab       # run it
+//
+// `KEY` is the group key (spec §2.2) — here the `Customer` row grouped by,
+// so `KEY.name` reads a column off it without a join in the source.
+
+FROM Order
+GROUPBY .customer
+HAVING SUM(.total) > 1000
+SELECT KEY.name AS customer_name, SUM(.total) AS total_spent, COUNT(.) AS order_count
+ORDERBY total_spent DESC

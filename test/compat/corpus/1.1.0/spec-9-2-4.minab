@@ -1,0 +1,5 @@
+switch .tier {
+    "gold"   => ({ discount: 20, freeShipping: true }),
+    "silver" => ({ discount: 10, freeShipping: false }),
+    _        => ({ discount: 0, freeShipping: false })
+}

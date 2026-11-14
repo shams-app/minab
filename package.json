@@ -1,6 +1,6 @@
 {
   "name": "@shamsine/minab",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Minab — a pipeline query and validation language, implemented with Langium",
   "license": "MIT",
   "author": "Hamed Zakery Miab",

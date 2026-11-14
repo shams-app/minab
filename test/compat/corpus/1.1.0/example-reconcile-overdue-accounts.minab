@@ -1,0 +1,56 @@
+// Everything together (showcase §14): a function that loops over a table,
+// calls another function, branches with `if`/`else if`/`else` expressions,
+// uses `is` to test JSON shape, and writes with UPDATE and INSERT.
+//
+// Inside `#Customers[.id == customer.id]` the filter re-pushes `.` to mean
+// each candidate row, so the loop's own customer is reached by its alias
+// (`customer.id`), not by a bare `.id`.
+//
+// `minab run` is a dry run: the loop runs and reads, and the writes are printed
+// and not executed. Add `--apply --database <url>` to write them in one transaction.
+//
+//   minab run reconcile-overdue-accounts.minab
+
+fn daysSincePayment(customerId: UUID): INTEGER {
+    let days: INTEGER = (
+        FROM Payment WHERE .customer_id == customerId SELECT .days_ago AS d ORDERBY d LIMIT 1
+    );
+    days
+}
+
+fn reconcileOverdueAccounts(cutoff: DECIMAL, graceDays: INTEGER): INTEGER {
+    let flaggedCount: INTEGER = 0;
+
+    loop customer in #Customers where .balance > cutoff {
+        let daysLate: INTEGER = daysSincePayment(.id);
+
+        let newStatus: TEXT = if daysLate > 90 {
+            let notes: JSON = .metadata;
+            if notes is object {
+                "disputed"
+            } else {
+                "severe"
+            }
+        } else if daysLate > graceDays {
+            "late"
+        } else {
+            "ok"
+        };
+
+        if! newStatus != "ok" {
+            flaggedCount = flaggedCount + 1;
+
+            UPDATE #Customers[.id == customer.id]
+            SET { status: newStatus, flaggedAt +: 1 };
+
+            if! newStatus == "severe" {
+                INSERT #CollectionsQueue
+                VALUES { customer_id: customer.id, reason: newStatus };
+            }
+        }
+    }
+
+    flaggedCount
+}
+
+reconcileOverdueAccounts(1000, 14)

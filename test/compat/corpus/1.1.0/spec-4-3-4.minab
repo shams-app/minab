@@ -1,0 +1,6 @@
+FROM Order AS o
+JOIN Shipment AS s ON o.tracking_code == s.tracking_code
+WHERE s.status == "delivered"
+SELECT o.id, o.total, s.delivered_at AS shipped_at
+ORDERBY o.total DESC
+LIMIT 20

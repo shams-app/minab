@@ -1,0 +1,3 @@
+fn swap(a: INTEGER, b: INTEGER): (INTEGER, INTEGER) {
+    (b, a)
+}

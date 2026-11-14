@@ -1,0 +1,6 @@
+let min_amount: DECIMAL = 100.00;
+let flagged_statuses: TEXT[] = ["flagged", "under_review"];
+
+FROM Order
+WHERE .total >= min_amount AND .status IN flagged_statuses
+SELECT .id, .total
