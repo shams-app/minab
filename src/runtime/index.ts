@@ -49,6 +49,9 @@ export type { Limits } from './limits.js';
 export { NO_DIRECTORY_PORT, PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK } from './ports.js';
 export { DirectoryRuntime, GroupValue, UserGroupValue, UserValue } from '../language/directory-values.js';
 export type { DirectoryBudget, DirectoryErrorCode, DirectoryRaise, UserFilterSet, UserSet } from '../language/directory-values.js';
+// The host functions of the directory are also here, so a CommonJS host (`require`) gets them from the same bundle as the runtime.
+export { directoryHostFunctions, hostFunctionsOf, MAX_ROUTE_DEPTH, routeHostFunction } from '../host/directory-functions.js';
+export type { DirectoryFunctionOptions, DirectoryHostFunction, DirectoryHostFunctions, RouteReturns } from '../host/directory-functions.js';
 export type {
     ClockPort,
     DataContext,

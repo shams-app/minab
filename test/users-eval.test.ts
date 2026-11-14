@@ -448,7 +448,7 @@ describe('analysis and SQL', () => {
     }
 
     test('usesDirectory, and tier data unless the port is local', async () => {
-        for (const source of ['@currentUser IN @@Sales', '.owner == @currentUser', "findUser('usr_ali').name"]) {
+        for (const source of ['@currentUser IN @@Sales', "findUser('usr_ali').name", '@currentUser.email == .owner.email']) {
             const program = await prepare(source);
             expect(program.analysis).toMatchObject({ usesDirectory: true, tier: 'data' });
         }

@@ -22,6 +22,7 @@ export type RouteReturns = 'USERGROUP' | 'USER?';
 /** A host function: its declaration for the checker and its code for the run. */
 export interface DirectoryHostFunction {
     declaration: HostFunctionDeclaration;
+    /** Runs the function with the arguments of the call. The context carries the run's directory and abort signal. */
     run(args: unknown[], context: HostCallContext): unknown | Promise<unknown>;
 }
 
@@ -31,6 +32,7 @@ export interface DirectoryHostFunctions {
     functions: HostFunctions;
 }
 
+/** What `directoryHostFunctions` takes besides the port: local answers, the routes of the workspace and the route depth. */
 export interface DirectoryFunctionOptions {
     /** `true`: the port answers with no round trip, so a program that uses these functions can run in the browser. */
     local?: boolean;

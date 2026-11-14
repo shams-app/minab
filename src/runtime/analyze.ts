@@ -11,6 +11,7 @@
 import { AstUtils, type AstNode } from 'langium';
 import {
     isAssignmentStatement,
+    isBinaryExpression,
     isCallExpression,
     isCurrentRecord,
     isDeleteStatement,
@@ -89,6 +90,8 @@ class Analyzer {
     readsWholeRecord = false;
     needsData = false;
     usesDirectory = false;
+    /** Above zero while the two sides of an id-only comparison are visited (`.assignee == @currentUser`). */
+    private idOnly = 0;
     writes = false;
 
     private readonly declared = new Map<string, FunctionDecl>();
@@ -129,6 +132,8 @@ class Analyzer {
 
     /** The program reads users or groups: it needs the directory port (P11). */
     private directory(): void {
+        // A user that is only compared by its id (see `idKind`) never asks the port.
+        if (this.idOnly > 0) return;
         this.usesDirectory = true;
         if (!this.options.localDirectory) this.needsData = true;
     }
@@ -168,6 +173,28 @@ class Analyzer {
         return undefined;
     }
 
+    /**
+     * Is the node a user (`user`) or a set of users (`users`) that is known by its id alone: a special user (`@currentUser`)
+     * or a user column of the record under validation (`.assignee`, `.watchers`)? Anything else (`.email` of a user, `@@name`,
+     * a function result) needs the directory.
+     */
+    private idKind(node: AstNode, scope: Scope): 'user' | 'users' | undefined {
+        if (isSpecialUserRef(node)) return 'user';
+        if (!isCurrentRecord(node) || !node.field || !scope.record || !scope.table) return undefined;
+        const column = this.schema.getColumn(scope.table, node.field);
+        if (!column || column.type.kind === 'scalar' || !isDirectoryTable(column.type.table)) return undefined;
+        return column.type.kind === 'ref' ? 'user' : 'users';
+    }
+
+    /** `user == user`, `user != user` and `user IN users` compare ids, so they run with no directory (P11). */
+    private isIdComparison(node: AstNode, scope: Scope): boolean {
+        if (!isBinaryExpression(node)) return false;
+        const left = this.idKind(node.left, scope);
+        const right = this.idKind(node.right, scope);
+        if (node.operator === '==' || node.operator === '!=') return left === 'user' && right === 'user';
+        return node.operator === 'IN' && left === 'user' && right === 'users';
+    }
+
     private children(node: AstNode, scope: Scope): void {
         for (const child of AstUtils.streamContents(node)) this.visit(child, scope);
     }
@@ -185,6 +212,12 @@ class Analyzer {
         }
         if (isFieldValue(node)) {
             this.readsFieldValue = true;
+            return;
+        }
+        if (this.isIdComparison(node, scope)) {
+            this.idOnly++;
+            this.children(node, scope);
+            this.idOnly--;
             return;
         }
         if (isSpecialUserRef(node) || isGroupRef(node)) {

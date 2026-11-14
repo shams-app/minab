@@ -47,6 +47,15 @@ export interface WireInputs {
     record?: Record<string, Json>;
     fieldValue?: Json;
     hostInputs?: Record<string, Json>;
+    /** The user ids of the special users of the run (`@currentUser`); `null` for a `USER?` that is missing. */
+    specialUsers?: Record<string, string | null>;
+}
+
+/** The special users cross as they are: a name and a user id (or `null`). Anything else is a bridge error. */
+function checkSpecialUsers(value: unknown): Record<string, string | null> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('specialUsers must be an object');
+    for (const id of Object.values(value)) if (id !== null && typeof id !== 'string') throw new Error('a special user is a user id or null');
+    return { ...(value as Record<string, string | null>) };
 }
 
 /** The editor questions a worker answers. Each is computed by `src/editor/`. */
@@ -225,10 +234,16 @@ export interface InputTypes {
 }
 
 export function encodeInputs(
-    inputs: { record?: Record<string, unknown>; fieldValue?: unknown; hostInputs?: Record<string, unknown> },
+    inputs: {
+        record?: Record<string, unknown>;
+        fieldValue?: unknown;
+        hostInputs?: Record<string, unknown>;
+        specialUsers?: Record<string, string | null>;
+    },
     types: InputTypes
 ): WireInputs {
     const out: WireInputs = {};
+    if (inputs.specialUsers !== undefined) out.specialUsers = checkSpecialUsers(inputs.specialUsers);
     if (inputs.record !== undefined) out.record = encodeFields(inputs.record, recordFieldTypes(types.schema, types.ruleContext.recordTable));
     if (inputs.fieldValue !== undefined) out.fieldValue = encodeBy(inputs.fieldValue, types.ruleContext.fieldType);
     if (inputs.hostInputs !== undefined) {
@@ -245,8 +260,14 @@ export function encodeInputs(
 export function decodeInputs(
     wire: WireInputs,
     types: InputTypes
-): { record?: Record<string, unknown>; fieldValue?: unknown; hostInputs?: Record<string, unknown> } {
+): {
+    record?: Record<string, unknown>;
+    fieldValue?: unknown;
+    hostInputs?: Record<string, unknown>;
+    specialUsers?: Record<string, string | null>;
+} {
     const out: ReturnType<typeof decodeInputs> = {};
+    if (wire.specialUsers !== undefined) out.specialUsers = checkSpecialUsers(wire.specialUsers);
     if (wire.record !== undefined) out.record = decodeFields(wire.record, recordFieldTypes(types.schema, types.ruleContext.recordTable));
     if (wire.fieldValue !== undefined) out.fieldValue = decodeBy(wire.fieldValue, types.ruleContext.fieldType);
     if (wire.hostInputs !== undefined) {
