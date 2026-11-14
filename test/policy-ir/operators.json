@@ -1,0 +1,860 @@
+{
+  "topic": "operators",
+  "cases": [
+    {
+      "name": "eq: equal text",
+      "source": ".status == 'open'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "open",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "eq: different text",
+      "source": ".status == 'closed'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "closed",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "ne",
+      "source": ".status != 'closed'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ne",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "closed",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "lt: a decimal",
+      "source": ".amount < 300.5",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "lt",
+          "l": {
+            "res": [
+              "amount"
+            ]
+          },
+          "r": {
+            "lit": "300.5",
+            "t": "DECIMAL"
+          }
+        }
+      }
+    },
+    {
+      "name": "le: equal integer",
+      "source": ".id <= 7",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "le",
+          "l": {
+            "res": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": 7,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "gt: a negative literal",
+      "source": ".id > -1",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "gt",
+          "l": {
+            "res": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": -1,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "ge: false",
+      "source": ".id >= 8",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ge",
+          "l": {
+            "res": [
+              "id"
+            ]
+          },
+          "r": {
+            "lit": 8,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "like: starts with",
+      "source": ".status LIKE 'op%'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "op%",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "like: one character",
+      "source": ".status LIKE 'o_en'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "o_en",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "like: no match",
+      "source": ".status LIKE 'x%'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "x%",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "in: a list of texts",
+      "source": ".status IN ['open', 'review']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": [
+              "open",
+              "review"
+            ],
+            "t": "JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "in: not in the list",
+      "source": ".status IN ['draft', 'review']",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": [
+              "draft",
+              "review"
+            ],
+            "t": "JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "in: a text in an array field",
+      "source": "'urgent' IN .tags",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "lit": "urgent",
+            "t": "TEXT"
+          },
+          "r": {
+            "res": [
+              "tags"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "in: a text not in the array field",
+      "source": "'late' IN .tags",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "lit": "late",
+            "t": "TEXT"
+          },
+          "r": {
+            "res": [
+              "tags"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "and",
+      "source": ".status == 'open' AND .id == 7",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "open",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "and: one false",
+      "source": ".status == 'open' AND .id == 8",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "open",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 8,
+                "t": "INTEGER"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "or",
+      "source": ".status == 'draft' OR .id == 7",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "draft",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "or: both false",
+      "source": ".status == 'draft' OR .id == 8",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "draft",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 8,
+                "t": "INTEGER"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "not",
+      "source": ".status != 'open' OR NOT .id == 8",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "ne",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "open",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "not",
+              "x": {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "res": [
+                    "id"
+                  ]
+                },
+                "r": {
+                  "lit": 8,
+                  "t": "INTEGER"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "not: a group",
+      "source": "NOT (.status == 'open' AND .id == 7)",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "and",
+            "of": [
+              {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "res": [
+                    "status"
+                  ]
+                },
+                "r": {
+                  "lit": "open",
+                  "t": "TEXT"
+                }
+              },
+              {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "res": [
+                    "id"
+                  ]
+                },
+                "r": {
+                  "lit": 7,
+                  "t": "INTEGER"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "precedence: and binds tighter than or",
+      "source": ".id == 1 OR .id == 7 AND .status == 'open'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "and",
+              "of": [
+                {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "res": [
+                      "id"
+                    ]
+                  },
+                  "r": {
+                    "lit": 7,
+                    "t": "INTEGER"
+                  }
+                },
+                {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "res": [
+                      "status"
+                    ]
+                  },
+                  "r": {
+                    "lit": "open",
+                    "t": "TEXT"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a boolean field alone",
+      "source": ".urgent",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "urgent"
+            ]
+          },
+          "r": {
+            "lit": true,
+            "t": "BOOLEAN"
+          }
+        }
+      }
+    },
+    {
+      "name": "a boolean field with not",
+      "source": "NOT .urgent",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "res": [
+                "urgent"
+              ]
+            },
+            "r": {
+              "lit": true,
+              "t": "BOOLEAN"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a boolean literal",
+      "source": "true",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "const",
+          "value": true
+        }
+      }
+    },
+    {
+      "name": "a constant false folds the and",
+      "source": ".status == 'open' AND false",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "const",
+          "value": false
+        }
+      }
+    },
+    {
+      "name": "a constant true folds the or",
+      "source": ".status == 'draft' OR true",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "const",
+          "value": true
+        }
+      }
+    },
+    {
+      "name": "a constant true is dropped from the and",
+      "source": "true AND .status == 'open'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "open",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a nested and is one list",
+      "source": ".status == 'open' AND (.id == 7 AND .amount > 1)",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "open",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "gt",
+              "l": {
+                "res": [
+                  "amount"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "two decimals keep their digits",
+      "source": ".amount == 250.00",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "amount"
+            ]
+          },
+          "r": {
+            "lit": "250.00",
+            "t": "DECIMAL"
+          }
+        }
+      }
+    },
+    {
+      "name": "is null: a null field",
+      "source": ".note is null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "res": [
+              "note"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "is null: a value",
+      "source": ".status is null",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "res": [
+              "status"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "isnot null",
+      "source": ".status isnot null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "isNull",
+            "x": {
+              "res": [
+                "status"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

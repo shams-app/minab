@@ -1,0 +1,372 @@
+{
+  "topic": "request",
+  "cases": [
+    {
+      "name": "request.mfa",
+      "source": "request.mfa",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "mfa"
+          },
+          "r": {
+            "lit": true,
+            "t": "BOOLEAN"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.mfa is false",
+      "source": "request.mfa",
+      "kind": "boolean",
+      "request": {
+        "mfa": false
+      },
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "mfa"
+          },
+          "r": {
+            "lit": true,
+            "t": "BOOLEAN"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.ip",
+      "source": "request.ip == '10.0.0.1'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "ip"
+          },
+          "r": {
+            "lit": "10.0.0.1",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.ip like",
+      "source": "request.ip LIKE '10.0.%'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "req": "ip"
+          },
+          "r": {
+            "lit": "10.0.%",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.clientId",
+      "source": "request.clientId == 'web'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "clientId"
+          },
+          "r": {
+            "lit": "web",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.clientId in a list",
+      "source": "request.clientId IN ['web', 'mobile']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "req": "clientId"
+          },
+          "r": {
+            "lit": [
+              "web",
+              "mobile"
+            ],
+            "t": "JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "a tag is text",
+      "source": "resource.tags.sensitivity == 'high'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "sensitivity"
+          },
+          "r": {
+            "lit": "high",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a tag with another value",
+      "source": "resource.tags.department == 'sales'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "department"
+          },
+          "r": {
+            "lit": "sales",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a tag and mfa",
+      "source": "resource.tags.sensitivity == 'high' AND NOT request.mfa",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "tag": "sensitivity"
+              },
+              "r": {
+                "lit": "high",
+                "t": "TEXT"
+              }
+            },
+            {
+              "op": "not",
+              "x": {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "req": "mfa"
+                },
+                "r": {
+                  "lit": true,
+                  "t": "BOOLEAN"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a tag the workspace does not use is never equal",
+      "source": "resource.tags.sensitivty == 'high'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "sensitivty"
+          },
+          "r": {
+            "lit": "high",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a plain label has the empty text",
+      "source": "resource.tags.confidential == ''",
+      "kind": "boolean",
+      "tags": {
+        "confidential": ""
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "confidential"
+          },
+          "r": {
+            "lit": "",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "new: the record after the change",
+      "source": "new.status == 'closed'",
+      "kind": "boolean",
+      "new": {
+        "status": "closed"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "new": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "closed",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "new against the stored record",
+      "source": ".status != new.status",
+      "kind": "boolean",
+      "new": {
+        "status": "closed"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ne",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "new": [
+              "status"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "new: a null value is an ordinary value",
+      "source": "new.status == 'closed'",
+      "kind": "boolean",
+      "new": {
+        "status": null
+      },
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "new": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "closed",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "new: is null",
+      "source": "new.approvedBy is null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "new": [
+              "approvedBy"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "new: a number",
+      "source": "new.amount > .id",
+      "kind": "boolean",
+      "new": {
+        "amount": "300"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "gt",
+          "l": {
+            "new": [
+              "amount"
+            ]
+          },
+          "r": {
+            "res": [
+              "id"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
