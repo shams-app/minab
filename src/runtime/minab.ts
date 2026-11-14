@@ -63,7 +63,17 @@ export function createMinab(options: MinabOptions): Minab {
                 }
                 text = migrated.source;
             }
-            return prepareProgram(set, uri, text, prepareOptions.expect, ruleContext.recordTable, localHostFunctions, limits, ruleContext.groupTable);
+            return prepareProgram(
+                set,
+                uri,
+                text,
+                prepareOptions.expect,
+                ruleContext.recordTable,
+                localHostFunctions,
+                limits,
+                ruleContext.groupTable,
+                options.localDirectory
+            );
         },
         cacheStats(): CacheStats {
             return { size: cache.size, created: cache.created, hits: cache.hits, openDocuments: cache.openDocuments() };

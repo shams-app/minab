@@ -13,6 +13,7 @@ import { DateError, parseDate, parseInstant, parseTime, normalizeDateTime } from
 import {
     groupType,
     GROUP_TABLE,
+    USER_TABLE,
     scalarType,
     USERGROUP_TYPE,
     USER_LIST_TYPE,
@@ -22,6 +23,7 @@ import {
     type ScalarType
 } from './minab-types.js';
 import { Big, normalizeIn, NumberError } from './values.js';
+import { GroupValue, UserGroupValue, UserValue } from './directory-values.js';
 import type { MinabColumnSchema, MinabSchema, MinabTableSchema } from './schema.js';
 
 /** A typed host function. A program calls it by name. It runs in the interpreter, never in SQL. */
@@ -253,8 +255,7 @@ function hostScalar(value: unknown, base: LogicalTypeBase): unknown {
  * It gives the value in the form the interpreter keeps, or `{ ok: false }` when the value is not of the type.
  */
 export function checkHostResult(value: unknown, type: MinabType): { ok: true; value: unknown } | { ok: false } {
-    // A function that returns users or groups runs with the directory port (MN.2). Until then its result is refused.
-    if (type.kind !== 'scalar') return { ok: false };
+    if (type.kind !== 'scalar') return checkDirectoryResult(value, type);
     if (value === undefined || value === null) return (type.array ? type.arrayNullable : type.nullable) ? { ok: true, value: null } : { ok: false };
     if (!type.array) {
         const checked = hostScalar(value, type.base);
@@ -273,4 +274,29 @@ export function checkHostResult(value: unknown, type: MinabType): { ok: true; va
         items.push(checked);
     }
     return { ok: true, value: items };
+}
+
+/** A user id text is a user; a list of id texts is a set. The other values come from the directory host functions. */
+const asUser = (value: unknown): UserValue | undefined =>
+    value instanceof UserValue ? value : typeof value === 'string' && value !== '' ? new UserValue(value) : undefined;
+
+/** The result of a host function that returns users or groups (MN.2). Anything that is not one of these values is refused. */
+function checkDirectoryResult(value: unknown, type: MinabType): { ok: true; value: unknown } | { ok: false } {
+    if (type.kind === 'record') {
+        if (value === undefined || value === null) return type.nullable ? { ok: true, value: null } : { ok: false };
+        const found = type.table === USER_TABLE ? asUser(value) : value instanceof GroupValue ? value : undefined;
+        return found ? { ok: true, value: found } : { ok: false };
+    }
+    if (type.kind !== 'collection') return { ok: false };
+    if (type.table === GROUP_TABLE) return Array.isArray(value) && value.every(item => item instanceof GroupValue) ? { ok: true, value } : { ok: false };
+    if (type.table !== USER_TABLE) return { ok: false };
+    if (type.list) {
+        const users = Array.isArray(value) ? value.map(asUser) : [];
+        return Array.isArray(value) && users.every(user => user) ? { ok: true, value: users } : { ok: false };
+    }
+    if (value instanceof UserGroupValue) return { ok: true, value };
+    const users = Array.isArray(value) ? value.map(asUser) : [];
+    return Array.isArray(value) && users.every(user => user)
+        ? { ok: true, value: new UserGroupValue({ op: 'ids', ids: users.map(user => user!.id) }) }
+        : { ok: false };
 }

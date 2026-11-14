@@ -152,6 +152,8 @@ class Prepared implements PreparedProgram {
                 writeMode: options.writes,
                 hostInputs: inputs.hostInputs as Record<string, unknown> | undefined,
                 hostFunctions: ports.hostFunctions,
+                directory: ports.directory,
+                specialUsers: inputs.specialUsers,
                 now: clock.now(),
                 timeZone: clock.timeZone,
                 events,
@@ -288,7 +290,8 @@ export async function prepareProgram(
     recordTable: string | undefined,
     localHostFunctions: ReadonlySet<string> | undefined,
     limits: Limits,
-    groupTable?: string
+    groupTable?: string,
+    localDirectory?: boolean
 ): Promise<PreparedProgram> {
     const { shared, services } = set;
     // A limit of the program text stops the work before the parser sees it.
@@ -358,7 +361,7 @@ export async function prepareProgram(
     const analysis =
         lexerErrors.length > 0 || parserErrors.length > 0
             ? conservativeAnalysis()
-            : analyzeProgram(model, services.schema, recordTable, { localHostFunctions, groupTable });
+            : analyzeProgram(model, services.schema, recordTable, { localHostFunctions, groupTable, localDirectory });
     return new Prepared(
         diagnostics,
         classified.kind,

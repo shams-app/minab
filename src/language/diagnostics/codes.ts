@@ -149,6 +149,11 @@ export const DIAGNOSTICS = {
         message: () => 'a block with statements cannot run inside a query (a statement cannot become SQL)',
         doc: 'A query is one SQL statement, so an if or switch arm in it may hold only its tail expression. Remove the statements, or run the logic outside the query.'
     }),
+    'compile.directoryInSql': entry<{ part: string }>({
+        severity: error,
+        message: p => `${p.part} reads users or groups, and a query cannot read the directory yet`,
+        doc: 'A query cannot use this part of the program with users or groups. Read the value into a variable first, outside the query, then use the variable.'
+    }),
     'compile.hostFunctionInSql': entry<{ name: string }>({
         severity: error,
         message: p => `"${p.name}" is a host function — it runs in the host, never in SQL`,
@@ -229,6 +234,11 @@ export const DIAGNOSTICS = {
         message: p => p.reason,
         doc: 'The program failed while it ran. params.reason has the English reason. Specific failures have their own code.'
     }),
+    'eval.groupNotFound': entry<{ name: string }>({
+        severity: error,
+        message: p => `the workspace has no group "${p.name}"`,
+        doc: 'The group named in the program does not exist now (it was renamed or deleted, or the name given to findGroup is wrong). Fix the name, or ask an admin.'
+    }),
     'eval.hostFunctionFailed': entry<{ name: string }>({
         severity: error,
         message: p => `the host function "${p.name}" failed`,
@@ -260,10 +270,30 @@ export const DIAGNOSTICS = {
         message: p => `the host input "${p.name}" has no value for this run`,
         doc: 'The program reads a declared host input, but run got no value for it. Give a value in the hostInputs of run.'
     }),
+    'eval.notExactlyOne': entry<{ count: number }>({
+        severity: error,
+        message: p => `expected exactly one user, found ${p.count}`,
+        doc: 'single needs a set with exactly one user. Use singleOrNull when none is fine, or filter the set until one user is left.'
+    }),
     'eval.programInvalid': entry({
         severity: error,
         message: () => 'the program has errors, so it cannot run',
         doc: 'Fix the diagnostics of the program first. A program with errors never runs.'
+    }),
+    'eval.routeCycle': entry<{ name: string; limit: number }>({
+        severity: error,
+        message: p => `the route "${p.name}" is nested more than ${p.limit} routes deep (does a route call itself?)`,
+        doc: 'Routes may call other routes, at most 3 nested in one evaluation. A route that calls itself, directly or through others, always ends here. Remove the cycle.'
+    }),
+    'eval.tooManyUsers': entry<{ limit: number }>({
+        severity: error,
+        message: p => `a set of users has more than ${p.limit} users`,
+        doc: 'A set is listed in full for COUNT, a loop, a result or single, and the limit maxUsers stops a huge list. Test one user with IN instead of listing the set, or narrow the set with a filter.'
+    }),
+    'eval.userNotFound': entry({
+        severity: error,
+        message: () => 'no user found for this key',
+        doc: 'findUser (or specialUser) found nobody for this key. A key is a user id, an e-mail or a phone number of a member of the workspace. The key is not repeated here: it may be personal data.'
     }),
     'eval.writeModeMissing': entry({
         severity: error,

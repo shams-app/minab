@@ -58,6 +58,7 @@ import {
     isFilterAccess,
     isFunctionDecl,
     isGroupKeyRef,
+    isGroupRef,
     isIfExpr,
     isDeleteStatement,
     isIfStatement,
@@ -75,6 +76,7 @@ import {
     isQuery,
     isStringLiteral,
     isSubquery,
+    isSpecialUserRef,
     isSwitchExpr,
     isTableRef,
     isTupleAccess,
@@ -89,6 +91,7 @@ import {
     type Block,
     type BodyStatement,
     type Expression,
+    type FilterAccess,
     type DeleteStatement,
     type FunctionDecl,
     type IfStatement,
@@ -104,7 +107,8 @@ import {
 import { BuiltinError, getBuiltin, isBuiltinName, type BuiltinArgInfo, type BuiltinClock, type BuiltinSignature } from './minab-builtins.js';
 import { AstUtils, type AstNode } from 'langium';
 import type { Row, SqlQuery } from './minab-executor.js';
-import type { DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
+import type { DirectoryPort, DataPort, EventSink, HostFunctions, WritePort } from '../runtime/ports.js';
+import { DirectoryRuntime, GroupValue, membersOf, setOf, UserGroupValue, UserValue, type DirectoryRaise } from './directory-values.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabSqlCompiler, OuterRecord, OuterResolver } from './minab-sql-compiler.js';
 import type { SchemaProvider } from './schema.js';
@@ -127,11 +131,11 @@ import { castValue } from './casts.js';
 import { dataFailure, sqlstateOf } from '../runtime/errors.js';
 import { formatLogMessage } from '../runtime/log-format.js';
 import { NO_LIMITS, RunBudget, RunStopped } from '../runtime/limits.js';
-import { PortError, type WriteTransaction } from '../runtime/ports.js';
+import { NO_DIRECTORY_PORT, PortError, type WriteTransaction } from '../runtime/ports.js';
 import type { MinabError, SourceRange, WriteMode } from '../runtime/types.js';
 import { coded } from './diagnostics/codes.js';
 import { JsonArrayError, removeAt, selectIndices, splitSelectors, updateAt, type ElementEvaluator } from './minab-json-writes.js';
-import { formatType, type LogicalTypeBase } from './minab-types.js';
+import { formatType, isDirectoryTable, isUserGroup, USER_TABLE, type LogicalTypeBase } from './minab-types.js';
 import { checkHostResult } from './host-declarations.js';
 
 export type MinabValue = unknown;
@@ -162,6 +166,12 @@ export interface EvalContext {
     /** Values of the declared host inputs (D27). A declared input with no value is the run error `eval.missingInput`. */
     hostInputs?: Record<string, MinabValue>;
     hostFunctions?: HostFunctions;
+    /** The workspace's users and groups (MN.2). Without it, a program that reads them fails. */
+    directory?: DirectoryPort;
+    /** The ids of the special users of this run: `{ currentUser: 'usr_1', flowStarter: null }`. */
+    specialUsers?: Record<string, string | null>;
+    /** The run's view of the directory. Set by the interpreter, not by the host. */
+    runtime?: DirectoryRuntime;
     /** The instant the run started: read once from the clock port. L6's `NOW()` returns it. */
     now?: Date;
     /** IANA name from the clock port. */
@@ -220,6 +230,12 @@ class LoopSignal {
 function fail(reason: string, code?: string, params?: Record<string, string | number>): never {
     throw new EvalError(reason, code, params);
 }
+
+/** The run error with a code of the registry, for the directory (`DirectoryRuntime.raise`). */
+const raiseCoded: DirectoryRaise = (code, params = {}) => {
+    const message = (coded as (code: string, params: object) => { reason: string; params: object })(code, params);
+    return fail(message.reason, code, message.params as Record<string, string | number>);
+};
 
 /** One level of the spec §2.2 scope stack, at runtime: what `.` means here, and what names are bound. */
 interface Frame {
@@ -301,6 +317,40 @@ function missingColumn(error: unknown): string {
 }
 
 /** A boolean that a driver may give as `true`, `"t"` or `1`. */
+const SET_OPERATORS: Record<string, 'union' | 'difference' | 'intersection' | 'symmetric' | undefined> = {
+    '+': 'union',
+    '-': 'difference',
+    '&': 'intersection',
+    '|': 'symmetric'
+};
+
+/** A user column holds the id text (P10); a program reads it as a user. */
+function userColumn(value: unknown): unknown {
+    return typeof value === 'string' ? new UserValue(value) : value;
+}
+
+/** A `users` column holds a list of id texts; a program reads it as a set of users. */
+function usersColumn(value: unknown): unknown {
+    if (value === null || value === undefined) return new UserGroupValue({ op: 'ids', ids: [] });
+    if (!Array.isArray(value)) return value;
+    return new UserGroupValue({ op: 'ids', ids: value.map(item => (item instanceof UserValue ? item.id : String(item))) });
+}
+
+/** What a member read goes through the directory for: users, sets of users, groups, and lists of groups. */
+function isDirectoryValue(value: unknown, member: string): boolean {
+    if (value instanceof UserValue || value instanceof UserGroupValue || value instanceof GroupValue) return true;
+    if (!Array.isArray(value) || !value.every(item => item instanceof GroupValue)) return false;
+    return value.length > 0 || member === 'members';
+}
+
+/** A short name of a value's kind, for `eval.castFailed`. */
+function kindOf(value: unknown): string {
+    if (value === null || value === undefined) return 'null';
+    if (value instanceof UserValue) return 'USER';
+    if (value instanceof UserGroupValue) return 'USERGROUP';
+    return Array.isArray(value) ? 'a list' : typeof value;
+}
+
 function isTrue(value: unknown): boolean {
     return value === true || value === 't' || value === 1 || value === '1';
 }
@@ -350,6 +400,13 @@ export class MinabInterpreter {
         const context: EvalContext = { ...given, now: given.now ?? new Date(), timeZone: given.timeZone ?? 'UTC' };
         const ownBudget = context.budget === undefined;
         const budget = context.budget ?? new RunBudget(NO_LIMITS, context.signal);
+        context.runtime = new DirectoryRuntime(
+            context.directory ?? NO_DIRECTORY_PORT,
+            budget,
+            raiseCoded,
+            row => this.normalizeRecord(row, USER_TABLE)!,
+            context.specialUsers
+        );
         try {
             budget.check();
             const writes = hasWrites(model);
@@ -380,7 +437,7 @@ export class MinabInterpreter {
             if (!isFunctionDecl(declaration)) await this.runStatements([declaration], state);
         }
         if (!model.tail) return null;
-        return externalize(this.asResultType(model.tail, await this.mainStatement(model.tail, state)));
+        return externalize(await this.userResult(this.asResultType(model.tail, await this.mainStatement(model.tail, state)), state));
     }
 
     /**
@@ -447,8 +504,12 @@ export class MinabInterpreter {
         if (!record || !table) return record;
         const normalized: Row = { ...record };
         for (const column of this.schema.getTable(table)?.columns ?? []) {
-            if (column.type.kind !== 'scalar' || !(column.name in record)) continue;
-            normalized[column.name] = normalizeIn(record[column.name], column.type.type.base, column.type.type.array);
+            if (!(column.name in record)) continue;
+            const type = column.type;
+            // A user column holds the id text (P10): a program reads a user, and a set of users for a `users` column.
+            if (type.kind === 'ref' && type.table === USER_TABLE) normalized[column.name] = userColumn(record[column.name]);
+            else if (type.kind === 'collection' && type.table === USER_TABLE) normalized[column.name] = usersColumn(record[column.name]);
+            else if (type.kind === 'scalar') normalized[column.name] = normalizeIn(record[column.name], type.type.base, type.type.array);
         }
         return normalized;
     }
@@ -620,7 +681,7 @@ export class MinabInterpreter {
     private isRelationColumn(table: string | undefined, field: string): boolean {
         if (!table) return false;
         const column = this.schema.getColumn(table, field);
-        return column !== undefined && column.type.kind !== 'scalar';
+        return column !== undefined && column.type.kind !== 'scalar' && !isDirectoryTable(column.type.table);
     }
 
     /** The table a receiver's rows come from, when the interpreter can tell without evaluating it. */
@@ -660,15 +721,26 @@ export class MinabInterpreter {
         }
         if (isMemberAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
+            if (isDirectoryValue(receiver, expr.member)) return await this.directoryField(receiver, expr.member, state);
             // A key of a `JSON` value: a missing key, or a value that is not an object, gives `null` (spec §7.3.1).
             if (this.isJsonValue(expr.receiver)) return readJsonKey(receiver, expr.member);
             return this.readField(receiver, expr.member);
         }
         if (isNameRef(expr)) return state.lookup(expr.name);
+        if (isSpecialUserRef(expr)) {
+            const user = state.context.runtime!.specialUser(expr.name);
+            if (user === undefined) fail(coded('eval.missingInput', { name: `@${expr.name}` }).reason, 'eval.missingInput', { name: `@${expr.name}` });
+            return user;
+        }
+        if (isGroupRef(expr)) return new UserGroupValue({ op: 'group', id: (await state.context.runtime!.group(expr.name)).id });
         if (isBinaryExpression(expr)) return await this.binary(expr, state);
         if (isUnaryExpression(expr)) {
-            // The complement of a set of users runs with the directory port (MN.2); it is never read as a unary plus.
-            if (expr.operator === '!') fail('the complement "!" of users and groups is not evaluated yet');
+            // The complement of users: everyone except them. It is never read as a unary plus.
+            if (expr.operator === '!') {
+                const set = setOf(await this.expression(expr.operand, state));
+                if (!set) fail('the complement "!" needs a user or a set of users');
+                return new UserGroupValue({ op: 'complement', of: set });
+            }
             const operand = await this.expression(expr.operand, state);
             if (expr.negated) return !this.truthy(operand);
             // A `null` operand gives `null` (D46).
@@ -707,6 +779,8 @@ export class MinabInterpreter {
         }
         if (isCastExpr(expr)) {
             const value = await this.expression(expr.value, state);
+            if (expr.targetType.base === 'USER' || expr.targetType.base === 'USERGROUP')
+                return await this.castUsers(value, expr.targetType.base, !!expr.targetType.array, state);
             const operand = this.staticScalar(expr.value);
             return castValue(
                 value,
@@ -729,6 +803,7 @@ export class MinabInterpreter {
         }
         if (isFilterAccess(expr)) {
             const receiver = await this.expression(expr.receiver, state);
+            if (receiver instanceof UserGroupValue) return this.filterUsers(receiver, expr, state);
             // A text in `[ ]` on a `JSON` value is a key, read in the scope around it (spec §7.3.1).
             if (this.isJsonValue(expr.receiver) && this.isTextValue(expr.filter)) {
                 const key = await this.expression(expr.filter, state);
@@ -751,6 +826,68 @@ export class MinabInterpreter {
             return items;
         }
         fail(`"${expr.$type}" is not evaluated yet (Phase 5 scope)`);
+    }
+
+    /** `G[test]` on a set of users: a filter in the tree. `.` is each user's record, and the test runs on one user at a time. */
+    private filterUsers(receiver: UserGroupValue, expr: FilterAccess, state: State): UserGroupValue {
+        const test = async (row: Row): Promise<boolean> =>
+            this.truthy(await this.expression(expr.filter, state.push({ record: row, table: USER_TABLE, variables: new Map(), types: new Map() })));
+        return new UserGroupValue({ op: 'filter', of: receiver.set, test, source: expr.filter.$cstNode?.text ?? '' });
+    }
+
+    /** The users of a set for an aggregate. `COUNT` and `EXISTS` need only the ids, so no record is read for them. */
+    private async userItems(builtin: BuiltinSignature, set: UserGroupValue, state: State): Promise<UserValue[]> {
+        const runtime = state.context.runtime!;
+        if (builtin.name === 'COUNT' || builtin.name === 'EXISTS') return (await runtime.list(set.set)).map(id => new UserValue(id));
+        return await runtime.users(set.set);
+    }
+
+    /** A column of a user (read from the directory on first use), of a set of users (one value for each user), or of groups. */
+    private async directoryField(receiver: MinabValue, field: string, state: State): Promise<MinabValue> {
+        const runtime = state.context.runtime!;
+        if (receiver instanceof UserValue) {
+            if (field === 'id') return receiver.id;
+            return this.readField(receiver.record ?? (await runtime.record(receiver.id)), field);
+        }
+        if (receiver instanceof GroupValue) return receiver.read(field);
+        if (receiver instanceof UserGroupValue) return (await runtime.users(receiver.set)).map(user => this.readField(user.record, field));
+        const groups = receiver as GroupValue[];
+        return field === 'members' ? membersOf(groups) : groups.map(group => group.read(field));
+    }
+
+    /** `CAST(x AS USERGROUP)` takes users (a list, one user, a set); `CAST(x AS USER)` a user. Anything else is `eval.castFailed`. */
+    private async castUsers(value: MinabValue, target: string, array: boolean, state: State): Promise<MinabValue> {
+        const runtime = state.context.runtime!;
+        const from = kindOf(value);
+        const refuse = (): never =>
+            fail(coded('eval.castFailed', { value: 'this value', from, to: target + (array ? '[]' : '') }).reason, 'eval.castFailed', {
+                value: 'this value',
+                from,
+                to: target + (array ? '[]' : '')
+            });
+        if (array) {
+            if (value instanceof UserGroupValue) return (await runtime.users(value.set)).map(user => new UserValue(user.id, user.record));
+            return Array.isArray(value) && value.every(item => item instanceof UserValue) ? value : refuse();
+        }
+        if (target === 'USER') return value === null || value instanceof UserValue ? value : refuse();
+        if (value instanceof UserGroupValue) return value;
+        if (value instanceof UserValue) return new UserGroupValue({ op: 'ids', ids: [value.id] });
+        if (Array.isArray(value) && value.every(item => item instanceof UserValue)) return runtime.idsSet(value.map(user => (user as UserValue).id));
+        return value === null ? new UserGroupValue({ op: 'ids', ids: [] }) : refuse();
+    }
+
+    /** A user or a set of users that ends a program is listed (up to `limits.maxUsers`) and leaves as records. */
+    private async userResult(value: MinabValue, state: State): Promise<MinabValue> {
+        const runtime = state.context.runtime!;
+        const row = (user: UserValue): Row => ({ ...(user.record ?? {}), id: user.id });
+        if (value instanceof UserValue) return row(new UserValue(value.id, value.record ?? (await runtime.record(value.id))));
+        if (value instanceof UserGroupValue) return (await runtime.users(value.set)).map(row);
+        if (Array.isArray(value) && value.some(item => item instanceof UserValue)) {
+            const result: MinabValue[] = [];
+            for (const item of value) result.push(await this.userResult(item, state));
+            return result;
+        }
+        return value;
     }
 
     private async filterArray(rows: MinabValue[], filter: Expression, state: State, indexed = true): Promise<MinabValue[]> {
@@ -1020,7 +1157,7 @@ export class MinabInterpreter {
             if (!Array.isArray(source)) fail('a loop needs an array or a collection to go through');
             for (let i = 0; i < source.length; i++) {
                 const frame: Frame = {
-                    record: source[i] as Row,
+                    record: (source[i] instanceof UserValue ? (source[i] as UserValue).record : source[i]) as Row,
                     table,
                     variables: new Map(loop.variable ? [[loop.variable, source[i]]] : []),
                     types: new Map(),
@@ -1047,7 +1184,10 @@ export class MinabInterpreter {
                 return { source: rows.map(row => this.normalizeRecord(row, compiled.table)), table: compiled.table, relational: true };
             }
         }
-        return { source: await this.expression(iterable, state), relational: false };
+        const value = await this.expression(iterable, state);
+        // The users of a set, each with its record. They have no position (`.$index`), like the rows of a table.
+        if (value instanceof UserGroupValue) return { source: await state.context.runtime!.users(value.set), table: USER_TABLE, relational: true };
+        return { source: value, relational: false };
     }
 
     /** A loop bound or step: a whole number. */
@@ -1163,9 +1303,12 @@ export class MinabInterpreter {
         let result: unknown;
         try {
             // The run stops waiting at its wall time, also when the function ignores the signal.
-            result = await budget.race(Promise.resolve().then(() => hostFunctions.call(name, values, { signal: budget.signal })));
+            result = await budget.race(
+                Promise.resolve().then(() => hostFunctions.call(name, values, { signal: budget.signal, directory: state.context.runtime! }))
+            );
         } catch (e) {
-            if (e instanceof RunStopped) throw e;
+            // A run error with its own code (`eval.userNotFound`, `eval.routeCycle` ...) keeps it.
+            if (e instanceof RunStopped || e instanceof EvalError || e instanceof PortError) throw e;
             // The text of the host's error stays with the host: it may hold personal data.
             throw new EvalError(coded('eval.hostFunctionFailed', { name }).reason, 'eval.hostFunctionFailed', { name }, e);
         }
@@ -1197,7 +1340,14 @@ export class MinabInterpreter {
             const values = await this.expression(expr.args[0], state);
             // `COUNT` of a `JSON` value counts the elements of an array, and is 0 for anything else (spec §5.3.1).
             if (builtin.name === 'COUNT' && this.isJsonValue(expr.args[0])) return Array.isArray(values) ? values.length : 0;
-            const items = Array.isArray(values) ? values : values === null ? [] : [values];
+            const items =
+                values instanceof UserGroupValue
+                    ? await this.userItems(builtin, values, state)
+                    : Array.isArray(values)
+                      ? values
+                      : values === null
+                        ? []
+                        : [values];
             return this.runBuiltin(builtin, [items], [], state);
         }
         const values: MinabValue[] = [];
@@ -1283,6 +1433,18 @@ export class MinabInterpreter {
         const left = await this.expression(expr.left, state);
         const right = operator === 'IN' && isSubquery(expr.right) ? await this.subqueryValues(expr.right, state) : await this.expression(expr.right, state);
 
+        if (operator === 'IN' && (right instanceof UserGroupValue || right instanceof UserValue || (right === null && left instanceof UserValue))) {
+            // Membership asks the directory about this one user; a set is never listed for it (P11). A `null` user is in no set.
+            if (left === null || left === undefined) return false;
+            if (!(left instanceof UserValue)) fail('IN needs a user on the left when the right side is a set of users');
+            return await state.context.runtime!.contains(setOf(right)!, left.id);
+        }
+        const setOperator = SET_OPERATORS[operator];
+        if (setOperator && this.isUserSetOperation(expr, left, right)) {
+            const [a, b] = [setOf(left), setOf(right)];
+            if (!a || !b) fail(`"${operator}" needs users or sets of users on both sides`);
+            return new UserGroupValue({ op: setOperator, left: a, right: b });
+        }
         if (operator === '==' || operator === '!=') {
             const caseInsensitive = this.isCaseInsensitive(expr, state);
             const equal = this.equal(left, right, caseInsensitive);
@@ -1348,6 +1510,19 @@ export class MinabInterpreter {
         });
     }
 
+    /** `+ - & |` on users: a value is a user or a set, or both sides are `null` and the checker typed the result as a set. */
+    private isUserSetOperation(expr: BinaryExpression, left: MinabValue, right: MinabValue): boolean {
+        const users = (v: MinabValue) => v instanceof UserValue || v instanceof UserGroupValue;
+        if (users(left) || users(right)) return true;
+        if (left !== null || right !== null || !this.typeChecker) return false;
+        try {
+            const inferred = this.typeChecker.inferType(expr);
+            return inferred.ok && isUserGroup(inferred.type);
+        } catch {
+            return false;
+        }
+    }
+
     /** `+` joins texts (D13). A `null` side gives `null`. */
     private isTextSum(expr: BinaryExpression, left: MinabValue, right: MinabValue): boolean {
         if (typeof left === 'string' || typeof right === 'string') return true;
@@ -1369,6 +1544,9 @@ export class MinabInterpreter {
      */
     private equal(left: MinabValue, right: MinabValue, caseInsensitive: boolean): boolean {
         if (left === null || right === null) return left === right;
+        // Users are the same user when the ids are the same. Two sets have no approved meaning for `==`: deny.
+        if (left instanceof UserValue || right instanceof UserValue) return left instanceof UserValue && right instanceof UserValue && left.id === right.id;
+        if (left instanceof UserGroupValue || right instanceof UserGroupValue) fail('sets of users are not compared with "=="; test one user with IN');
         if (caseInsensitive && typeof left === 'string' && typeof right === 'string') {
             return left.toLowerCase() === right.toLowerCase();
         }
@@ -1415,6 +1593,7 @@ export class MinabInterpreter {
     /** Traversal through a `null` propagates `null` unconditionally (spec §7.7 rule 1) — no error, no opt-in operator. */
     private readField(receiver: MinabValue, field: string): MinabValue {
         if (receiver === null || receiver === undefined) return null;
+        if (receiver instanceof GroupValue) return receiver.read(field);
         if (typeof receiver !== 'object') fail(`"${field}" accessed on a non-record value`);
         const value = (receiver as Row)[field];
         return value === undefined ? null : value;

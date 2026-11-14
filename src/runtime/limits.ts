@@ -31,6 +31,8 @@ export interface Limits {
     logEntries: number;
     /** Runs in one wire request. The run endpoint checks it (H2). */
     batchRuns: number;
+    /** Users in one listed set (`COUNT`, a loop, a result, `single`). More is `eval.tooManyUsers` (P11). */
+    maxUsers: number;
 }
 
 /** The defaults of D36. */
@@ -43,7 +45,8 @@ export const DEFAULT_LIMITS: Readonly<Limits> = Object.freeze({
     loopIterations: 100_000,
     callDepth: 64,
     logEntries: 100,
-    batchRuns: 100
+    batchRuns: 100,
+    maxUsers: 10_000
 });
 
 const LIMIT_NAMES = Object.keys(DEFAULT_LIMITS) as (keyof Limits)[];
@@ -264,5 +267,6 @@ export const NO_LIMITS: Readonly<Limits> = Object.freeze({
     loopIterations: Infinity,
     callDepth: Infinity,
     logEntries: Infinity,
-    batchRuns: Infinity
+    batchRuns: Infinity,
+    maxUsers: Infinity
 });

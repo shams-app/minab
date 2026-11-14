@@ -41,11 +41,20 @@ export { LANGUAGE_VERSION, MIGRATIONS, migrate } from './migrate.js';
 export type { MigrateResult, Migration } from './migrate.js';
 export { DEFAULT_LIMITS } from './limits.js';
 export type { Limits } from './limits.js';
-export { PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK } from './ports.js';
+export { NO_DIRECTORY_PORT, PortError, REFUSING_WRITE_PORT, SYSTEM_CLOCK } from './ports.js';
+export { DirectoryRuntime, GroupValue, UserGroupValue, UserValue } from '../language/directory-values.js';
+export type { DirectoryBudget, DirectoryErrorCode, DirectoryRaise, UserFilterSet, UserSet } from '../language/directory-values.js';
 export type {
     ClockPort,
     DataContext,
     DataPort,
+    DirectoryContext,
+    DirectoryFilter,
+    DirectoryGroup,
+    DirectoryPort,
+    DirectoryUser,
+    HostCallContext,
+    RouteContext,
     EventSink,
     HostDeclarations,
     HostFunctionDeclaration,

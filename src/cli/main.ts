@@ -28,7 +28,7 @@ import type { Diagnostic } from 'vscode-languageserver-types';
 import { createMinab, type DataPort, type MinabError, type PreparedProgram, type SourceRange, type WritePort, type WriteStatement } from '../runtime/index.js';
 import { DEFAULT_CONFIG_NAME, ConfigError, discoverConfig, emptyConfig, loadConfigFile, loadRecordFile, type LoadedConfig } from './config.js';
 import { formatDiagnostic, isError, summarize, toCliDiagnostic } from './diagnostics.js';
-import { DataSourceError, FixtureExecutor, connectPostgres } from './executors.js';
+import { DataSourceError, FixtureDirectory, FixtureExecutor, connectPostgres } from './executors.js';
 import { formatSql, formatValue } from '../host/format.js';
 
 export { formatSql, formatValue } from '../host/format.js';
@@ -195,6 +195,11 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     }
 }
 
+/** Frees the Minab runtime of the fixture directory. */
+function closeDirectory(directory: FixtureDirectory | undefined): void {
+    directory?.close();
+}
+
 async function execute(options: Options, io: CliIo): Promise<number> {
     const filePath = resolvePath(options.file, io.cwd);
     if (!existsSync(filePath)) {
@@ -206,9 +211,14 @@ async function execute(options: Options, io: CliIo): Promise<number> {
     // it skips Chevrotain's per-construction grammar re-validation, which
     // takes ~2.8s against this grammar and answers a question the test
     // suite already answers. See `MinabServiceOptions` in `minab-module.ts`.
+    // A `directory` section gives users and groups to run against (MN.2): a fixture, like the `data` section.
+    const directory: FixtureDirectory | undefined = config.directory ? new FixtureDirectory(config.directory) : undefined;
     const minab = createMinab({
-        schema: config.schema,
-        ruleContext: config.ruleContext,
+        schema: directory ? { ...config.schema, directory: directory.schema() } : config.schema,
+        ruleContext: directory
+            ? { ...config.ruleContext, specialUsers: directory.specialUserDeclarations, groupNames: directory.groupNames }
+            : config.ruleContext,
+        functions: directory?.functions().declarations,
         mode: 'production'
     });
     try {
@@ -234,10 +244,11 @@ async function execute(options: Options, io: CliIo): Promise<number> {
             case 'compile':
                 return compile(program, options, io);
             case 'run':
-                return await run(program, config, options, io, label);
+                return await run(program, config, options, io, label, directory);
         }
     } finally {
         minab.dispose();
+        closeDirectory(directory);
     }
 }
 
@@ -286,7 +297,14 @@ function errorReason(error: MinabError): string {
     return typeof error.params.reason === 'string' ? error.params.reason : error.message;
 }
 
-async function run(program: PreparedProgram, config: LoadedConfig, options: Options, io: CliIo, fileLabel: string): Promise<number> {
+async function run(
+    program: PreparedProgram,
+    config: LoadedConfig,
+    options: Options,
+    io: CliIo,
+    fileLabel: string,
+    directory?: FixtureDirectory
+): Promise<number> {
     const databaseUrl = options.database ?? process.env.MINAB_DATABASE_URL ?? config.database;
     // Writes need a real database. A fixture cannot hold them, so asking for it is a mistake in the command.
     if (options.apply && !databaseUrl) throw new ConfigError('--apply needs a database: give --database <url> or set MINAB_DATABASE_URL');
@@ -319,10 +337,12 @@ async function run(program: PreparedProgram, config: LoadedConfig, options: Opti
 
     try {
         const result = await program.run(
-            { record: config.record, fieldValue: config.fieldValue },
+            { record: config.record, fieldValue: config.fieldValue, specialUsers: config.directory?.specialUsers },
             {
                 data,
                 write,
+                directory,
+                hostFunctions: directory?.functions().functions,
                 events:
                     options.trace || options.logs
                         ? {
