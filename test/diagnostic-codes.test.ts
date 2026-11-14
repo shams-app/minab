@@ -283,7 +283,7 @@ describe('the registry', () => {
 
     test.each(codes)('%s has the form <area>.<camelCaseName>, a message and an explanation', code => {
         expect(code).toMatch(
-            /^((syntax|scope|aggregate|groupExpression|type|null|call|compile|compat|deprecated|eval|limit|data|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/
+            /^((syntax|scope|aggregate|groupExpression|type|null|call|compile|compat|deprecated|eval|limit|data|policy|query|rule|wire)\.[a-z][A-Za-z0-9]*|cancelled)$/
         );
         const entry = DIAGNOSTICS[code as DiagnosticCode];
         expect(entry.doc.length).toBeGreaterThan(10);
