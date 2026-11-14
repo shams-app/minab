@@ -1,0 +1,473 @@
+{
+  "topic": "nulls",
+  "cases": [
+    {
+      "name": "a null field is an ordinary value: == is false",
+      "source": ".note == 'x'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "x",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a null field is an ordinary value: != is true",
+      "source": ".note != 'x'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ne",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "x",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a false comparison with a null field makes the and false",
+      "source": ".id == 1 AND .note == 'x'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a comparison with a null field is false, not unknown",
+      "source": ".id == 7 AND .note == 'x'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "or with a null comparison: true",
+      "source": ".id == 7 OR .note == 'x'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "or with a null comparison: false",
+      "source": ".id == 1 OR .note == 'x'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 1,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "note"
+                ]
+              },
+              "r": {
+                "lit": "x",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "not of a comparison with null is true",
+      "source": ".id == 7 AND NOT .note == 'x'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "id"
+                ]
+              },
+              "r": {
+                "lit": 7,
+                "t": "INTEGER"
+              }
+            },
+            {
+              "op": "not",
+              "x": {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "res": [
+                    "note"
+                  ]
+                },
+                "r": {
+                  "lit": "x",
+                  "t": "TEXT"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "is null on an empty user field",
+      "source": ".reviewer is null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "res": [
+              "reviewer"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a user field that is null: is null with another test",
+      "source": ".reviewer is null AND .status == 'open'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "and",
+          "of": [
+            {
+              "op": "isNull",
+              "x": {
+                "res": [
+                  "reviewer"
+                ]
+              }
+            },
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "status"
+                ]
+              },
+              "r": {
+                "lit": "open",
+                "t": "TEXT"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an empty user compared with a user is false",
+      "source": ".reviewer == @currentUser",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "reviewer"
+            ]
+          },
+          "r": {
+            "prin": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "an empty user is not equal to a user",
+      "source": ".reviewer != @currentUser",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "res": [
+                "reviewer"
+              ]
+            },
+            "r": {
+              "prin": [
+                "id"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "like with a null field is false",
+      "source": ".note LIKE 'a%'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "a%",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "in with a null field is false",
+      "source": ".note IN ['a', 'b']",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": [
+              "a",
+              "b"
+            ],
+            "t": "JSON"
+          }
+        }
+      }
+    },
+    {
+      "name": "a missing tag is null",
+      "source": "resource.tags.nothing is null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "tag": "nothing"
+          }
+        }
+      }
+    },
+    {
+      "name": "a missing tag compared is false",
+      "source": "resource.tags.nothing == 'x'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "tag": "nothing"
+          },
+          "r": {
+            "lit": "x",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.tagKey is null when no tag key is asked",
+      "source": "request.tagKey is null",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "req": "tagKey"
+          }
+        }
+      }
+    },
+    {
+      "name": "request.tagKey set",
+      "source": "request.tagKey == 'sensitivity'",
+      "kind": "boolean",
+      "request": {
+        "tagKey": "sensitivity"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "req": "tagKey"
+          },
+          "r": {
+            "lit": "sensitivity",
+            "t": "TEXT"
+          }
+        }
+      }
+    }
+  ]
+}

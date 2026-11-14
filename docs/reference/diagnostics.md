@@ -219,6 +219,16 @@ The data port failed or is missing.
 | `data.error` | error | the data source failed | none | The data port failed. params.sqlstate holds the SQLSTATE when the driver gave one. The SQL text is never part of the error: read it from the statement event. |
 | `data.noPort` | error | this program needs data, and no data port was given | none | The program reads a table, but the host gave run no data port. Give a data port, or run a program that needs no data. |
 
+## policy
+
+A policy, a group expression or a route uses something the policy profile does not allow (MN.3, P12).
+
+| Code | Severity | Message | Parameters | What to do |
+| --- | --- | --- | --- | --- |
+| `policy.constructNotAllowed` | error | {construct} is not allowed in a policy, a group or a route | `construct` | The policy profile accepts only literals, record fields, @ and @@ names, request, resource.tags, comparisons, AND / OR / NOT, IN, LIKE, is null, set operators, filters, the directory functions and named routes. Remove this part or move it to a place that runs Minab. |
+| `policy.tooManySteps` | error | the route "{name}" is called more than {limit} levels deep inside other route calls | `name`, `limit` | Route calls may be nested at most 3 deep, so a rule stays cheap to check. Call fewer routes inside each other, or write one route that does the work. |
+| `policy.unknownTagKey` | warning | no resource in this workspace carries the tag "{key}": did you mean {suggestions}? | `key`, `suggestions` | The workspace does not use this tag key. A typo here makes a rule that never matches. Check the key; the rule is still saved. |
+
 ## cancelled
 
 The host aborted the run.

@@ -434,6 +434,11 @@ export class MinabTypeChecker {
     }
 
     private inferMemberAccess(node: MemberAccess): TypeResult {
+        // The policy profile (P12): `resource.tags.<key>` is the tag's text, or `null` when the thing has no such tag.
+        const tags = node.receiver;
+        if (this.ruleContext.resourceTags && isMemberAccess(tags) && tags.member === 'tags' && isNameRef(tags.receiver) && tags.receiver.name === 'resource') {
+            return ok(scalarType('TEXT', { nullable: true }));
+        }
         if (isGroupKeyRef(node.receiver)) {
             const res = this.scopeResolver.resolveGroupKeyRef(node.receiver);
             if (res.found && isGroupByClause(res.scope.owner) && res.scope.owner.keys.length > 1) {

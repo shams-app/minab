@@ -138,6 +138,11 @@ export interface MinabRuleContext {
      * are not checked here (the host checks them when it saves).
      */
     groupNames?: readonly string[];
+    /**
+     * The policy profile (MN.3, P12): `resource.tags.<key>` reads the tag `<key>` of the thing checked, as `TEXT?`, for any
+     * key that is a name. The host still declares the input `resource` (`{ tags: 'JSON' }`).
+     */
+    resourceTags?: boolean;
     /** True when `$` (FieldValue) is valid anywhere in this program. */
     isFieldRule: boolean;
     /**

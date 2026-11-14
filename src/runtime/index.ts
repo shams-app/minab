@@ -5,6 +5,8 @@ export type {
     CacheStats,
     CompileExpressionOptions,
     CompileExpressionResult,
+    CompilePolicyOptions,
+    CompilePolicyResult,
     CompileResult,
     ExpectedType,
     Minab,
@@ -37,6 +39,9 @@ export type {
 export { scalarType } from '../language/schema.js';
 export type { LogicalTypeBase, ScalarType } from '../language/minab-types.js';
 export type { QueryExecutor, Row, SqlQuery } from '../language/minab-executor.js';
+export { policyInputs } from '../policy/profile.js';
+export type { PolicyOptions, PolicyRoute } from '../policy/profile.js';
+export type { IrBool, IrComparison, IrFunction, IrJson, IrSet, IrType, IrUser, IrVal, PolicyIr, PolicyReads } from '../policy/compile-ir.js';
 export { LANGUAGE_VERSION, MIGRATIONS, migrate } from './migrate.js';
 export type { MigrateResult, Migration } from './migrate.js';
 export { DEFAULT_LIMITS } from './limits.js';

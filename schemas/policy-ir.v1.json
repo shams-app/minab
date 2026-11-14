@@ -1,0 +1,543 @@
+{
+   "$id": "https://schemas.shamsine.dev/authz/policy-ir.v1.json",
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "type": "object",
+   "properties": {
+      "v": {
+         "type": "number",
+         "const": 1
+      },
+      "principal": {
+         "$ref": "#/$defs/Set"
+      },
+      "notPrincipal": {
+         "$ref": "#/$defs/Set"
+      },
+      "condition": {
+         "$ref": "#/$defs/Bool"
+      }
+   },
+   "required": ["v"],
+   "additionalProperties": false,
+   "title": "Shamsine policy IR v1",
+   "description": "One statement's compiled principal and condition (engine spec §6.1).",
+   "$defs": {
+      "Set": {
+         "anyOf": [
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "everyone"
+                  }
+               },
+               "required": ["k"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "user"
+                  },
+                  "id": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  }
+               },
+               "required": ["k", "id"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "group"
+                  },
+                  "id": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  }
+               },
+               "required": ["k", "id"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "system"
+                  },
+                  "name": {
+                     "type": "string",
+                     "enum": ["owners", "admins", "members", "operators", "viewers", "applications"]
+                  }
+               },
+               "required": ["k", "name"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "enum": ["union", "inter"]
+                  },
+                  "of": {
+                     "minItems": 1,
+                     "type": "array",
+                     "items": {
+                        "$ref": "#/$defs/Set"
+                     }
+                  }
+               },
+               "required": ["k", "of"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "enum": ["diff", "xor"]
+                  },
+                  "a": {
+                     "$ref": "#/$defs/Set"
+                  },
+                  "b": {
+                     "$ref": "#/$defs/Set"
+                  }
+               },
+               "required": ["k", "a", "b"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "filter"
+                  },
+                  "set": {
+                     "$ref": "#/$defs/Set"
+                  },
+                  "where": {
+                     "$ref": "#/$defs/Bool"
+                  }
+               },
+               "required": ["k", "set", "where"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "groupsOf"
+                  },
+                  "user": {
+                     "$ref": "#/$defs/User"
+                  },
+                  "where": {
+                     "$ref": "#/$defs/Bool"
+                  }
+               },
+               "required": ["k", "user"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "route"
+                  },
+                  "name": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  },
+                  "arg": {
+                     "$ref": "#/$defs/User"
+                  }
+               },
+               "required": ["k", "name", "arg"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "one"
+                  },
+                  "user": {
+                     "$ref": "#/$defs/User"
+                  }
+               },
+               "required": ["k", "user"],
+               "additionalProperties": false
+            }
+         ]
+      },
+      "Bool": {
+         "anyOf": [
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "enum": ["and", "or"]
+                  },
+                  "of": {
+                     "minItems": 1,
+                     "type": "array",
+                     "items": {
+                        "$ref": "#/$defs/Bool"
+                     }
+                  }
+               },
+               "required": ["op", "of"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "const": "not"
+                  },
+                  "x": {
+                     "$ref": "#/$defs/Bool"
+                  }
+               },
+               "required": ["op", "x"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "const": "const"
+                  },
+                  "value": {
+                     "type": "boolean"
+                  }
+               },
+               "required": ["op", "value"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "const": "cmp"
+                  },
+                  "cmp": {
+                     "type": "string",
+                     "enum": ["eq", "ne", "lt", "le", "gt", "ge", "like", "in"]
+                  },
+                  "l": {
+                     "$ref": "#/$defs/Val"
+                  },
+                  "r": {
+                     "$ref": "#/$defs/Val"
+                  }
+               },
+               "required": ["op", "cmp", "l", "r"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "const": "member"
+                  },
+                  "user": {
+                     "$ref": "#/$defs/User"
+                  },
+                  "set": {
+                     "$ref": "#/$defs/Set"
+                  }
+               },
+               "required": ["op", "user", "set"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "op": {
+                     "type": "string",
+                     "const": "isNull"
+                  },
+                  "x": {
+                     "$ref": "#/$defs/Val"
+                  }
+               },
+               "required": ["op", "x"],
+               "additionalProperties": false
+            }
+         ]
+      },
+      "Val": {
+         "anyOf": [
+            {
+               "type": "object",
+               "properties": {
+                  "lit": {
+                     "$ref": "#/$defs/Json"
+                  },
+                  "t": {
+                     "type": "string",
+                     "enum": [
+                        "TEXT",
+                        "CITEXT",
+                        "INTEGER",
+                        "DECIMAL",
+                        "BOOLEAN",
+                        "DATE",
+                        "TIME",
+                        "DATETIME",
+                        "UUID",
+                        "USER",
+                        "JSON"
+                     ]
+                  }
+               },
+               "required": ["lit", "t"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "res": {
+                     "minItems": 1,
+                     "maxItems": 8,
+                     "type": "array",
+                     "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                     }
+                  }
+               },
+               "required": ["res"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "new": {
+                     "minItems": 1,
+                     "maxItems": 8,
+                     "type": "array",
+                     "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                     }
+                  }
+               },
+               "required": ["new"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "prin": {
+                     "minItems": 1,
+                     "maxItems": 8,
+                     "type": "array",
+                     "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                     }
+                  }
+               },
+               "required": ["prin"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "req": {
+                     "type": "string",
+                     "enum": ["time", "ip", "mfa", "clientId", "tagKey"]
+                  }
+               },
+               "required": ["req"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "tag": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 64
+                  }
+               },
+               "required": ["tag"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "fn": {
+                     "type": "string",
+                     "enum": ["NOW", "LOWER", "UPPER", "YEAR", "MONTH", "DAY", "DATE"]
+                  },
+                  "args": {
+                     "maxItems": 8,
+                     "type": "array",
+                     "items": {
+                        "$ref": "#/$defs/Val"
+                     }
+                  }
+               },
+               "required": ["fn", "args"],
+               "additionalProperties": false
+            }
+         ]
+      },
+      "Json": {
+         "$ref": "#/$defs/__schema0"
+      },
+      "__schema0": {
+         "anyOf": [
+            {
+               "type": "string"
+            },
+            {
+               "type": "number"
+            },
+            {
+               "type": "boolean"
+            },
+            {
+               "type": "null"
+            },
+            {
+               "type": "array",
+               "items": {
+                  "$ref": "#/$defs/__schema0"
+               }
+            },
+            {
+               "type": "object",
+               "propertyNames": {
+                  "type": "string"
+               },
+               "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+               }
+            }
+         ]
+      },
+      "User": {
+         "anyOf": [
+            {
+               "type": "object",
+               "properties": {
+                  "special": {
+                     "type": "string",
+                     "enum": ["currentUser", "appUser"]
+                  }
+               },
+               "required": ["special"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "id": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  }
+               },
+               "required": ["id"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "res": {
+                     "minItems": 1,
+                     "maxItems": 8,
+                     "type": "array",
+                     "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                     }
+                  }
+               },
+               "required": ["res"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "attr": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  },
+                  "of": {
+                     "$ref": "#/$defs/User"
+                  }
+               },
+               "required": ["attr", "of"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "route"
+                  },
+                  "name": {
+                     "type": "string",
+                     "minLength": 1,
+                     "maxLength": 128
+                  },
+                  "arg": {
+                     "$ref": "#/$defs/User"
+                  }
+               },
+               "required": ["k", "name", "arg"],
+               "additionalProperties": false
+            },
+            {
+               "type": "object",
+               "properties": {
+                  "k": {
+                     "type": "string",
+                     "const": "single"
+                  },
+                  "set": {
+                     "$ref": "#/$defs/Set"
+                  },
+                  "orNull": {
+                     "type": "boolean"
+                  }
+               },
+               "required": ["k", "set", "orNull"],
+               "additionalProperties": false
+            }
+         ]
+      }
+   }
+}

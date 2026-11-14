@@ -1,0 +1,442 @@
+{
+  "topic": "routes",
+  "cases": [
+    {
+      "name": "a route returning a set",
+      "source": "@currentUser IN teamLeader(.owner)",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "route",
+            "name": "teamLeader",
+            "arg": {
+              "res": [
+                "owner"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route returning a set: yes",
+      "source": "@currentUser IN teamLeader(.owner)",
+      "kind": "boolean",
+      "record": {
+        "owner": "usr_mina"
+      },
+      "currentUser": "usr_ali",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "route",
+            "name": "teamLeader",
+            "arg": {
+              "res": [
+                "owner"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route with the current user",
+      "source": ".owner IN teamMates(@currentUser)",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "route",
+            "name": "teamMates",
+            "arg": {
+              "special": "currentUser"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route returning one user",
+      "source": "@currentUser IN deputy(.owner)",
+      "kind": "boolean",
+      "currentUser": "usr_ali",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "route",
+              "name": "deputy",
+              "arg": {
+                "res": [
+                  "owner"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route returning one user compared",
+      "source": "@currentUser == deputy(.owner)",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "route",
+              "name": "deputy",
+              "arg": {
+                "res": [
+                  "owner"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route that answers nobody is an empty set",
+      "source": "@currentUser IN vacant(.owner)",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "k": "route",
+              "name": "vacant",
+              "arg": {
+                "res": [
+                  "owner"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route nested in a route",
+      "source": "@currentUser IN teamMates(deputy(.owner))",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "route",
+            "name": "teamMates",
+            "arg": {
+              "k": "route",
+              "name": "deputy",
+              "arg": {
+                "res": [
+                  "owner"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route as a principal",
+      "source": "teamLeader(@currentUser)",
+      "kind": "principal",
+      "currentUser": "usr_mina",
+      "expected": [
+        "usr_ali"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "route",
+          "name": "teamLeader",
+          "arg": {
+            "special": "currentUser"
+          }
+        }
+      }
+    },
+    {
+      "name": "a route with a set operator",
+      "source": "teamMates(@currentUser) - @@Interns",
+      "kind": "principal",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "route",
+            "name": "teamMates",
+            "arg": {
+              "special": "currentUser"
+            }
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "a route body: the team mates",
+      "source": "groupsOf(u)['team' IN .tags].members",
+      "kind": "route",
+      "u": "usr_sara",
+      "expected": [
+        "usr_omid",
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "groupsOf",
+          "user": {
+            "special": "currentUser"
+          },
+          "where": {
+            "op": "cmp",
+            "cmp": "in",
+            "l": {
+              "lit": "team",
+              "t": "TEXT"
+            },
+            "r": {
+              "res": [
+                "tags"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a route body: the team leaders",
+      "source": "groupsOf(u)['team' IN .tags].members & @@TeamLeaders",
+      "kind": "route",
+      "u": "usr_mina",
+      "expected": [
+        "usr_ali"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "inter",
+          "of": [
+            {
+              "k": "groupsOf",
+              "user": {
+                "special": "currentUser"
+              },
+              "where": {
+                "op": "cmp",
+                "cmp": "in",
+                "l": {
+                  "lit": "team",
+                  "t": "TEXT"
+                },
+                "r": {
+                  "res": [
+                    "tags"
+                  ]
+                }
+              }
+            },
+            {
+              "k": "group",
+              "id": "grp_TeamLeaders"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a route body returning one user",
+      "source": "singleOrNull(@@everyone[.city == 'Tabriz' AND .role == 'admin'])",
+      "kind": "route",
+      "u": "usr_sara",
+      "returns": "USER?",
+      "expected": "usr_ali",
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "one",
+          "user": {
+            "k": "single",
+            "set": {
+              "k": "filter",
+              "set": {
+                "k": "everyone"
+              },
+              "where": {
+                "op": "and",
+                "of": [
+                  {
+                    "op": "cmp",
+                    "cmp": "eq",
+                    "l": {
+                      "prin": [
+                        "city"
+                      ]
+                    },
+                    "r": {
+                      "lit": "Tabriz",
+                      "t": "TEXT"
+                    }
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "eq",
+                    "l": {
+                      "prin": [
+                        "role"
+                      ]
+                    },
+                    "r": {
+                      "lit": "admin",
+                      "t": "TEXT"
+                    }
+                  }
+                ]
+              }
+            },
+            "orNull": true
+          }
+        }
+      }
+    },
+    {
+      "name": "a route body returning nobody",
+      "source": "singleOrNull(@@everyone[.city == 'Nowhere'])",
+      "kind": "route",
+      "u": "usr_sara",
+      "returns": "USER?",
+      "expected": null,
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "one",
+          "user": {
+            "k": "single",
+            "set": {
+              "k": "filter",
+              "set": {
+                "k": "everyone"
+              },
+              "where": {
+                "op": "cmp",
+                "cmp": "eq",
+                "l": {
+                  "prin": [
+                    "city"
+                  ]
+                },
+                "r": {
+                  "lit": "Nowhere",
+                  "t": "TEXT"
+                }
+              }
+            },
+            "orNull": true
+          }
+        }
+      }
+    },
+    {
+      "name": "a route body that calls a route",
+      "source": "teamMates(u) - @@Interns",
+      "kind": "route",
+      "u": "usr_sara",
+      "expected": [
+        "usr_sara"
+      ],
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "diff",
+          "a": {
+            "k": "route",
+            "name": "teamMates",
+            "arg": {
+              "special": "currentUser"
+            }
+          },
+          "b": {
+            "k": "group",
+            "id": "grp_Interns"
+          }
+        }
+      }
+    },
+    {
+      "name": "a route body with the user itself",
+      "source": "u",
+      "kind": "route",
+      "u": "usr_sara",
+      "returns": "USER?",
+      "expected": "usr_sara",
+      "ir": {
+        "v": 1,
+        "principal": {
+          "k": "one",
+          "user": {
+            "special": "currentUser"
+          }
+        }
+      }
+    }
+  ]
+}

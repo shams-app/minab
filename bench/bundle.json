@@ -3,12 +3,12 @@
   "minified": true,
   "entries": {
     "app": {
-      "bytes": 885201,
-      "gzip": 216366
+      "bytes": 901594,
+      "gzip": 221843
     },
     "browser": {
-      "bytes": 94321,
-      "gzip": 28695
+      "bytes": 95298,
+      "gzip": 29010
     },
     "monaco": {
       "bytes": 8758,
@@ -19,8 +19,8 @@
       "gzip": 1879
     },
     "worker": {
-      "bytes": 860846,
-      "gzip": 207893
+      "bytes": 877230,
+      "gzip": 213286
     }
   }
 }
