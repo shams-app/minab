@@ -18,7 +18,7 @@ database driver. A test checks the imports.
 - `log-format.ts`: `formatLogValue` and `formatLogMessage`: the one-line text of a `LOG` entry (D37). Newlines are escaped.
 - `errors.ts`: builds run errors from the registry, and maps a data port failure to a code.
 - `prepare.ts`: `prepare` and the `PreparedProgram` it returns: `diagnostics`, `ok`,
-  `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `compileGroupExpression()` (P2), `run()`. Also the `expect` check.
+  `kind`, `resultType`, `analysis`, `dependsOn()`, `compile()`, `compileGroupExpression()` (P2), `compilePolicy()` (MN.3, see `src/policy/`), `run()`. Also the `expect` check.
 - `migrate.ts`: `LANGUAGE_VERSION`, the list of `MIGRATIONS` (empty today) and `migrate(source, from, to)`. `prepare`
   takes `languageVersion` (Q5). See `docs/compatibility.md`.
 - `analyze.ts`: program analysis (R5). `analyzeProgram` builds `PreparedProgram.analysis`

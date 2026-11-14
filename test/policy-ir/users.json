@@ -1,0 +1,907 @@
+{
+  "topic": "users",
+  "cases": [
+    {
+      "name": "the owner is the current user",
+      "source": ".owner == @currentUser",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "owner"
+            ]
+          },
+          "r": {
+            "prin": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "the owner is not another user",
+      "source": ".owner != @currentUser",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "not",
+          "x": {
+            "op": "cmp",
+            "cmp": "eq",
+            "l": {
+              "res": [
+                "owner"
+              ]
+            },
+            "r": {
+              "prin": [
+                "id"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the owner is another user",
+      "source": ".owner == @currentUser",
+      "kind": "boolean",
+      "currentUser": "usr_ali",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "owner"
+            ]
+          },
+          "r": {
+            "prin": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "the current user is a manager",
+      "source": "@currentUser IN @@Managers",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Managers"
+          }
+        }
+      }
+    },
+    {
+      "name": "the current user is a manager: yes",
+      "source": "@currentUser IN @@Managers",
+      "kind": "boolean",
+      "currentUser": "usr_ali",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Managers"
+          }
+        }
+      }
+    },
+    {
+      "name": "owner or manager",
+      "source": ".owner == @currentUser OR @currentUser IN @@Managers",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "owner"
+                ]
+              },
+              "r": {
+                "prin": [
+                  "id"
+                ]
+              }
+            },
+            {
+              "op": "member",
+              "user": {
+                "special": "currentUser"
+              },
+              "set": {
+                "k": "group",
+                "id": "grp_Managers"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "owner or manager: neither",
+      "source": ".owner == @currentUser OR @currentUser IN @@Managers",
+      "kind": "boolean",
+      "currentUser": "usr_omid",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "or",
+          "of": [
+            {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "res": [
+                  "owner"
+                ]
+              },
+              "r": {
+                "prin": [
+                  "id"
+                ]
+              }
+            },
+            {
+              "op": "member",
+              "user": {
+                "special": "currentUser"
+              },
+              "set": {
+                "k": "group",
+                "id": "grp_Managers"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the record owner in a group",
+      "source": ".owner IN @@Sales",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Sales"
+          }
+        }
+      }
+    },
+    {
+      "name": "the record owner not in a group",
+      "source": ".owner IN @@Managers",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Managers"
+          }
+        }
+      }
+    },
+    {
+      "name": "a union on the right",
+      "source": "@currentUser IN @@Sales + @@Support",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "union",
+            "of": [
+              {
+                "k": "group",
+                "id": "grp_Sales"
+              },
+              {
+                "k": "group",
+                "id": "grp_Support"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a difference on the right",
+      "source": "@currentUser IN @@Sales - @@Interns",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "diff",
+            "a": {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            "b": {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a difference removes the user",
+      "source": "@currentUser IN @@Sales - @@Interns",
+      "kind": "boolean",
+      "currentUser": "usr_omid",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "diff",
+            "a": {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            "b": {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "an intersection",
+      "source": "@currentUser IN @@Sales & @@Support",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "inter",
+            "of": [
+              {
+                "k": "group",
+                "id": "grp_Sales"
+              },
+              {
+                "k": "group",
+                "id": "grp_Support"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a symmetric difference",
+      "source": "@currentUser IN @@Sales | @@Support",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "xor",
+            "a": {
+              "k": "group",
+              "id": "grp_Sales"
+            },
+            "b": {
+              "k": "group",
+              "id": "grp_Support"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the complement",
+      "source": "@currentUser IN !@@Interns",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "diff",
+            "a": {
+              "k": "everyone"
+            },
+            "b": {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the complement excludes",
+      "source": "@currentUser IN !@@Interns",
+      "kind": "boolean",
+      "currentUser": "usr_omid",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "diff",
+            "a": {
+              "k": "everyone"
+            },
+            "b": {
+              "k": "group",
+              "id": "grp_Interns"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "precedence: & binds tighter than +",
+      "source": "@currentUser IN @@Interns + @@Sales & @@Support",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "union",
+            "of": [
+              {
+                "k": "group",
+                "id": "grp_Interns"
+              },
+              {
+                "k": "inter",
+                "of": [
+                  {
+                    "k": "group",
+                    "id": "grp_Sales"
+                  },
+                  {
+                    "k": "group",
+                    "id": "grp_Support"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a filtered group",
+      "source": "@currentUser IN @@everyone[.city == 'Marand']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "prin": [
+                  "city"
+                ]
+              },
+              "r": {
+                "lit": "Marand",
+                "t": "TEXT"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter on two attributes",
+      "source": "@currentUser IN @@everyone[.city == 'Marand' AND .department == 'IT']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "and",
+              "of": [
+                {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "prin": [
+                      "city"
+                    ]
+                  },
+                  "r": {
+                    "lit": "Marand",
+                    "t": "TEXT"
+                  }
+                },
+                {
+                  "op": "cmp",
+                  "cmp": "eq",
+                  "l": {
+                    "prin": [
+                      "department"
+                    ]
+                  },
+                  "r": {
+                    "lit": "IT",
+                    "t": "TEXT"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "a filter with like",
+      "source": "@currentUser IN @@everyone[.email LIKE '%@example.com']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "like",
+              "l": {
+                "prin": [
+                  "email"
+                ]
+              },
+              "r": {
+                "lit": "%@example.com",
+                "t": "CITEXT"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the user of a user field is not left",
+      "source": ".owner IN @@everyone",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "everyone"
+          }
+        }
+      }
+    },
+    {
+      "name": "a person who left is in no group",
+      "source": ".owner IN @@everyone",
+      "kind": "boolean",
+      "record": {
+        "owner": "usr_gone"
+      },
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "everyone"
+          }
+        }
+      }
+    },
+    {
+      "name": "a left owner is still an owner",
+      "source": ".owner is null",
+      "kind": "boolean",
+      "record": {
+        "owner": "usr_gone"
+      },
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "isNull",
+          "x": {
+            "res": [
+              "owner"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "an application account is not in everyone",
+      "source": "@currentUser IN @@everyone",
+      "kind": "boolean",
+      "currentUser": "svc_bot",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "everyone"
+          }
+        }
+      }
+    },
+    {
+      "name": "an application account is in applications",
+      "source": "@currentUser IN @@applications",
+      "kind": "boolean",
+      "currentUser": "svc_bot",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "applications"
+          }
+        }
+      }
+    },
+    {
+      "name": "the owners group",
+      "source": "@currentUser IN @@owners",
+      "kind": "boolean",
+      "currentUser": "usr_root",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "owners"
+          }
+        }
+      }
+    },
+    {
+      "name": "the admins group",
+      "source": "@currentUser IN @@admins",
+      "kind": "boolean",
+      "currentUser": "usr_ali",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "admins"
+          }
+        }
+      }
+    },
+    {
+      "name": "the members group",
+      "source": "@currentUser IN @@members",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "members"
+          }
+        }
+      }
+    },
+    {
+      "name": "the operators group",
+      "source": "@currentUser IN @@operators",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "operators"
+          }
+        }
+      }
+    },
+    {
+      "name": "the viewers group",
+      "source": "@currentUser IN @@viewers",
+      "kind": "boolean",
+      "currentUser": "usr_omid",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "viewers"
+          }
+        }
+      }
+    },
+    {
+      "name": "a user on the right counts as a set of one",
+      "source": "@currentUser IN .owner",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "res": [
+                "owner"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the app user",
+      "source": ".owner == @appUser",
+      "kind": "boolean",
+      "appUser": "usr_sara",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "res": [
+              "owner"
+            ]
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "special": "appUser"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "the app user in a set",
+      "source": "@appUser IN @@applications",
+      "kind": "boolean",
+      "appUser": "svc_bot",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "appUser"
+          },
+          "set": {
+            "k": "system",
+            "name": "applications"
+          }
+        }
+      }
+    },
+    {
+      "name": "a nested group is flattened",
+      "source": "@currentUser IN @@Everyone2",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Everyone2"
+          }
+        }
+      }
+    },
+    {
+      "name": "a group named with backticks",
+      "source": "@currentUser IN @@`Sales team`",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "group",
+            "id": "grp_Sales team"
+          }
+        }
+      }
+    },
+    {
+      "name": "an optional user is a set of none",
+      "source": "@currentUser IN .reviewer",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "one",
+            "user": {
+              "res": [
+                "reviewer"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

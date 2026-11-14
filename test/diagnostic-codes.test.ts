@@ -200,6 +200,10 @@ const CASES: Record<DiagnosticCode, Case> = {
     'scope.unknownSpecialUser': { via: 'validator', program: '@flowStarter', setting: 'users' },
     'scope.unknownTable': { via: 'validator', program: 'FROM Nope' },
 
+    'policy.constructNotAllowed': { via: 'runtime' }, // test/policy.test.ts (MN.3)
+    'policy.tooManySteps': { via: 'runtime' }, // test/policy.test.ts (MN.3)
+    'policy.unknownTagKey': { via: 'runtime' }, // test/policy.test.ts (MN.3)
+
     'syntax.incompleteExpression': { via: 'validator', program: '.id >' },
     'syntax.lexer': { via: 'validator', program: '~~~' },
     'syntax.parser': { via: 'validator', program: 'FROM' },

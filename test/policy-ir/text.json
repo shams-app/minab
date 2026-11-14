@@ -1,0 +1,325 @@
+{
+  "topic": "text",
+  "cases": [
+    {
+      "name": "citext compares without case",
+      "source": ".code == 'abc'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "code"
+            ]
+          },
+          "r": {
+            "lit": "abc",
+            "t": "CITEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "citext not equal",
+      "source": ".code != 'abd'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ne",
+          "l": {
+            "res": [
+              "code"
+            ]
+          },
+          "r": {
+            "lit": "abd",
+            "t": "CITEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "text compares with case",
+      "source": ".status == 'OPEN'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "lit": "OPEN",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "lower",
+      "source": ".status == LOWER('OPEN')",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "status"
+            ]
+          },
+          "r": {
+            "fn": "LOWER",
+            "args": [
+              {
+                "lit": "OPEN",
+                "t": "TEXT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "lower of a field",
+      "source": "LOWER(.title) == 'hello'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "LOWER",
+            "args": [
+              {
+                "res": [
+                  "title"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": "hello",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "upper of a field",
+      "source": "UPPER(.status) == 'OPEN'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "UPPER",
+            "args": [
+              {
+                "res": [
+                  "status"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": "OPEN",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "upper is not lower",
+      "source": "UPPER(.status) == 'open'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "UPPER",
+            "args": [
+              {
+                "res": [
+                  "status"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": "open",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a persian text",
+      "source": ".title == 'سلام'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "title"
+            ]
+          },
+          "r": {
+            "lit": "سلام",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "a persian text equal",
+      "source": ".note == 'سلام'",
+      "kind": "boolean",
+      "record": {
+        "note": "سلام"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "res": [
+              "note"
+            ]
+          },
+          "r": {
+            "lit": "سلام",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "lower of a persian text keeps it",
+      "source": "LOWER(.note) == 'سلام'",
+      "kind": "boolean",
+      "record": {
+        "note": "سلام"
+      },
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "LOWER",
+            "args": [
+              {
+                "res": [
+                  "note"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": "سلام",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "like with percent in the middle",
+      "source": ".title LIKE 'H%o'",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "title"
+            ]
+          },
+          "r": {
+            "lit": "H%o",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "like keeps the case of a text",
+      "source": ".title LIKE 'h%'",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "like",
+          "l": {
+            "res": [
+              "title"
+            ]
+          },
+          "r": {
+            "lit": "h%",
+            "t": "TEXT"
+          }
+        }
+      }
+    },
+    {
+      "name": "in with a citext field",
+      "source": ".code IN ['abc', 'xyz']",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "in",
+          "l": {
+            "res": [
+              "code"
+            ]
+          },
+          "r": {
+            "lit": [
+              "abc",
+              "xyz"
+            ],
+            "t": "JSON"
+          }
+        }
+      }
+    }
+  ]
+}

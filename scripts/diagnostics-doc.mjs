@@ -31,6 +31,7 @@ const AREAS = {
     eval: 'A program fails while it runs.',
     limit: 'A limit of the host stopped the program (D36).',
     data: 'The data port failed or is missing.',
+    policy: 'A policy, a group expression or a route uses something the policy profile does not allow (MN.3, P12).',
     cancelled: 'The host aborted the run.',
     query: 'A query is used in a way its shape does not allow.',
     rule: 'A rule cannot be checked in this setting.',

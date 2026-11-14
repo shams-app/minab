@@ -1,0 +1,365 @@
+{
+  "topic": "dates",
+  "cases": [
+    {
+      "name": "year of a date",
+      "source": "YEAR(.due) == 2026",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "YEAR",
+            "args": [
+              {
+                "res": [
+                  "due"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 2026,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "month of a date",
+      "source": "MONTH(.due) == 3",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "MONTH",
+            "args": [
+              {
+                "res": [
+                  "due"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 3,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "day of a date",
+      "source": "DAY(.due) == 15",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "DAY",
+            "args": [
+              {
+                "res": [
+                  "due"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 15,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "year of a date and time",
+      "source": "YEAR(.closesAt) == 2026",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "YEAR",
+            "args": [
+              {
+                "res": [
+                  "closesAt"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 2026,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "month of a date and time",
+      "source": "MONTH(.closesAt) == 4",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "MONTH",
+            "args": [
+              {
+                "res": [
+                  "closesAt"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 4,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "day of a date and time",
+      "source": "DAY(.closesAt) == 1",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "DAY",
+            "args": [
+              {
+                "res": [
+                  "closesAt"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "lit": 1,
+            "t": "INTEGER"
+          }
+        }
+      }
+    },
+    {
+      "name": "now is before closing",
+      "source": "NOW() < .closesAt",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "lt",
+          "l": {
+            "fn": "NOW",
+            "args": []
+          },
+          "r": {
+            "res": [
+              "closesAt"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "now is after closing",
+      "source": "NOW() > .closesAt",
+      "kind": "boolean",
+      "now": "2026-05-01T00:00:00Z",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "gt",
+          "l": {
+            "fn": "NOW",
+            "args": []
+          },
+          "r": {
+            "res": [
+              "closesAt"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a date literal",
+      "source": "CAST('2026-03-01' AS DATE) < .due",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "lt",
+          "l": {
+            "lit": "2026-03-01",
+            "t": "DATE"
+          },
+          "r": {
+            "res": [
+              "due"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a date literal folds to a typed literal",
+      "source": ".due >= CAST('2026-03-15' AS DATE)",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "ge",
+          "l": {
+            "res": [
+              "due"
+            ]
+          },
+          "r": {
+            "lit": "2026-03-15",
+            "t": "DATE"
+          }
+        }
+      }
+    },
+    {
+      "name": "the date of a text field",
+      "source": "CAST(.dueText AS DATE) == .due",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "eq",
+          "l": {
+            "fn": "DATE",
+            "args": [
+              {
+                "res": [
+                  "dueText"
+                ]
+              }
+            ]
+          },
+          "r": {
+            "res": [
+              "due"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a date part in a set filter reads the user",
+      "source": "@currentUser IN @@everyone[YEAR(.joinedAt) == 2026]",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "member",
+          "user": {
+            "special": "currentUser"
+          },
+          "set": {
+            "k": "filter",
+            "set": {
+              "k": "everyone"
+            },
+            "where": {
+              "op": "cmp",
+              "cmp": "eq",
+              "l": {
+                "fn": "YEAR",
+                "args": [
+                  {
+                    "prin": [
+                      "joinedAt"
+                    ]
+                  }
+                ]
+              },
+              "r": {
+                "lit": 2026,
+                "t": "INTEGER"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "request time",
+      "source": "request.time > .closesAt",
+      "kind": "boolean",
+      "expected": false,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "gt",
+          "l": {
+            "req": "time"
+          },
+          "r": {
+            "res": [
+              "closesAt"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "request time after",
+      "source": "request.time < .closesAt",
+      "kind": "boolean",
+      "expected": true,
+      "ir": {
+        "v": 1,
+        "condition": {
+          "op": "cmp",
+          "cmp": "lt",
+          "l": {
+            "req": "time"
+          },
+          "r": {
+            "res": [
+              "closesAt"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

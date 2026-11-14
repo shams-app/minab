@@ -122,6 +122,7 @@
     "build:watch": "tsc -b tsconfig.json --watch",
     "cli": "node out/src/cli/bin.js",
     "test": "vitest run",
+    "corpus:check": "vitest run test/policy.test.ts -t \"golden corpus\"",
     "test:watch": "vitest",
     "bench": "node bench/run.mjs",
     "bench:check": "node bench/check.mjs",

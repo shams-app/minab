@@ -11,6 +11,8 @@ import type { SqlQuery } from '../language/minab-executor.js';
 import type { HostFunctionDeclaration, HostInputType } from '../language/host-declarations.js';
 import type { ClockPort, DataPort, DirectoryPort, EventSink, HostFunctions, WritePort } from './ports.js';
 import type { Limits } from './limits.js';
+import type { PolicyIr, PolicyReads } from '../policy/compile-ir.js';
+import type { PolicyOptions } from '../policy/profile.js';
 import type { ProgramKind } from './program-kind.js';
 
 export type { ProgramKind } from './program-kind.js';
@@ -36,8 +38,11 @@ export interface MinabDiagnostic {
     params: Record<string, string | number>;
 }
 
-/** The type the host wants back. Shamsine uses the six words. */
-export type ExpectedType = 'text' | 'number' | 'boolean' | 'date' | 'dateTime' | 'list' | { minab: string };
+/**
+ * The type the host wants back. Shamsine uses the six words. `principal` (a `USER` or a `USERGROUP`) and `route` (what the
+ * policy's `route` option says) are for the policy profile (MN.3).
+ */
+export type ExpectedType = 'text' | 'number' | 'boolean' | 'date' | 'dateTime' | 'list' | 'principal' | 'route' | { minab: string };
 
 /** What a host gives to `createMinab`. Everything except `schema` is optional. */
 export interface MinabOptions {
@@ -89,6 +94,15 @@ export interface PrepareOptions {
      * diagnostics then refer to the migrated source. Missing: the current version.
      */
     languageVersion?: number;
+    /**
+     * `'policy'`: the program is a policy condition, a principal or group expression, or a route body (MN.3, P12). It may use
+     * only the policy profile, and `compilePolicy()` turns it into the policy IR. Needs `expect`: `boolean` (a condition),
+     * `principal` (a set of users) or `route` (a route body: one parameter `u: USER`, the return type is `policy.route`).
+     * The host declares `request`, `resource` and `new` (`policyInputs()`) and the directory functions (`directoryHostFunctions`).
+     */
+    profile?: 'policy';
+    /** What the policy profile needs besides the source: group names, tag keys, routes, `@appUser`. */
+    policy?: PolicyOptions;
 }
 
 /** Given, never asked: the record under validation, `$`, and the values of the declared host inputs. */
@@ -203,6 +217,22 @@ export type RunResult =
 /** What `compile` answers: the program as one SQL statement, or the reason it is not one. */
 export type CompileResult = { ok: true; sql: SqlQuery } | { ok: false; error: MinabError };
 
+/** Options of `compilePolicy` (MN.3). */
+export interface CompilePolicyOptions {
+    /** Needed when the program names a group by `@@Name` (not a system group) or a user or group by a key (`findUser('…')`). */
+    directory?: DirectoryPort;
+    /** Stops the directory calls. */
+    signal?: AbortSignal;
+}
+
+/**
+ * What `compilePolicy` answers: the IR, what the program reads, and the source with every literal e-mail or phone key of
+ * `findUser` replaced by the id it resolved to (P4, `pinnedSource`; the host stores it instead of the typed text), or why
+ * there is no IR. A condition is `ir.condition`; a principal or a route body is `ir.principal` (a route body reads its
+ * parameter `u` as `{ special: 'currentUser' }`).
+ */
+export type CompilePolicyResult = { ok: true; ir: PolicyIr; reads: PolicyReads; pinnedSource: string } | { ok: false; error: MinabError };
+
 /** Options of `compileGroupExpression` (P2). */
 export interface CompileExpressionOptions {
     /**
@@ -278,6 +308,12 @@ export interface PreparedProgram {
      * `SELECT … GROUP BY …` (P2). Any other program: `compile.notGroupExpression`.
      */
     compileGroupExpression(options: CompileExpressionOptions): CompileExpressionResult;
+    /**
+     * A program prepared with `profile: 'policy'` as the policy IR v1 (MN.3). It asks the directory port for the ids of the
+     * groups and users the program names by text, so a group or user that does not exist is a compile error
+     * (`eval.groupNotFound`, `eval.userNotFound`). Any other program: a `TypeError`.
+     */
+    compilePolicy(options?: CompilePolicyOptions): Promise<CompilePolicyResult>;
     /** Never throws for a failed program: the answer says `ok: false`. */
     run(inputs?: RunInputs, ports?: RunPorts, options?: RunOptions): Promise<RunResult>;
 }
