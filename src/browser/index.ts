@@ -8,7 +8,7 @@
  * Nothing here may touch Node or the DOM.
  */
 
-import type { CompletionResult, HoverResult, SignatureHelpResult } from '../editor/types.js';
+import type { CompletionResult, EditorHints, HoverResult, PinnedUser, SignatureHelpResult } from '../editor/types.js';
 import { coded } from '../language/diagnostics/codes.js';
 import type { HostFunctionDeclaration } from '../language/host-declarations.js';
 import { parseTypeWord } from '../language/host-declarations.js';
@@ -50,7 +50,17 @@ import {
 } from './protocol.js';
 
 export type { BridgeEndpoint, InputTypes } from './protocol.js';
-export type { CompletionItem, CompletionKind, CompletionResult, EditorPosition, EditorRange, HoverResult, SignatureHelpResult } from '../editor/types.js';
+export type {
+    CompletionItem,
+    CompletionKind,
+    CompletionResult,
+    EditorHints,
+    EditorPosition,
+    EditorRange,
+    HoverResult,
+    PinnedUser,
+    SignatureHelpResult
+} from '../editor/types.js';
 export { consoleEventSink, emitLogs } from './console.js';
 export type { ConsoleLike, ConsoleSinkOptions } from './console.js';
 export { createRemoteMinab } from './remote.js';
@@ -85,6 +95,11 @@ export interface WorkerPreparedProgram {
     release(): void;
 }
 
+/** What an editor question may carry: the rule context, and what only the host knows (group names, user labels; MN.4). */
+export interface EditorQuestionOptions extends Pick<PrepareOptions, 'ruleContext'> {
+    hints?: EditorHints;
+}
+
 /** The runtime of a web app: `prepare` and the editor services, all answered by the worker. */
 export interface WorkerMinab {
     /** Parses and checks a program in the worker. It resolves with diagnostics for a bad program. */
@@ -94,9 +109,11 @@ export interface WorkerMinab {
      * lines and columns in the results are 0-based. They need no `prepare`, and they fail soft: an
      * answer the worker cannot give is an empty result (`hover` and `signatureHelp`: `undefined`).
      */
-    complete(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<CompletionResult>;
+    complete(source: string, offset: number, options?: EditorQuestionOptions): Promise<CompletionResult>;
     /** Hover text for the symbol at `offset`, or `undefined` when there is none. */
-    hover(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<HoverResult | undefined>;
+    hover(source: string, offset: number, options?: EditorQuestionOptions): Promise<HoverResult | undefined>;
+    /** The `findUser('usr_…')` calls of a program (MN.4, P4): the ids and where they are, so the host can say who they are. */
+    pinnedUsers(source: string, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<PinnedUser[]>;
     /** Signature help for the call at `offset`, or `undefined` when there is none. */
     signatureHelp(source: string, offset: number, options?: Pick<PrepareOptions, 'ruleContext'>): Promise<SignatureHelpResult | undefined>;
     /**
@@ -343,12 +360,27 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
         };
     }
 
-    async function editor(method: EditorMethod, source: string, offset: number, ruleContext: PrepareOptions['ruleContext']): Promise<unknown> {
+    async function editor(
+        method: EditorMethod,
+        source: string,
+        offset: number,
+        ruleContext: PrepareOptions['ruleContext'],
+        hints?: EditorHints
+    ): Promise<unknown> {
         if (disposed) throw new Error('this Minab runtime was disposed');
         if (typeof source !== 'string') throw new TypeError(`${method} needs the program source as a string`);
         await created;
         try {
-            return await request({ v: BRIDGE_VERSION, type: 'editor', id: nextId('r'), method, source, offset, ...(ruleContext ? { ruleContext } : {}) });
+            return await request({
+                v: BRIDGE_VERSION,
+                type: 'editor',
+                id: nextId('r'),
+                method,
+                source,
+                offset,
+                ...(ruleContext ? { ruleContext } : {}),
+                ...(hints ? { hints } : {})
+            });
         } catch (failure) {
             throw new Error(failure instanceof BridgeFailure ? failure.error.message : toMinabError(failure).message);
         }
@@ -384,8 +416,9 @@ export function createWorkerMinab(options: WorkerMinabOptions): WorkerMinab {
             eventListeners.add(listener);
             return () => eventListeners.delete(listener);
         },
-        complete: async (source, offset, o) => (await editor('complete', source, offset, o?.ruleContext)) as CompletionResult,
-        hover: async (source, offset, o) => ((await editor('hover', source, offset, o?.ruleContext)) as HoverResult | null) ?? undefined,
+        complete: async (source, offset, o) => (await editor('complete', source, offset, o?.ruleContext, o?.hints)) as CompletionResult,
+        hover: async (source, offset, o) => ((await editor('hover', source, offset, o?.ruleContext, o?.hints)) as HoverResult | null) ?? undefined,
+        pinnedUsers: async (source, o) => (await editor('pinnedUsers', source, 0, o?.ruleContext)) as PinnedUser[],
         signatureHelp: async (source, offset, o) =>
             ((await editor('signatureHelp', source, offset, o?.ruleContext)) as SignatureHelpResult | null) ?? undefined,
         async prepare(source, prepareOptions = {}) {

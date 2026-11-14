@@ -6,7 +6,7 @@
     "runLocal": { "what": "run a prepared rule that needs no data (Node), median", "budget": 0.05, "unit": "ms" },
     "rerun100": { "what": "re-run 100 prepared local rules after one field changes (worker code in Node), total", "budget": 8, "unit": "ms" },
     "runCorrelated": { "what": "run a correlated rule with one data call (PGlite), without database time, median", "budget": 2, "unit": "ms" },
-    "workerGzip": { "what": "browser worker bundle, gzip (H5 measured 184160 bytes, plus 10%; raised on purpose in MN.1: main was 202147, users and groups add 2040; raised again in MN.2: running users and groups adds 3706; raised again in MN.3: the policy profile and compiler add 5393)", "budget": 215000, "unit": "bytes", "allowance": 1 },
+    "workerGzip": { "what": "browser worker bundle, gzip (H5 measured 184160 bytes, plus 10%; raised on purpose in MN.1: main was 202147, users and groups add 2040; raised again in MN.2: running users and groups adds 3706; raised again in MN.3: the policy profile and compiler add 5393; raised again in MN.4: users in queries and the editor hints add about 2300)", "budget": 218000, "unit": "bytes", "allowance": 1 },
     "completion": { "what": "completion on a 200-line file, median", "budget": 50, "unit": "ms" },
     "memory50": { "what": "resident memory with 50 cached schemas", "budget": 200, "unit": "MB" }
   }

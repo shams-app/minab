@@ -151,8 +151,8 @@ export const DIAGNOSTICS = {
     }),
     'compile.directoryInSql': entry<{ part: string }>({
         severity: error,
-        message: p => `${p.part} reads users or groups, and a query cannot read the directory yet`,
-        doc: 'A query cannot use this part of the program with users or groups. Read the value into a variable first, outside the query, then use the variable.'
+        message: p => `${p.part} reads users or groups for each row, and a query cannot ask the directory for each row`,
+        doc: 'A query can use a person or a group that does not depend on the row (@currentUser, @@Sales, a route of the current user), and compare a user column with it. This part depends on each row (a route of a column, groupsOf of a column, a column of the user in a column such as .owner.name), so the database cannot answer it. Read the value outside the query, or compare user ids.'
     }),
     'compile.hostFunctionInSql': entry<{ name: string }>({
         severity: error,

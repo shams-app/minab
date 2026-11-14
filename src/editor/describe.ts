@@ -39,7 +39,10 @@ export function hostFunctionSignature(fn: ResolvedHostFunction): string {
 }
 
 export function hostFunctionDoc(fn: ResolvedHostFunction): string {
-    return fn.local ? 'A function of the host. It runs in the browser too.' : 'A function of the host. A program that calls it needs the server.';
+    const where = fn.local ? 'It runs in the browser too.' : 'A program that calls it needs the server.';
+    // A host may give a title and a description for people (a route of the workspace, MN.4).
+    const own = [fn.title ? `**${fn.title}**` : '', fn.description ?? ''].filter(Boolean).join('\n\n');
+    return own ? `${own}\n\n${where}` : `A function of the host. ${where}`;
 }
 
 const PLAIN_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;

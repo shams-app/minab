@@ -2,7 +2,7 @@
 
 Entry point `@shamsine/minab/monaco` (production plan E5): Minab in a Monaco editor.
 One call gives a host app the language, highlighting, brackets, comments, error
-markers, completion, hover and signature help.
+markers, completion (also after `@` and `@@`), hover, signature help and inlay hints for pinned users.
 
 ```ts
 import * as monaco from 'monaco-editor';
@@ -34,6 +34,8 @@ converts results to Monaco shapes.
 - `ruleContext`: used for every check and every question. Without it the client's own rule context is used.
 - `debounceMs` (default 150): the wait after the last edit before the check.
 - `keywordDocs(word)`: Markdown for a hovered keyword. The editor service only says which keyword it is.
+- `directoryNames()`: the groups of the workspace (`{ name, title?, kind? }`) for `@@` completion and hover. Cache it on your side: it is read for every completion and hover.
+- `userLabels(ids)`: who the ids of `findUser('usr_…')` are (`{ [id]: { name, email? } }`). With it the editor shows the member after the call as an inlay hint, and on hover. It needs `client.pinnedUsers`.
 - `onError(error)`: the worker failed. The editor keeps working and the markers stay as they were.
 
 ## Behaviour

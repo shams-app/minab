@@ -12,3 +12,4 @@ Tests for `src/editor/` (production plans E1 and E3).
 - `references.test.ts`: find references, rename (names, quoting, rule refusals, capture), prepare rename.
 - `semantic-tokens.test.ts`: sigils, keywords, built-ins, user and host functions, host inputs, fields, aliases.
 - `quick-fixes.test.ts`: "Did you mean …?" and "Add CAST(… AS T)". Each test applies the fix and checks the diagnostic is gone.
+- `users.test.ts`: users and groups (MN.4): completion after `@`, `@@` and a user's `.`, host routes with their title, hover of `@@Sales`, `@currentUser` and a pinned `findUser('usr_…')`, inlay hints, semantic tokens of `@` names, and the quick fixes for an unknown group or special user.

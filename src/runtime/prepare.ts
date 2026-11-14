@@ -9,10 +9,10 @@
 import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { coded } from '../language/diagnostics/codes.js';
-import { isExpression, isQuery, type Model } from '../language/generated/ast.js';
+import { isExpression, isQuery, type Expression, type Model } from '../language/generated/ast.js';
 import type { Row, SqlQuery } from '../language/minab-executor.js';
 import type { MinabInterpreter } from '../language/minab-interpreter.js';
-import type { MinabSqlCompiler } from '../language/minab-sql-compiler.js';
+import { NO_OUTER_SCOPE, type MinabSqlCompiler } from '../language/minab-sql-compiler.js';
 import type { MinabTypeChecker } from '../language/minab-type-checker.js';
 import { checkPolicyProfile, compilePolicyProgram, shifted, type PolicyProgram } from '../policy/compile-ir.js';
 import type { PolicyOptions } from '../policy/profile.js';
@@ -133,7 +133,10 @@ class Prepared implements PreparedProgram {
         if (!this.ok) return { ok: false, error: runError('compile.programHasErrors', undefined) };
         const tail = this.model?.tail;
         if (!tail) return { ok: false, error: runError('compile.nothingToCompile', undefined) };
-        const compiled = isQuery(tail) ? this.compiler.compileQuery(tail) : this.compiler.compileValue(tail);
+        // To show the SQL, each user or set that does not depend on the row stands for its answer: a user is `null`, a set is empty (MN.4, P11).
+        const stand = new Map(this.compiler.directoryParts(tail).map(({ node, set }) => [node, set ? [] : null] as const));
+        const outer = { ...NO_OUTER_SCOPE, boundUsers: (expr: Expression) => (stand.has(expr) ? stand.get(expr) : undefined) };
+        const compiled = isQuery(tail) ? this.compiler.compileQuery(tail, outer) : this.compiler.compileValue(tail, outer);
         if (compiled.ok) return { ok: true, sql: compiled.query };
         const range = tail.$cstNode?.range;
         if (compiled.code === 'compile.notSql') return { ok: false, error: runError('compile.notSql', range, { reason: compiled.reason }) };

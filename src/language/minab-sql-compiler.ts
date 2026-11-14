@@ -39,6 +39,7 @@ import {
     isCurrentRecord,
     isFieldValue,
     isFilterAccess,
+    isExpression,
     isGroupKeyRef,
     isGroupRef,
     isIfExpr,
@@ -88,10 +89,11 @@ import { getBuiltin, isBuiltinName, type BuiltinClock, type BuiltinSignature, ty
 import type { SqlQuery } from './minab-executor.js';
 import { findUserFunction, groupKeyName, inlineBlocker } from './minab-query-inlining.js';
 import { jsonNumber, sqlParameter } from './values.js';
-import { isDirectoryTable, NUMERIC_BASES, type LogicalTypeBase } from './minab-types.js';
+import { isDirectoryTable, NUMERIC_BASES, USER_TABLE, type LogicalTypeBase } from './minab-types.js';
 import type { MinabTypeChecker } from './minab-type-checker.js';
 import type { MinabColumnSchema, SchemaProvider } from './schema.js';
-import { AstUtils } from 'langium';
+import type { MinabScopeResolver } from './minab-scope-resolver.js';
+import { AstUtils, type AstNode } from 'langium';
 import Big from 'big.js';
 
 export type WriteStatementNode = InsertStatement | UpdateStatement | DeleteStatement;
@@ -142,6 +144,11 @@ export interface OuterResolver {
     resolveRecord(frameIndex: number): { found: true; record: OuterRecord } | { found: false; reason: string };
     /** The row a local name holds (a loop variable over a table). Only a path assignment asks (X6). */
     resolveNamedRecord?(name: string): { found: true; record: OuterRecord } | { found: false; reason: string };
+    /**
+     * A part that is a user or a set of users and does not read the row (MN.4, P11), already listed through the directory
+     * port: a user id (`null` for a missing `USER?`) or the ids of a set. `undefined` means this part is not one of them.
+     */
+    boundUsers?(expr: Expression): string | string[] | null | undefined;
 }
 
 const NO_OUTER_REASON = 'reaches outside the query being compiled, with no enclosing runtime scope to supply it';
@@ -422,7 +429,8 @@ function literalSql(value: unknown, numberLiteral: boolean): string {
 export class MinabSqlCompiler {
     constructor(
         private readonly schema: SchemaProvider,
-        private readonly typeChecker?: MinabTypeChecker
+        private readonly typeChecker?: MinabTypeChecker,
+        private readonly scopeResolver?: MinabScopeResolver
     ) {}
 
     /** `+` joins texts (D13): it is `||` in SQL. The static type tells text from numbers. */
@@ -1194,7 +1202,9 @@ export class MinabSqlCompiler {
         // Only the node right under `condition` (or under `AND`/`OR` there) is in a truth position.
         const truth = ctx.truthPosition;
         ctx.truthPosition = false;
-        const directory = this.directoryPart(expr);
+        const users = this.userExpression(expr, ctx, scopes, truth);
+        if (users !== undefined) return users;
+        const directory = this.directoryPart(expr, ctx);
         if (directory) failCoded('compile.directoryInSql', { part: directory });
         if (isBinaryExpression(expr)) return this.binary(expr, ctx, scopes, truth);
         if (isStringLiteral(expr)) return ctx.bind(expr.value);
@@ -1258,7 +1268,7 @@ export class MinabSqlCompiler {
      * do not depend on the row). A special user, a group, `!`, `&` and `|` always do. `+`, `-` and `IN` do when an
      * operand is a user or a set, and so does a read of a user column or of a column of a user.
      */
-    private directoryPart(expr: Expression): string | undefined {
+    private directoryPart(expr: Expression, ctx: Ctx): string | undefined {
         const text = expr.$cstNode?.text ?? 'this part';
         if (isSpecialUserRef(expr) || isGroupRef(expr)) return text;
         if (isUnaryExpression(expr)) return expr.operator === '!' ? text : undefined;
@@ -1271,13 +1281,146 @@ export class MinabSqlCompiler {
             }
         };
         if (isBinaryExpression(expr)) {
-            if (expr.operator === '&' || expr.operator === '|') return text;
-            if (['+', '-', 'IN'].includes(expr.operator) && (readsDirectory(expr.left) || readsDirectory(expr.right))) return text;
+            // Name the operand that depends on the row; the one already listed is fine (P11).
+            const unlisted = [expr.left, expr.right].find(operand => readsDirectory(operand) && ctx.outer.boundUsers?.(operand) === undefined);
+            if (expr.operator === '&' || expr.operator === '|') return unlisted?.$cstNode?.text ?? text;
+            if (['+', '-', 'IN'].includes(expr.operator) && (readsDirectory(expr.left) || readsDirectory(expr.right))) return unlisted?.$cstNode?.text ?? text;
             return undefined;
         }
         if (isMemberAccess(expr)) return readsDirectory(expr.receiver) || readsDirectory(expr) ? text : undefined;
         if (isCurrentRecord(expr) && expr.field) return readsDirectory(expr) ? text : undefined;
         return undefined;
+    }
+
+    // ---- users and groups in a query (MN.4, P11) ------------------------
+
+    /**
+     * The largest parts of `root` that are a user or a set of users and do not depend on the row of any query inside `root`
+     * (`@currentUser`, `@@Sales`, `teamMates(@currentUser)`, `findUser('usr_1')`, set operators and filters over these).
+     * The caller lists each through the directory port, then gives the answer back as `OuterResolver.boundUsers`.
+     * A `.` inside a filter of a set is that set's user, so it does not count as the row.
+     */
+    directoryParts(root: AstNode): { node: Expression; set: boolean }[] {
+        const parts: { node: Expression; set: boolean }[] = [];
+        const usersOf = (node: AstNode): 'user' | 'set' | undefined => {
+            if (!isExpression(node) || !this.typeChecker) return undefined;
+            try {
+                const inferred = this.typeChecker.inferType(node);
+                if (!inferred.ok || (inferred.type.kind !== 'record' && inferred.type.kind !== 'collection') || inferred.type.table !== USER_TABLE)
+                    return undefined;
+                return inferred.type.kind === 'record' ? 'user' : 'set';
+            } catch {
+                return undefined;
+            }
+        };
+        const visit = (node: AstNode): void => {
+            const kind = usersOf(node);
+            if (kind && this.isRowFree(node, root)) {
+                parts.push({ node: node as Expression, set: kind === 'set' });
+                return;
+            }
+            for (const child of AstUtils.streamContents(node)) visit(child);
+        };
+        visit(root);
+        return parts;
+    }
+
+    /** True when nothing under `node` reads a scope that belongs to `root` but not to `node` itself. */
+    private isRowFree(node: AstNode, root: AstNode): boolean {
+        const resolver = this.scopeResolver;
+        if (!resolver) return false;
+        const inside = (inner: AstNode, outer: AstNode): boolean => {
+            for (let n: AstNode | undefined = inner; n; n = n.$container) if (n === outer) return true;
+            return false;
+        };
+        for (const part of [node, ...AstUtils.streamAllContents(node)]) {
+            // The name of a function in a call is not a read of any scope.
+            if (isNameRef(part) && part.$container && isCallExpression(part.$container) && part.$container.callee === part) continue;
+            const found = isCurrentRecord(part)
+                ? resolver.resolveCurrentRecordBase(part)
+                : isParentRecord(part)
+                  ? resolver.resolveParentRecord(part)
+                  : isNamedScope(part)
+                    ? resolver.resolveNamedScope(part)
+                    : isNameRef(part)
+                      ? resolver.resolveNameRef(part)
+                      : isGroupKeyRef(part)
+                        ? resolver.resolveGroupKeyRef(part)
+                        : undefined;
+            if (!found) continue;
+            if (!found.found) return false;
+            const owner = found.scope.owner;
+            if (!inside(owner, node) && inside(owner, root)) return false;
+        }
+        return true;
+    }
+
+    /** A user or a set of users in SQL: a part the caller listed, or a user column of a row in this query. */
+    private userOperand(expr: Expression, ctx: Ctx, scopes: SqlScope[]): UserOperand | undefined {
+        const bound = ctx.outer.boundUsers?.(expr);
+        if (bound !== undefined) {
+            if (Array.isArray(bound)) return { kind: 'set', sql: `${ctx.bind(bound)}::text[]`, bound: 'ids' };
+            return { kind: 'user', sql: bound === null ? 'NULL::text' : `${ctx.bind(bound)}::text`, bound: bound === null ? 'null' : 'id' };
+        }
+        let alias: string | undefined;
+        let table: string | undefined;
+        let field: string | undefined;
+        if (isCurrentRecord(expr) && expr.field && scopes.length > 0) {
+            [alias, table, field] = [scopes[0].alias, scopes[0].table, expr.field];
+        } else if (isMemberAccess(expr)) {
+            const mark = ctx.mark();
+            let row: RowRef | undefined;
+            try {
+                row = this.rowRef(expr.receiver, ctx, scopes);
+            } catch (e) {
+                if (!(e instanceof CompileError)) throw e;
+            }
+            ctx.reset(mark);
+            if (row?.kind !== 'scope') return undefined;
+            [alias, table, field] = [row.alias, row.table, expr.member];
+        }
+        const column = table && field ? this.schema.getColumn(table, field) : undefined;
+        if (!alias || !column || column.type.kind === 'scalar' || column.type.table !== USER_TABLE) return undefined;
+        // A `user` column holds the id as text; a `users` column holds a text array of ids (P10).
+        if (column.type.kind === 'ref')
+            return { kind: 'user', sql: `${quoteIdent(alias)}.${quoteIdent(column.type.foreignKey ?? column.sqlName ?? column.name)}`, bound: false };
+        if (column.type.kind === 'collection') return { kind: 'set', sql: `${quoteIdent(alias)}.${quoteIdent(column.sqlName ?? column.name)}`, bound: false };
+        return undefined;
+    }
+
+    /**
+     * `==`, `!=` and `IN` between users and sets, `EXISTS` and `COUNT` of a set, and a listed part by itself. Everything is
+     * compared by id, and `null` is an ordinary value (spec §7.7): `null IN set` is `false`. `undefined` means this is not
+     * one of those, or a part depends on the row, so the caller goes on (and refuses it with `compile.directoryInSql`).
+     */
+    private userExpression(expr: Expression, ctx: Ctx, scopes: SqlScope[], truth: boolean): string | undefined {
+        const mark = ctx.mark();
+        const give = (sql: string | undefined): string | undefined => {
+            if (sql === undefined) ctx.reset(mark);
+            return sql;
+        };
+        if (ctx.outer.boundUsers?.(expr) !== undefined) return this.userOperand(expr, ctx, scopes)?.sql;
+        if (isBinaryExpression(expr) && (expr.operator === '==' || expr.operator === '!=' || expr.operator === 'IN')) {
+            const [l, r] = [this.userOperand(expr.left, ctx, scopes), this.userOperand(expr.right, ctx, scopes)];
+            if (!l || !r || l.kind !== 'user') return give(undefined);
+            const never = (sql: string) => (truth ? sql : `COALESCE(${sql}, FALSE)`);
+            if (expr.operator === 'IN') return never(r.kind === 'set' ? `${l.sql} = ANY(${r.sql})` : `${l.sql} = ${r.sql}`);
+            if (r.kind !== 'user') return give(undefined);
+            if (expr.operator === '!=') return `${l.sql} IS DISTINCT FROM ${r.sql}`;
+            // An id never equals `NULL`, so `=` gives the same rows as a null-safe test and Postgres can use an index.
+            return l.bound === 'id' || r.bound === 'id' ? never(`${l.sql} = ${r.sql}`) : `${l.sql} IS NOT DISTINCT FROM ${r.sql}`;
+        }
+        if (isCallExpression(expr) && isNameRef(expr.callee) && ['EXISTS', 'COUNT'].includes(expr.callee.name) && expr.args.length === 1) {
+            const arg = expr.args[0];
+            const overlap = isBinaryExpression(arg) && arg.operator === '&' && expr.callee.name === 'EXISTS';
+            const [l, r] = overlap
+                ? [this.userOperand(arg.left, ctx, scopes), this.userOperand(arg.right, ctx, scopes)]
+                : [this.userOperand(arg, ctx, scopes), undefined];
+            if (!l || l.kind !== 'set' || (overlap && r?.kind !== 'set')) return give(undefined);
+            if (overlap) return `COALESCE(${l.sql} && ${r!.sql}, FALSE)`;
+            return expr.callee.name === 'EXISTS' ? `COALESCE(cardinality(${l.sql}) > 0, FALSE)` : `CAST(COALESCE(cardinality(${l.sql}), 0) AS bigint)`;
+        }
+        return give(undefined);
     }
 
     // ---- if, switch, is, JSON literals (spec §5.6, §7.3, §9) -------------
@@ -2158,6 +2301,13 @@ export class MinabSqlCompiler {
             held: record.held
         };
     }
+}
+
+/** A user (`kind: 'user'`) or a set of users in SQL. `bound` says it is a listed part: its id, a missing user, or the ids of a set. */
+interface UserOperand {
+    kind: 'user' | 'set';
+    sql: string;
+    bound: 'id' | 'null' | 'ids' | false;
 }
 
 /** Per-compilation mutable state: bound parameters and generated aliases. */

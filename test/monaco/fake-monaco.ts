@@ -87,7 +87,8 @@ export function fakeMonaco() {
             },
             registerCompletionItemProvider: (_id: string, provider: Provider) => track('completion', provider),
             registerHoverProvider: (_id: string, provider: Provider) => track('hover', provider),
-            registerSignatureHelpProvider: (_id: string, provider: Provider) => track('signature', provider)
+            registerSignatureHelpProvider: (_id: string, provider: Provider) => track('signature', provider),
+            registerInlayHintsProvider: (_id: string, provider: Provider) => track('inlay', provider)
         },
         editor: {
             getModels: () => models,

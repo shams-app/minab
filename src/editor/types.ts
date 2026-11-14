@@ -123,3 +123,57 @@ export interface QuickFix {
     title: string;
     edits: TextEdit[];
 }
+
+/** One name the host knows in its directory: a group for `@@name` (MN.4). */
+export interface DirectoryName {
+    name: string;
+    /** The title people read, when it is not the name. */
+    title?: string;
+    /** What kind of group it is: `system`, `static`, `dynamic`, ... The host's own word. */
+    kind?: string;
+}
+
+/** How a user shows in an editor: the name, and the e-mail when there is one. */
+export interface UserLabel {
+    name: string | null;
+    email?: string | null;
+}
+
+/**
+ * What only the host knows and an editor question may use (MN.4). The host gives `directoryNames()` and `userLabels(ids)`
+ * to `registerMinab`; the adapter reads them on the main thread and sends the answers with the question.
+ */
+export interface EditorHints {
+    /** The groups of the workspace, for `@@` completion and hover. Without it the editor offers `ruleContext.groupNames`. */
+    groups?: readonly DirectoryName[];
+    /** User ids to labels, for the hover of a pinned `findUser('usr_…')`. */
+    userLabels?: Readonly<Record<string, UserLabel>>;
+}
+
+/** A `findUser('usr_…')` with an id as its key: the program's own text pins a person (P4). */
+export interface PinnedUser {
+    id: string;
+    /** The whole call, `findUser('usr_5h2m')`. */
+    range: EditorRange;
+}
+
+/** A small text the editor shows inside the line, after `position` (an inlay hint). */
+export interface InlayHintResult {
+    position: EditorPosition;
+    label: string;
+}
+
+/** `Sara Ahmadi · sara@example.com`. A person who left the workspace has no name: there is no label, and the id is never shown as a name. */
+export function userLabelText(label: UserLabel | undefined): string | undefined {
+    if (!label) return undefined;
+    const parts = [label.name, label.email].filter((part): part is string => !!part);
+    return parts.length > 0 ? parts.join(' · ') : undefined;
+}
+
+/** One hint after each pinned call whose label the host knows. */
+export function inlayHints(pins: readonly PinnedUser[], labels: Readonly<Record<string, UserLabel>>): InlayHintResult[] {
+    return pins.flatMap(pin => {
+        const label = userLabelText(labels[pin.id]);
+        return label ? [{ position: pin.range.end, label }] : [];
+    });
+}

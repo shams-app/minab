@@ -456,11 +456,10 @@ describe('analysis and SQL', () => {
         expect((await prepare('1 + 1')).analysis).toMatchObject({ usesDirectory: false, tier: 'local' });
     });
 
-    test('a query cannot read users yet: compile.directoryInSql, with the part named', async () => {
+    test('a part of a query that depends on each row is compile.directoryInSql, with the part named (MN.4)', async () => {
         for (const [source, part] of [
-            ['FROM Task WHERE @currentUser IN @@Sales SELECT .id', '@currentUser IN @@Sales'],
             ['FROM Task WHERE .owner.name == "Sara" SELECT .id', '.owner'],
-            ['FROM Task WHERE @currentUser IN teamLeader(.owner) SELECT .id', '@currentUser']
+            ['FROM Task WHERE @currentUser IN teamLeader(.owner) SELECT .id', 'teamLeader(.owner)']
         ] as const) {
             const program = await prepare(source);
             const compiled = program.compile();
@@ -469,7 +468,9 @@ describe('analysis and SQL', () => {
         }
     });
 
-    test('running such a query is the same error', async () => {
-        expect(await failure('FROM Task WHERE @currentUser IN @@Sales SELECT .id')).toBe('compile.directoryInSql');
+    test('running such a query is the same error, and a part that does not depend on the row reaches the data port', async () => {
+        expect(await failure('FROM Task WHERE @currentUser IN teamLeader(.owner) SELECT .id')).toBe('compile.directoryInSql');
+        // Users in queries run in test/users-sql.test.ts; with no data port the query is sent and refused there.
+        expect(await failure('FROM Task WHERE @currentUser IN @@Sales SELECT .id')).toBe('data.noPort');
     });
 });

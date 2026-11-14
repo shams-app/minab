@@ -6,6 +6,10 @@ over stdio. VS Code users should install the extension instead (see
 
 The server gives diagnostics, completion, hover, go to definition, signature
 help, document symbols, find references, rename, semantic tokens and quick fixes.
+It knows users and groups too: `@` and `@@` names have semantic tokens and complete (after `@` the special users of
+the place, after `@@` the group names), and an unknown group or special user has a quick fix. The language server
+reads `minab.config.json` only, so it has no titles, kinds or user labels. A Monaco host gives those with the
+callbacks `directoryNames()` and `userLabels(ids)` (see `src/monaco/README.md`).
 Each file uses the nearest `minab.config.json` above it, like the `minab` CLI.
 
 ## The command

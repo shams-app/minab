@@ -1023,3 +1023,43 @@ else show(result.error);   // eval.userNotFound, eval.groupNotFound (a user or g
 `test/policy-ir/*.json` has the cases the interpreter and the engine must agree on: the source, what it must answer, and the IR
 it compiles to. `npm run corpus:check` runs them; the Shamsine engine runs the same files (EN.9). See
 `test/policy-ir/README.md` for the format.
+
+### Users and groups in queries (1.1.0)
+
+A `FROM` query may use a person or a group that does not depend on the row. Minab lists the set through the directory port
+before the query runs, then sends the ids as one array parameter. It lists at most `limits.maxUsers` people (10,000), else
+`eval.tooManyUsers`, and it sends no statement in that case.
+
+```minab
+COUNT(#Task[.assignee IN teamMates(@currentUser) AND .status != 'done'])   // assignee = ANY($1::text[])
+FROM Task WHERE .owner == @currentUser SELECT .id                           // owner = $1, no directory read
+FROM Task WHERE @currentUser IN .approvers SELECT .id                       // $1 = ANY(approvers), no directory read
+FROM Task WHERE EXISTS(.approvers & @@Reviewers) SELECT .id                 // approvers && $1::text[]
+FROM Task WHERE @currentUser IN teamLeader(.owner) SELECT .id               // compile.directoryInSql: teamLeader(.owner)
+```
+
+- A `user` column holds the id as text. A `users` column is a `text[]` of ids. Both must be real columns of the table.
+- A part that depends on each row (a route or `groupsOf` of a column, a column of the user in a column such as `.owner.name`)
+  is `compile.directoryInSql`. The message names that part.
+- `prepared.compile()` shows the SQL with each such part as one parameter, with an empty answer.
+- The interpreter and the SQL give the same answer. `test/users-sql.test.ts` runs 15 conditions both ways on each row.
+
+### Editor support for users and groups
+
+`registerMinab` takes two callbacks. Both are optional, and a failing callback leaves the editor working.
+
+```ts
+registerMinab(monaco, {
+    client,
+    ruleContext: { isFieldRule: false, specialUsers: [{ name: 'currentUser', type: 'USER' }] },
+    directoryNames: () => groups.map(g => ({ name: g.name, title: g.title, kind: g.kind })),
+    userLabels: async ids => lookupMembers(ids) // { usr_5h2m: { name: 'Sara Ahmadi', email: 'sara@example.com' } }
+});
+```
+
+- After `@` the editor offers `ruleContext.specialUsers`. After `@@` it offers `directoryNames()`, or `ruleContext.groupNames`
+  when there is no callback. A name that is not a plain word is inserted in backticks.
+- After a user's `.` it offers the directory columns. A scoped attribute such as `person:city` is inserted in backticks.
+- A host function or route may have a `title` and a `description` (`HostFunctionDeclaration`). They show in the function list and on hover.
+- `userLabels(ids)` is called once for all `findUser('usr_…')` calls of a program. A pinned call shows the member after it, as an
+  inlay hint, and on hover. It needs `client.pinnedUsers` (a `WorkerMinab` has it). A person who left has no name, so there is no hint.

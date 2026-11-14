@@ -6,4 +6,5 @@
 export { registerMinab, toMonacoRange, DEFAULT_LANGUAGE_ID } from './register.js';
 export { languageConfiguration, tokensProvider, MinabLineState, TOKEN_SCOPES } from './language.js';
 export type { LineState, TokenType } from '../editor/tokens.js';
+export type { DirectoryName, EditorHints, PinnedUser, UserLabel } from '../editor/types.js';
 export type { MinabEditorClient, MinabRegistration, RegisterMinabOptions } from './types.js';

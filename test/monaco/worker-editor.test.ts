@@ -62,6 +62,28 @@ describe('the worker answers editor questions', () => {
         expect(noRecord.items.map(item => item.label)).not.toContain('total');
     });
 
+    test('hints cross the bridge: group names for @@, and the pinned people of a program (MN.4)', async () => {
+        const minab = setup();
+        const special = { specialUsers: [{ name: 'currentUser', type: 'USER' as const }], groupNames: ['Sales', 'Sales team'] };
+        const groups = [
+            { name: 'Sales', title: 'Sales people' },
+            { name: 'Sales team', kind: 'dynamic' }
+        ];
+        const found = await minab.complete('@@Sa', 4, { ruleContext: { ...rule, ...special }, hints: { groups } });
+        expect(found.items.map(item => [item.label, item.insertText])).toEqual([
+            ['Sales', undefined],
+            ['Sales team', '`Sales team`']
+        ]);
+        expect(found.items[0].documentation).toBe('Sales people');
+        const source = "findUser('usr_5h2m') == findUser('sara@example.com')";
+        expect((await minab.pinnedUsers(source, { ruleContext: { ...rule, ...special } })).map(pin => pin.id)).toEqual(['usr_5h2m']);
+        const hovered = await minab.hover(source, 12, {
+            ruleContext: { ...rule, ...special },
+            hints: { userLabels: { usr_5h2m: { name: 'Sara Ahmadi', email: 'sara@example.com' } } }
+        });
+        expect(hovered?.contents).toContain('Sara Ahmadi · sara@example.com');
+    });
+
     test('a disposed runtime throws, like prepare', async () => {
         const minab: WorkerMinab = setup();
         minab.dispose();
